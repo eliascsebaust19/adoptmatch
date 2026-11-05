@@ -12,9 +12,9 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _nameController = TextEditingController(text: 'Elias Ahmed');
-  final _emailController = TextEditingController(text: 'elias3224@gmail.com');
-  final _passwordController = TextEditingController(text: 'password123');
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isSignUp = false;
 
@@ -174,73 +174,6 @@ class _LoginScreenState extends State<LoginScreen> {
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('OK', style: TextStyle(color: Color(0xFFE05626), fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showFeatureNoticeDialog({
-    required String title,
-    required String message,
-    required IconData icon,
-  }) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFEFF6FF),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: const Color(0xFF2563EB), size: 22),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)),
-              ),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFFEFF6FF),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: const Color(0xFFBFDBFE)),
-              ),
-              child: const Text(
-                'Available in Future / শীঘ্রই আসছে',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF1D4ED8)),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              message,
-              style: const TextStyle(fontSize: 13, height: 1.5, color: Color(0xFF475569)),
-            ),
-          ],
-        ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFE05626),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            ),
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK / ঠিক আছে'),
           ),
         ],
       ),
@@ -511,129 +444,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       );
                     },
                   ),
-                  const SizedBox(height: 12),
-
-                  // Alternate X & Apple options (Coming in future - no login)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: _SocialIconButton(
-                          logo: const XOfficialLogo(size: 18),
-                          label: 'X (Twitter)',
-                          onTap: () {
-                            _showFeatureNoticeDialog(
-                              title: 'X (Twitter) Login',
-                              message: 'X (Twitter) sign-in will be available in a future update.\n\nPlease continue by signing in with Google or Email.\n\n(X লগইন সুবিধাটি পরবর্তী আপডেটে যুক্ত হবে। অনুগ্রহ করে Google বা Email দিয়ে সাইন ইন করুন।)',
-                              icon: Icons.info_outline_rounded,
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _SocialIconButton(
-                          logo: const Icon(Icons.apple, color: Color(0xFF0F172A), size: 22),
-                          label: 'Apple',
-                          onTap: () {
-                            _showFeatureNoticeDialog(
-                              title: 'Apple ID Sign In',
-                              message: 'Apple ID sign-in will be available in a future update.\n\nPlease continue by signing in with Google or Email.\n\n(অ্যাপল আইডি লগইন সুবিধাটি পরবর্তী আপডেটে যুক্ত হবে। অনুগ্রহ করে Google বা Email দিয়ে সাইন ইন করুন।)',
-                              icon: Icons.apple,
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Fast bypass / Demo button (Restricted Guest Mode)
-                  TextButton(
-                    onPressed: () {
-                      context.read<AuthBloc>().add(const GuestLoginEvent());
-                      context.go('/home');
-                    },
-                    child: const Text(
-                      'Explore AdoptMatch as Guest →',
-                      style: TextStyle(
-                        color: Color(0xFFE05626),
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-
-                  // Direct link for Admin / Shelter Managers
-                  TextButton.icon(
-                    onPressed: () => context.go('/admin/login'),
-                    icon: const Icon(Icons.admin_panel_settings_outlined, size: 16, color: Color(0xFF64748B)),
-                    label: const Text(
-                      'Admin / Shelter Coordinator Portal →',
-                      style: TextStyle(
-                        color: Color(0xFF64748B),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SocialIconButton extends StatelessWidget {
-  final Widget logo;
-  final String label;
-  final VoidCallback onTap;
-
-  const _SocialIconButton({
-    required this.logo,
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.02),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.max,
-            children: [
-              logo,
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1E293B),
-                ),
-              ),
-            ],
           ),
         ),
       ),

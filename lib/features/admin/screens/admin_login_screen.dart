@@ -12,8 +12,8 @@ class AdminLoginScreen extends StatefulWidget {
 }
 
 class _AdminLoginScreenState extends State<AdminLoginScreen> {
-  final _emailController = TextEditingController(text: 'admin@adoptmatch.com');
-  final _passwordController = TextEditingController(text: 'Admin@123456');
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   String? _errorMessage;
 
@@ -340,93 +340,6 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                               ),
                             );
                           },
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Quick demo buttons
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0F172A).withOpacity(0.5),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: const Color(0xFF334155),
-                              width: 0.5,
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'QUICK DEMO PRESETS:',
-                                style: TextStyle(
-                                  color: Color(0xFF94A3B8),
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: OutlinedButton(
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: const Color(
-                                          0xFFFBBF24,
-                                        ),
-                                        side: const BorderSide(
-                                          color: Color(0xFFF59E0B),
-                                        ),
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 8,
-                                        ),
-                                      ),
-                                      onPressed: () {
-                                        setState(() {
-                                          _emailController.text =
-                                              'superadmin@adoptmatch.org';
-                                          _passwordController.text =
-                                              'adminSecure2026!';
-                                        });
-                                      },
-                                      child: const Text(
-                                        'Super Admin',
-                                        style: TextStyle(fontSize: 11),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: OutlinedButton(
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: const Color(
-                                          0xFF818CF8,
-                                        ),
-                                        side: const BorderSide(
-                                          color: Color(0xFF6366F1),
-                                        ),
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 8,
-                                        ),
-                                      ),
-                                      onPressed: () {
-                                        setState(() {
-                                          _emailController.text =
-                                              'admin@adoptmatch.com';
-                                          _passwordController.text =
-                                              'Admin@123456';
-                                        });
-                                      },
-                                      child: const Text(
-                                        'Admin (Demo)',
-                                        style: TextStyle(fontSize: 11),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
                         ),
                       ],
                     ),
