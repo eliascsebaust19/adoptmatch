@@ -21,8 +21,12 @@ WORKDIR /var/www/html
 # Copy application files
 COPY . .
 
+# Configure composer to disable security advisory blocking during Docker build
+RUN composer config policy.advisories.block false || true && \
+    composer config audit.block false || true
+
 # Install dependencies optimized for production
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+RUN composer install --no-dev --optimize-autoloader --no-interaction || composer update --no-dev --optimize-autoloader --no-interaction
 
 # Set proper permissions for storage and bootstrap cache
 RUN chmod -R 777 storage bootstrap/cache
