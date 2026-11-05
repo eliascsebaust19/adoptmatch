@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import '../models/pet_model.dart';
 import '../services/local_storage_service.dart';
+import '../services/laravel_pet_service.dart';
 
 class PetRepository {
   static final PetRepository _instance = PetRepository._internal();
@@ -9,6 +11,7 @@ class PetRepository {
     _initStorage();
   }
 
+  final _laravelPetService = LaravelPetService();
   final _storage = LocalStorageService.instance;
   final _petStreamController = StreamController<List<Pet>>.broadcast();
   Stream<List<Pet>> get petsStream => _petStreamController.stream;
@@ -854,8 +857,30 @@ class PetRepository {
     bool? apartmentOnly,
     bool? vaccinatedOnly,
   }) async {
-    // Simulating light network latency for realistic UX
-    await Future.delayed(const Duration(milliseconds: 300));
+    try {
+      final remotePets = await _laravelPetService.getPets(
+        species: (category != null && category != 'All Pets' && !category.toLowerCase().startsWith('all'))
+            ? category.toLowerCase()
+            : null,
+        search: searchQuery,
+      );
+      if (remotePets.isNotEmpty) {
+        var result = List<Pet>.from(remotePets);
+        if (kidSafeOnly == true) {
+          result = result.where((p) => p.isKidSafe).toList();
+        }
+        if (apartmentOnly == true) {
+          result = result.where((p) => p.isApartmentFriendly).toList();
+        }
+        if (vaccinatedOnly == true) {
+          result = result.where((p) => p.isVaccinated).toList();
+        }
+        return result;
+      }
+    } catch (e) {
+      debugPrint('[PetRepository] Live fetch fallback to local list: ');
+    }
+    await Future.delayed(const Duration(milliseconds: 150));
     var result = List<Pet>.from(_pets);
 
     if (category != null && category != 'All Pets' && !category.toLowerCase().startsWith('all')) {

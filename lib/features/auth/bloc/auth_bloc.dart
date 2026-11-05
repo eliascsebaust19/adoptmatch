@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 import '../../../core/services/supabase_service.dart';
 import '../../../core/services/google_auth_service.dart';
+import '../../../core/services/laravel_auth_service.dart';
 
 enum UserRole {
   guest,
@@ -364,6 +365,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     isVerified: true,
   );
 
+  final _laravelAuthService = LaravelAuthService();
   StreamSubscription<sb.AuthState>? _supabaseAuthSubscription;
 
   AuthBloc()
@@ -435,6 +437,26 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     emit(AuthLoading());
     try {
+      try {
+        final res = await _laravelAuthService.register(
+          name: event.fullName,
+          email: event.email,
+          password: event.password,
+          role: 'adopter',
+        );
+        if (res['status'] == 'success' || res['success'] == true) {
+          emit(
+            AuthSignUpConfirmationPending(
+              email: event.email,
+              message: 'Account created on AdoptMatch! You can now log in.',
+            ),
+          );
+          return;
+        }
+      } catch (laravelErr) {
+        debugPrint('[AuthBloc] Laravel register fallback: ');
+      }
+
       if (SupabaseService.isInitialized) {
         await SupabaseService.signUpWithEmail(
           email: event.email,
@@ -442,7 +464,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           fullName: event.fullName,
         );
       } else {
-        // Fallback for demo without live Supabase credentials
         await Future.delayed(const Duration(milliseconds: 600));
       }
 
@@ -468,7 +489,34 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       final emailLower = event.email.trim().toLowerCase();
 
-      // 1. Try Live Supabase authentication
+      // 1. Try Live Laravel 11 Backend API Authentication
+      try {
+        final res = await _laravelAuthService.login(
+          email: event.email,
+          password: event.password,
+        );
+        if (res['status'] == 'success' || res['success'] == true) {
+          final userMap = res['user'] as Map<String, dynamic>?;
+          if (userMap != null) {
+            final roleStr = userMap['role']?.toString();
+            _currentUser = UserProfile(
+              id: userMap['id']?.toString() ?? '1',
+              name: userMap['name'] ?? 'User',
+              email: userMap['email'] ?? event.email,
+              phone: userMap['phone'] ?? '',
+              role: UserRole.fromCode(roleStr),
+              avatarUrl: userMap['avatar'] ?? '',
+              isVerified: true,
+            );
+            emit(Authenticated(_currentUser));
+            return;
+          }
+        }
+      } catch (laravelErr) {
+        debugPrint('[AuthBloc] Laravel login fallback: ');
+      }
+
+      // 2. Try Live Supabase authentication
       if (SupabaseService.isInitialized) {
         try {
           final response = await SupabaseService.signInWithEmail(

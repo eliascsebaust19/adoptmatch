@@ -10,13 +10,36 @@ class LaravelPetService {
   LaravelPetService({ApiClient? apiClient})
       : _apiClient = apiClient ?? ApiClient();
 
+  /// Fetch public pet catalog
+  Future<List<Pet>> getPets({String? species, String? search, int page = 1}) async {
+    try {
+      final response = await _apiClient.dio.get('/pets', queryParameters: {
+        if (species != null && species != 'all') 'species': species,
+        if (search != null && search.isNotEmpty) 'search': search,
+        'page': page,
+      });
+
+      if (response.statusCode == 200 &&
+          (response.data['status'] == 'success' || response.data['success'] == true)) {
+        final paginated = response.data['data'];
+        final List data = paginated is Map ? (paginated['data'] as List? ?? []) : (paginated as List? ?? []);
+        return data.map((json) => _petFromJson(json as Map<String, dynamic>)).toList();
+      }
+      return [];
+    } catch (e) {
+      debugPrint('[LaravelPetService] getPets error: $e');
+      return [];
+    }
+  }
+
   /// Tinder-style swipe stack: fetches candidate pets excluding already swiped ones
   Future<List<Pet>> getSwipeStack() async {
     try {
       final response = await _apiClient.dio.get('/pets/swipe-stack');
-      if (response.statusCode == 200 && response.data['success'] == true) {
+      if (response.statusCode == 200 &&
+          (response.data['status'] == 'success' || response.data['success'] == true)) {
         final List data = response.data['data'] as List;
-        return data.map((json) => _petFromJson(json)).toList();
+        return data.map((json) => _petFromJson(json as Map<String, dynamic>)).toList();
       }
       return [];
     } catch (e) {
@@ -32,7 +55,7 @@ class LaravelPetService {
         '/pets/$petId/like',
         data: {'direction': isLike ? 'like' : 'dislike'},
       );
-      return response.data['success'] == true;
+      return response.data['status'] == 'success' || response.data['success'] == true;
     } catch (e) {
       debugPrint('[LaravelPetService] recordSwipe error: $e');
       return false;
@@ -52,9 +75,10 @@ class LaravelPetService {
         'radius': radiusKm,
       });
 
-      if (response.statusCode == 200 && response.data['success'] == true) {
+      if (response.statusCode == 200 &&
+          (response.data['status'] == 'success' || response.data['success'] == true)) {
         final List data = response.data['data'] as List;
-        return data.map((json) => _petFromJson(json)).toList();
+        return data.map((json) => _petFromJson(json as Map<String, dynamic>)).toList();
       }
       return [];
     } catch (e) {
@@ -74,7 +98,8 @@ class LaravelPetService {
         'answers_json': answersJson,
       });
 
-      if (response.statusCode == 201 && response.data['success'] == true) {
+      if ((response.statusCode == 200 || response.statusCode == 201) &&
+          (response.data['status'] == 'success' || response.data['success'] == true)) {
         return response.data['data'];
       }
       return null;
@@ -88,7 +113,8 @@ class LaravelPetService {
   Future<List<AdoptionApplication>> getMyAdoptionRequests() async {
     try {
       final response = await _apiClient.dio.get('/adoption-requests');
-      if (response.statusCode == 200 && response.data['success'] == true) {
+      if (response.statusCode == 200 &&
+          (response.data['status'] == 'success' || response.data['success'] == true)) {
         final List data = response.data['data'] as List;
         return data.map((json) {
           final answers = json['answers_json'] is Map<String, dynamic>
@@ -116,7 +142,10 @@ class LaravelPetService {
 
   Pet _petFromJson(Map<String, dynamic> json) {
     final images = (json['images'] as List?)
-            ?.map((img) => img['image_url']?.toString() ?? '')
+            ?.map((img) {
+              if (img is Map) return img['image_url']?.toString() ?? '';
+              return img.toString();
+            })
             .where((url) => url.isNotEmpty)
             .toList() ??
         [];
@@ -130,6 +159,11 @@ class LaravelPetService {
     final ageDisplay = ageMonths >= 12
         ? '${(ageMonths / 12).floor()} ${(ageMonths / 12).floor() == 1 ? 'yr' : 'yrs'}'
         : '$ageMonths mos';
+
+    final vStatus = json['vaccination_status'];
+    final bool isVaccinated = vStatus == true ||
+        vStatus == 1 ||
+        (vStatus is String && vStatus.toLowerCase() != 'unvaccinated' && vStatus.isNotEmpty);
 
     return Pet(
       id: json['id']?.toString() ?? '',
@@ -148,18 +182,17 @@ class LaravelPetService {
       isUrgent: false,
       isFeatured: false,
       isFoster: false,
-      isVaccinated: json['vaccination_status'] == true ||
-          json['vaccination_status'] == 1,
-      isNeutered: true,
+      isVaccinated: isVaccinated,
+      isNeutered: json['is_spayed_neutered'] == true || json['is_spayed_neutered'] == 1,
       isHouseTrained: true,
       isKidSafe: true,
       isApartmentFriendly: true,
       shelterName: json['owner']?['name'] ?? 'AdoptMatch Shelter',
       shelterPhone: json['owner']?['phone'] ?? '+880 17•• ••••89',
-      shelterAddress: 'Dhaka, Bangladesh',
+      shelterAddress: json['location_city'] ?? 'Dhaka, Bangladesh',
       shelterRating: 4.9,
       story: json['description'] ?? 'Looking for a warm forever home.',
-      medicalHistory: 'Up to date on vaccinations and health checks.',
+      medicalHistory: json['medical_history'] ?? 'Up to date on vaccinations and health checks.',
       qrHash: json['qr_hash'] ?? 'ADOPT-PET-${json['id']}',
     );
   }

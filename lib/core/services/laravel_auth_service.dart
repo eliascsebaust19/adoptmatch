@@ -29,8 +29,8 @@ class LaravelAuthService {
         'id_token': idToken,
       });
 
-      if (response.statusCode == 200 && response.data['success'] == true) {
-        final token = response.data['token'] as String;
+      if (response.statusCode == 200 && (response.data['status'] == 'success' || response.data['success'] == true)) {
+        final token = (response.data['access_token'] ?? response.data['token']) as String;
         await ApiClient.saveToken(token);
         return response.data;
       }
@@ -54,8 +54,8 @@ class LaravelAuthService {
       'password': password,
     });
 
-    if (response.data['success'] == true) {
-      final token = response.data['token'] as String;
+    if (response.data['status'] == 'success' || response.data['success'] == true) {
+      final token = (response.data['access_token'] ?? response.data['token']) as String;
       await ApiClient.saveToken(token);
     }
     return response.data;
@@ -77,8 +77,8 @@ class LaravelAuthService {
       'phone': phone,
     });
 
-    if (response.data['success'] == true) {
-      final token = response.data['token'] as String;
+    if (response.data['status'] == 'success' || response.data['success'] == true) {
+      final token = (response.data['access_token'] ?? response.data['token']) as String;
       await ApiClient.saveToken(token);
     }
     return response.data;
@@ -87,9 +87,9 @@ class LaravelAuthService {
   /// Get current authenticated user profile
   Future<Map<String, dynamic>?> getMe() async {
     try {
-      final response = await _apiClient.dio.get('/auth/me');
-      if (response.data['success'] == true) {
-        return response.data['user'];
+      final response = await _apiClient.dio.get('/me');
+      if (response.data['status'] == 'success' || response.data['success'] == true) {
+        return response.data['user'] ?? response.data['data'];
       }
       return null;
     } catch (_) {
@@ -111,4 +111,3 @@ class LaravelAuthService {
     }
   }
 }
-
