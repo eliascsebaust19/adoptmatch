@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/supabase_service.dart';
 import '../../features/auth/bloc/auth_bloc.dart';
+import '../network/api_client.dart';
 
 class GoogleAuthResult {
   final bool success;
@@ -29,7 +30,7 @@ class GoogleAuthService {
 
   static const String backendBaseUrl = String.fromEnvironment(
     'BACKEND_URL',
-    defaultValue: 'http://localhost:5000',
+    defaultValue: 'https://adoptmatch-api.onrender.com',
   );
 
   static final GoogleSignIn _googleSignIn = GoogleSignIn(
@@ -88,6 +89,7 @@ class GoogleAuthService {
           Uri.parse('$backendBaseUrl/api/v1/auth/google'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
+            'id_token': idToken,
             'idToken': idToken,
             'accessToken': accessToken,
             'profile': {
@@ -104,10 +106,12 @@ class GoogleAuthService {
           final u = data['user'];
           final tokens = data['tokens'];
 
-          // Save session token in SharedPreferences
+          // Save session token in SharedPreferences and ApiClient
           final prefs = await SharedPreferences.getInstance();
-          if (tokens != null && tokens['accessToken'] != null) {
-            await prefs.setString('auth_token', tokens['accessToken']);
+          final sanctumToken = data['access_token'] ?? data['token'] ?? (tokens != null ? tokens['accessToken'] : null);
+          if (sanctumToken != null) {
+            await prefs.setString('auth_token', sanctumToken.toString());
+            await ApiClient.saveToken(sanctumToken.toString());
           }
 
           userProfile = UserProfile(

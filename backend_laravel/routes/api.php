@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\PetController;
 use App\Http\Controllers\Api\AdoptionRequestController;
 use App\Http\Controllers\Api\MessageController;
+use App\Http\Controllers\Api\UploadController;
 
 /*
 |--------------------------------------------------------------------------
@@ -28,14 +29,18 @@ Route::prefix('v1')->group(function () {
     Route::get('/pets', [PetController::class, 'index']);
     Route::get('/pets/{id}', [PetController::class, 'show'])->whereNumber('id');
 
+    // Cloudinary / Media Upload Endpoint
+    Route::post('/upload/image', [UploadController::class, 'uploadImage']);
+
     // =====================================
     // 2. PROTECTED ROUTES (SANCTUM BEARER)
     // =====================================
     Route::middleware('auth:sanctum')->group(function () {
 
-        // User & Session
+        // User & Session & FCM Token Registration
         Route::get('/me', [AuthController::class, 'me']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
+        Route::post('/auth/fcm-token', [AuthController::class, 'updateFcmToken']);
 
         // Tinder Pet Matching & Swiping
         Route::get('/pets/swipe-stack', [PetController::class, 'getSwipeStack']);
@@ -59,4 +64,3 @@ Route::prefix('v1')->group(function () {
         Route::post('/messages', [MessageController::class, 'sendMessage']);
     });
 });
-

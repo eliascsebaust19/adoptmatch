@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AdoptionRequest;
 use App\Models\Pet;
+use App\Services\FcmService;
 use Illuminate\Http\Request;
 
 class AdoptionRequestController extends Controller
@@ -24,7 +25,7 @@ class AdoptionRequestController extends Controller
             'signature_data' => 'nullable|string',
         ]);
 
-        $pet = Pet::findOrFail($request->pet_id);
+        $pet = Pet::with('owner')->findOrFail($request->pet_id);
         $user = $request->user();
 
         // Prevent duplicate pending applications for the same pet
@@ -55,42 +56,54 @@ class AdoptionRequestController extends Controller
             'signature_data' => $request->signature_data ?? 'DIGITAL_SIGNATURE_VERIFIED',
         ]);
 
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Adoption application successfully recorded',
-            'data' => $application->load(['pet.images', 'owner']),
-        ], 201);
-    }
-
-    /**
-     * List User's Adoption Applications (Both sent and received).
-     */
-    public function index(Request $request)
-    {
-        $user = $request->user();
-        $type = $request->query('type', 'sent'); // 'sent' or 'received'
-
-        if ($type === 'received' || $user->role === 'shelter' || $user->role === 'admin') {
-            $applications = AdoptionRequest::where('owner_id', $user->id)
-                ->with(['pet.images', 'requester'])
-                ->orderBy('created_at', 'desc')
-                ->get();
-        } else {
-            $applications = AdoptionRequest::where('requester_id', $user->id)
-                ->with(['pet.images', 'owner'])
-                ->orderBy('created_at', 'desc')
-                ->get();
+        // Push notification to pet owner / shelter
+        if ($pet->owner && !empty($pet->owner->fcm_token)) {
+            FcmService::sendNotification(
+                $pet->owner->fcm_token,
+                "New Adoption Application for {$pet->name}!",
+                "{$request->applicant_data['applicantName']} just submitted an adoption application.",
+                ['type' => 'adoption_request', 'reference_no' => $referenceNo, 'pet_id' => (string)$pet->id]
+            );
         }
 
         return response()->json([
             'status' => 'success',
-            'count' => $applications->count(),
+            'message' => 'Adoption application successfully recorded',
+            'reference_no' => $referenceNo,
+            'data' => $application->load(['pet', 'owner']),
+        ], 201);
+    }
+
+    /**
+     * List user submitted or received applications.
+     */
+    public function index(Request $request)
+    {
+        $user = $request->user();
+        $type = $request->query('type', 'submitted'); // 'submitted' or 'received'
+
+        $query = AdoptionRequest::with(['pet.images', 'requester', 'owner']);
+
+        if ($type === 'received') {
+            $query->where('owner_id', $user->id);
+        } else {
+            $query->where('requester_id', $user->id);
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        $applications = $query->orderBy('created_at', 'desc')->paginate(15);
+
+        return response()->json([
+            'status' => 'success',
             'data' => $applications,
         ], 200);
     }
 
     /**
-     * View Single Application Dossier.
+     * Application Details by ID.
      */
     public function show(Request $request, $id)
     {
@@ -122,7 +135,7 @@ class AdoptionRequestController extends Controller
 
         $user = $request->user();
 
-        $application = AdoptionRequest::where('owner_id', $user->id)->findOrFail($id);
+        $application = AdoptionRequest::with(['pet', 'requester'])->where('owner_id', $user->id)->findOrFail($id);
 
         $application->update([
             'status' => $request->status,
@@ -135,6 +148,20 @@ class AdoptionRequestController extends Controller
             $application->pet->update(['adoption_status' => 'adopted']);
         }
 
+        // Push notification to applicant
+        if ($application->requester && !empty($application->requester->fcm_token)) {
+            $petName = $application->pet ? $application->pet->name : 'your pet';
+            $title = $request->status === 'approved' ? "🎉 Application Approved!" : "Update on your adoption of {$petName}";
+            $body = "Your application status has been updated to: " . strtoupper($request->status);
+
+            FcmService::sendNotification(
+                $application->requester->fcm_token,
+                $title,
+                $body,
+                ['type' => 'status_update', 'application_id' => (string)$application->id, 'status' => $request->status]
+            );
+        }
+
         return response()->json([
             'status' => 'success',
             'message' => "Application status updated to {$request->status}",
@@ -142,4 +169,3 @@ class AdoptionRequestController extends Controller
         ], 200);
     }
 }
-

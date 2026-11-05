@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'package:dio/dio.dart' as dio;
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../network/api_client.dart';
 import 'supabase_service.dart';
 
 class StorageService {
@@ -55,7 +57,7 @@ class StorageService {
   }
 
   /// Uploads user profile photo to Supabase Storage (Bucket: 'avatars')
-  /// or falls back to Vercel Blob API / resilient high-res data URI.
+  /// or falls back to Laravel 11 Backend / Cloudinary CDN / Base64.
   static Future<String> uploadProfileImage({
     required Uint8List bytes,
     required String fileName,
@@ -64,7 +66,7 @@ class StorageService {
     final sanitizedFileName = fileName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
     final uniquePath = 'profiles/${userId ?? "usr"}_${DateTime.now().millisecondsSinceEpoch}_$sanitizedFileName';
 
-    // 1. Primary: Upload via Supabase Storage
+    // 1. Primary: Upload via Supabase Storage if initialized
     if (SupabaseService.isInitialized) {
       try {
         final storage = SupabaseService.client.storage.from('avatars');
@@ -84,13 +86,45 @@ class StorageService {
           return publicUrl;
         }
       } catch (e) {
-        debugPrint('[StorageService] Supabase upload failed or bucket missing: $e. Falling back to Vercel Blob / Base64.');
+        debugPrint('[StorageService] Supabase upload notice: $e');
       }
     }
 
-    // 2. Resilient Base64 Data URI Fallback (guarantees 100% local display without crash)
+    // 2. Secondary: Upload to Laravel 11 Backend & Cloudinary CDN
+    try {
+      final backendUrl = await uploadToCloudinaryOrBackend(
+        bytes: bytes,
+        fileName: sanitizedFileName,
+      );
+      if (backendUrl != null && backendUrl.isNotEmpty) {
+        return backendUrl;
+      }
+    } catch (_) {}
+
+    // 3. Resilient Base64 Data URI Fallback (guarantees 100% display without crash)
     final base64String = base64Encode(bytes);
     return 'data:image/jpeg;base64,$base64String';
+  }
+
+  /// Upload image bytes directly to Laravel Backend & Cloudinary Multi-Image CDN
+  static Future<String?> uploadToCloudinaryOrBackend({
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    try {
+      final client = ApiClient();
+      final formData = dio.FormData.fromMap({
+        'image': dio.MultipartFile.fromBytes(bytes, filename: fileName),
+      });
+
+      final response = await client.dio.post('/upload/image', data: formData);
+      if (response.statusCode == 200 && response.data['url'] != null) {
+        return response.data['url'] as String;
+      }
+    } catch (e) {
+      debugPrint('[StorageService] Cloudinary/Backend upload error: $e');
+    }
+    return null;
   }
 
   /// Retrieves the direct Google Profile Photo from Supabase OAuth session metadata
@@ -109,4 +143,3 @@ class StorageService {
     return null;
   }
 }
-

@@ -21,6 +21,7 @@ class User extends Authenticatable
         'location_lat',
         'location_lng',
         'password',
+        'fcm_token',
     ];
 
     protected $hidden = [
@@ -58,11 +59,6 @@ class User extends Authenticatable
         return $this->hasMany(AdoptionRequest::class, 'requester_id');
     }
 
-    public function receivedAdoptionRequests()
-    {
-        return $this->hasMany(AdoptionRequest::class, 'owner_id');
-    }
-
     public function sentMessages()
     {
         return $this->hasMany(Message::class, 'sender_id');
@@ -73,4 +69,3 @@ class User extends Authenticatable
         return $this->hasMany(Message::class, 'receiver_id');
     }
 }
-
