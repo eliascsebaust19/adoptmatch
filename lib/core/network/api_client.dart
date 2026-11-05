@@ -6,10 +6,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ApiClient {
   static const String _tokenKey = 'laravel_sanctum_token';
 
-  // Configurable base URL: Use Render URL in production or local IP / localhost in dev
-  static const String defaultBaseUrl = kReleaseMode
-      ? 'https://adoptmatch-api.onrender.com/api/v1'
-      : 'http://127.0.0.1:8000/api/v1';
+  // Configurable base URL: Defaults to live Render API, overridable with --dart-define=API_BASE_URL=...
+  static const String defaultBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://adoptmatch-api.onrender.com/api/v1',
+  );
 
   late final Dio dio;
 
@@ -76,4 +77,3 @@ class ApiClient {
     await prefs.remove(_tokenKey);
   }
 }
-
