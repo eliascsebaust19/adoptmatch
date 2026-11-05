@@ -66,3 +66,6 @@ backend_laravel/.env
 .php-preview-router.php
 review app/
 
+
+*.apk
+
