@@ -11,12 +11,14 @@ class GoogleAuthResult {
   final UserProfile? user;
   final String? errorMessage;
   final bool wasCancelled;
+  final bool isNewUser;
 
   const GoogleAuthResult({
     required this.success,
     this.user,
     this.errorMessage,
     this.wasCancelled = false,
+    this.isNewUser = false,
   });
 }
 
@@ -72,6 +74,8 @@ class GoogleAuthService {
 
       UserProfile? userProfile;
 
+      bool isNewUser = false;
+
       // Sync with Laravel 11 Backend API
       try {
         final res = await http.post(
@@ -94,6 +98,7 @@ class GoogleAuthService {
 
         if (res.statusCode == 200) {
           final data = jsonDecode(res.body);
+          isNewUser = data['is_new_user'] == true;
           final u = data['user'] ?? data['data'];
           final sanctumToken = data['access_token'] ?? data['token'];
 
@@ -146,7 +151,11 @@ class GoogleAuthService {
       await prefs.setString('cached_user_photo', userProfile.avatarUrl);
       await prefs.setString('cached_user_role', userProfile.role.code);
 
-      return GoogleAuthResult(success: true, user: userProfile);
+      return GoogleAuthResult(
+        success: true,
+        user: userProfile,
+        isNewUser: isNewUser,
+      );
     } catch (e) {
       debugPrint('[GoogleAuthService] Exception in Google Sign-In: $e');
       return GoogleAuthResult(

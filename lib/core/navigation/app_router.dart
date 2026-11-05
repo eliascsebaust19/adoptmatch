@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../services/local_storage_service.dart';
+import '../../features/onboarding/screens/onboarding_screen.dart';
 import '../../features/auth/bloc/auth_bloc.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/otp_screen.dart';
@@ -96,6 +98,21 @@ class AppRouter {
         final path = state.uri.path;
         final isAdminPath = path.startsWith('/admin') || path.startsWith('/shelter');
         final isAdminLogin = path == '/admin/login';
+        final hasSeenOnboarding = LocalStorageService.instance.hasSeenOnboarding;
+        final isOnboardingPath = path == '/onboarding';
+
+        // 0. Guarding First-time Onboarding:
+        if (!hasSeenOnboarding) {
+          if (!isOnboardingPath) {
+            return '/onboarding';
+          }
+          return null;
+        }
+
+        // Returning users who have completed onboarding should skip /onboarding
+        if (isOnboardingPath && hasSeenOnboarding) {
+          return isAuthenticated ? '/home' : '/login';
+        }
 
         // 1. Guarding Admin & Shelter Routes (Strict 403 / Redirect isolation):
         if (isAdminPath && !isAdminLogin) {
@@ -250,8 +267,22 @@ class AppRouter {
         ),
 
         // ==========================================
+        // 0. ONBOARDING ROUTE
+        // ==========================================
+        GoRoute(
+          parentNavigatorKey: rootNavigatorKey,
+          path: '/onboarding',
+          builder: (context, state) => const OnboardingScreen(),
+        ),
+
+        // ==========================================
         // 3. AUTHENTICATION ROUTES
         // ==========================================
+        GoRoute(
+          parentNavigatorKey: rootNavigatorKey,
+          path: '/login',
+          builder: (context, state) => const LoginScreen(),
+        ),
         GoRoute(
           parentNavigatorKey: rootNavigatorKey,
           path: '/auth/login',

@@ -329,9 +329,10 @@ class AuthOtpSent extends AuthState {
 
 class Authenticated extends AuthState {
   final UserProfile user;
-  const Authenticated(this.user);
+  final bool isNewUser;
+  const Authenticated(this.user, {this.isNewUser = false});
   @override
-  List<Object?> get props => [user];
+  List<Object?> get props => [user, isNewUser];
 }
 
 class AuthSignUpConfirmationPending extends AuthState {
@@ -746,7 +747,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         final result = await GoogleAuthService.signIn();
         if (result.success && result.user != null) {
           _currentUser = result.user!;
-          emit(Authenticated(_currentUser));
+          emit(Authenticated(_currentUser, isNewUser: result.isNewUser));
           return;
         } else if (result.wasCancelled) {
           emit(AuthUnauthenticated());

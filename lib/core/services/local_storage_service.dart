@@ -11,11 +11,20 @@ class LocalStorageService {
   static const String _keyFavorites = 'adoptmatch_favorites';
   static const String _keyQuizCompleted = 'adoptmatch_quiz_completed';
   static const String _keyQuizAnswers = 'adoptmatch_quiz_answers';
+  static const String _keyHasSeenOnboarding = 'has_seen_onboarding';
 
   static final LocalStorageService instance = LocalStorageService._internal();
   LocalStorageService._internal();
 
   SharedPreferences? _prefs;
+  bool _hasSeenOnboarding = false;
+
+  bool get hasSeenOnboarding => _hasSeenOnboarding;
+
+  Future<void> init() async {
+    final p = await prefs;
+    _hasSeenOnboarding = p.getBool(_keyHasSeenOnboarding) ?? false;
+  }
 
   Future<SharedPreferences> get prefs async {
     _prefs ??= await SharedPreferences.getInstance();
@@ -165,5 +174,22 @@ class LocalStorageService {
     final p = await prefs;
     await p.remove(_keyQuizCompleted);
     await p.remove(_keyQuizAnswers);
+  }
+
+  // --- Onboarding ---
+  Future<bool> loadHasSeenOnboarding() async {
+    try {
+      final p = await prefs;
+      _hasSeenOnboarding = p.getBool(_keyHasSeenOnboarding) ?? false;
+      return _hasSeenOnboarding;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> saveHasSeenOnboarding(bool value) async {
+    _hasSeenOnboarding = value;
+    final p = await prefs;
+    await p.setBool(_keyHasSeenOnboarding, value);
   }
 }

@@ -10,6 +10,7 @@ import '../../../core/repositories/notification_repository.dart';
 import '../../../core/localization/app_locale.dart';
 import '../../../core/widgets/language_selector_sheet.dart';
 import '../../auth/bloc/auth_bloc.dart';
+import '../../../core/services/notification_service.dart';
 
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key});
@@ -26,6 +27,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   bool _filterApartment = false;
   bool _filterVaccinated = false;
   int _unreadNotifs = 0;
+  bool _hasShownWelcome = false;
 
   final List<String> _categories = [
     'All Pets',
@@ -48,6 +50,82 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     NotificationRepository().notificationsStream.listen((_) {
       _loadUnreadNotifs();
     });
+
+    final authState = context.read<AuthBloc>().state;
+    _checkAndShowWelcome(context, authState);
+  }
+
+  void _checkAndShowWelcome(BuildContext context, AuthState state) {
+    if (_hasShownWelcome) return;
+    if (state is Authenticated && state.isNewUser) {
+      _hasShownWelcome = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final userName = state.user.name.trim().isNotEmpty
+            ? state.user.name.trim()
+            : 'Pet Lover';
+        _showWelcomeToastAndNotification(userName);
+      });
+    }
+  }
+
+  void _showWelcomeToastAndNotification(String userName) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xFF0D9488),
+        elevation: 6,
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+        duration: const Duration(seconds: 5),
+        content: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.pets, color: Colors.white, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Welcome to AdoptMatch, $userName! 🎉',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Account created successfully. Start swiping to find pets!',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    NotificationService.showNotification(
+      title: 'Welcome to AdoptMatch! 🐾',
+      body:
+          'Your account has been created successfully. Discover adoptable pets near you today!',
+    );
   }
 
   Future<void> _loadUnreadNotifs() async {
@@ -127,8 +205,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         : 'Friend';
     final greetingText = '${_getGreeting()}, $displayName 👋';
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+    return BlocListener<AuthBloc, AuthState>(
+      listener: (context, state) {
+        _checkAndShowWelcome(context, state);
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
       drawer: _buildAppDrawer(context),
       appBar: AppBar(
         backgroundColor: const Color(0xFFF8FAFC),
@@ -638,8 +720,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           onPressed: () => context.push('/ai-assistant'),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildAppDrawer(BuildContext context) {
     final language = AppLocaleScope.of(context).language;

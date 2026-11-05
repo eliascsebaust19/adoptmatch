@@ -84,6 +84,8 @@ class AuthController extends Controller
                 ->orWhere('email', $email)
                 ->first();
 
+            $isNewUser = !$user;
+
             if (!$user) {
                 $user = User::create([
                     'name' => $name,
@@ -109,6 +111,7 @@ class AuthController extends Controller
                 'message' => 'Google Authentication Successful',
                 'access_token' => $token,
                 'token_type' => 'Bearer',
+                'is_new_user' => $isNewUser,
                 'user' => $user->load('shelter'),
             ], 200);
 
