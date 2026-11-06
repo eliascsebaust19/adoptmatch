@@ -102,7 +102,7 @@ class AppRouter {
         final isOnboardingPath = path == '/onboarding';
 
         // 0. Guarding First-time Onboarding:
-        if (!hasSeenOnboarding) {
+        if (!hasSeenOnboarding && !isAdminPath) {
           if (!isOnboardingPath) {
             return '/onboarding';
           }
