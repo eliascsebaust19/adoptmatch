@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../storage/secure_storage_service.dart';
 
 class ApiClient {
-  static const String _tokenKey = 'laravel_sanctum_token';
-
   // Configurable base URL: Defaults to live Render API, overridable with --dart-define=API_BASE_URL=...
   static const String defaultBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
@@ -30,8 +28,7 @@ class ApiClient {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-          final prefs = await SharedPreferences.getInstance();
-          final token = prefs.getString(_tokenKey);
+          final token = await SecureStorageService.instance.getAuthToken();
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
           }
@@ -63,17 +60,14 @@ class ApiClient {
   }
 
   static Future<void> saveToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_tokenKey, token);
+    await SecureStorageService.instance.saveAuthToken(token);
   }
 
   static Future<String?> getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_tokenKey);
+    return await SecureStorageService.instance.getAuthToken();
   }
 
   static Future<void> clearToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_tokenKey);
+    await SecureStorageService.instance.clearSession();
   }
 }

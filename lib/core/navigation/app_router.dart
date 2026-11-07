@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../services/local_storage_service.dart';
+import '../../features/splash/screens/splash_screen.dart';
 import '../../features/onboarding/screens/onboarding_screen.dart';
 import '../../features/auth/bloc/auth_bloc.dart';
 import '../../features/auth/screens/login_screen.dart';
@@ -86,7 +87,7 @@ class AppRouter {
 
     return GoRouter(
       navigatorKey: rootNavigatorKey,
-      initialLocation: '/home',
+      initialLocation: '/splash',
       refreshListenable: GoRouterRefreshStream(authBloc.stream),
       redirect: (context, state) {
         final authState = authBloc.state;
@@ -100,8 +101,14 @@ class AppRouter {
         final isAdminLogin = path == '/admin/login';
         final hasSeenOnboarding = LocalStorageService.instance.hasSeenOnboarding;
         final isOnboardingPath = path == '/onboarding';
+        final isSplashPath = path == '/splash';
 
-        // 0. Guarding First-time Onboarding:
+        // 0. Splash screen has priority to verify session & route
+        if (isSplashPath) {
+          return null;
+        }
+
+        // 1. Guarding First-time Onboarding:
         if (!hasSeenOnboarding && !isAdminPath) {
           if (!isOnboardingPath) {
             return '/onboarding';
@@ -114,7 +121,7 @@ class AppRouter {
           return isAuthenticated ? '/home' : '/login';
         }
 
-        // 1. Guarding Admin & Shelter Routes (Strict 403 / Redirect isolation):
+        // 2. Guarding Admin & Shelter Routes (Strict 403 / Redirect isolation):
         if (isAdminPath && !isAdminLogin) {
           if (!isAuthenticated) {
             return '/admin/login';
@@ -128,7 +135,7 @@ class AppRouter {
           return null;
         }
 
-        // 2. Guarding Consumer Routes for Admin/Moderator Users:
+        // 3. Guarding Consumer Routes for Admin/Moderator Users:
         if (isAuthenticated && hasAdminAccess) {
           if (!isAdminPath) {
             return '/admin/dashboard';
@@ -139,9 +146,21 @@ class AppRouter {
           return null;
         }
 
-        // 3. Regular users trying to access /admin/login while logged in as consumer:
+        // 4. Regular users trying to access /admin/login while logged in as consumer:
         if (isAdminLogin && isAuthenticated && !hasAdminAccess) {
           return '/home';
+        }
+
+        // 5. Authenticated users on login screen redirected to home
+        if (isAuthenticated && (path == '/login' || path == '/register')) {
+          return hasAdminAccess ? '/admin/dashboard' : '/home';
+        }
+
+        // 6. Unauthenticated users attempting to access account-restricted screens
+        if (!isAuthenticated && !isAdminPath && path != '/login' && path != '/onboarding' && path != '/auth-callback') {
+          if (path.startsWith('/profile') || path.startsWith('/chat') || path.startsWith('/applications')) {
+            return '/login';
+          }
         }
 
         return null;
@@ -267,8 +286,13 @@ class AppRouter {
         ),
 
         // ==========================================
-        // 0. ONBOARDING ROUTE
+        // 0. SPLASH & ONBOARDING ROUTES
         // ==========================================
+        GoRoute(
+          parentNavigatorKey: rootNavigatorKey,
+          path: '/splash',
+          builder: (context, state) => const SplashScreen(),
+        ),
         GoRoute(
           parentNavigatorKey: rootNavigatorKey,
           path: '/onboarding',

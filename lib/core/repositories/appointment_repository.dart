@@ -16,25 +16,6 @@ class AppointmentRepository {
   List<AdoptionAppointment> _appointments = [];
   bool _initialized = false;
 
-  final List<AdoptionAppointment> _defaultAppointments = [
-    AdoptionAppointment(
-      id: 'apt-001',
-      petId: 'p1',
-      petName: 'Luna',
-      petImageUrl: 'https://3kht7mdtcvdag9ff.private.blob.vercel-storage.com/pets/pet_1.jpg',
-      shelterName: 'Dhaka Animal Rescue',
-      shelterPhone: '+880 17•• ••••12',
-      shelterAddress: 'Dhanmondi 27, Dhaka',
-      applicantName: 'Elias Ahmed',
-      applicantPhone: '+880 1711 234567',
-      date: DateTime.now().add(const Duration(days: 2)),
-      timeSlot: '4:00 PM - 5:00 PM',
-      type: AppointmentType.homeTourInterview,
-      status: AppointmentStatus.confirmed,
-      notes: 'Virtual video call via Zoom or Google Meet. Shelter officer Tanvir will lead.',
-    ),
-  ];
-
   Future<void> _init() async {
     if (_initialized) return;
     try {
@@ -44,11 +25,10 @@ class AppointmentRepository {
         final List<dynamic> list = jsonDecode(raw);
         _appointments = list.map((item) => AdoptionAppointment.fromJson(item as Map<String, dynamic>)).toList();
       } else {
-        _appointments = List.from(_defaultAppointments);
-        await _save();
+        _appointments = [];
       }
     } catch (_) {
-      _appointments = List.from(_defaultAppointments);
+      _appointments = [];
     }
     _initialized = true;
     _streamController.add(List.unmodifiable(_appointments));

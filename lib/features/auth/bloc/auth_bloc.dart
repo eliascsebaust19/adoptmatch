@@ -1,28 +1,53 @@
 import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
-
-import '../../../core/services/supabase_service.dart';
 import '../../../core/services/google_auth_service.dart';
 import '../../../core/services/laravel_auth_service.dart';
+import '../../../core/services/supabase_service.dart';
+import '../../../core/storage/secure_storage_service.dart';
+import '../repositories/auth_repository.dart';
 
+// --- Roles & Profile Models ---
 enum UserRole {
-  guest,
   adopter,
   shelter,
   foster,
   moderator,
   admin,
-  superAdmin;
+  superAdmin,
+  guest;
 
-  bool get isGuest => this == UserRole.guest;
+  String get displayName {
+    switch (this) {
+      case UserRole.superAdmin:
+        return 'Super Administrator';
+      case UserRole.admin:
+        return 'Operations Admin';
+      case UserRole.moderator:
+        return 'Community Moderator';
+      case UserRole.shelter:
+        return 'Shelter Manager';
+      case UserRole.foster:
+        return 'Foster Caregiver';
+      case UserRole.guest:
+        return 'Guest Explorer';
+      case UserRole.adopter:
+        return 'Pet Adopter';
+    }
+  }
+
+  bool get hasAdminAccess =>
+      this == UserRole.admin ||
+      this == UserRole.superAdmin ||
+      this == UserRole.moderator ||
+      this == UserRole.shelter;
+
   bool get isAdmin => this == UserRole.admin || this == UserRole.superAdmin;
   bool get isModerator => this == UserRole.moderator;
   bool get isShelter => this == UserRole.shelter;
-  bool get hasAdminAccess => isAdmin || isModerator || isShelter;
+  bool get isGuest => this == UserRole.guest;
   bool get isConsumer => this == UserRole.adopter || this == UserRole.guest;
 
   String get code {
@@ -46,7 +71,7 @@ enum UserRole {
 
   static UserRole fromCode(String? code) {
     if (code == null) return UserRole.adopter;
-    switch (code.toUpperCase().trim()) {
+    switch (code.toUpperCase()) {
       case 'GUEST':
         return UserRole.guest;
       case 'SUPER_ADMIN':
@@ -122,6 +147,59 @@ class UserProfile extends Equatable {
     return 'Verified Supporter';
   }
 
+  factory UserProfile.fromJson(Map<String, dynamic> json) {
+    DateTime? expiry;
+    if (json['premiumExpiresAt'] != null) {
+      try {
+        expiry = DateTime.parse(json['premiumExpiresAt'].toString());
+      } catch (_) {}
+    } else if (json['premium_expires_at'] != null) {
+      try {
+        expiry = DateTime.parse(json['premium_expires_at'].toString());
+      } catch (_) {}
+    }
+
+    final rawRole = json['role']?.toString();
+
+    return UserProfile(
+      id: json['id']?.toString() ?? 'usr_${DateTime.now().millisecondsSinceEpoch}',
+      name: json['name']?.toString() ?? 'Pet Lover',
+      email: json['email']?.toString() ?? '',
+      phone: json['phone']?.toString() ?? '',
+      role: UserRole.fromCode(rawRole),
+      isVerified: json['isVerified'] == true || json['is_verified'] == true || json['email_verified_at'] != null,
+      avatarUrl: json['avatarUrl']?.toString() ?? json['avatar']?.toString() ?? '',
+      permissions: (json['permissions'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
+      location: json['location']?.toString() ?? json['location_city']?.toString() ?? 'Dhaka, Bangladesh',
+      bio: json['bio']?.toString() ?? 'Animal advocate & pet rescuer',
+      googlePhotoUrl: json['googlePhotoUrl']?.toString() ?? '',
+      preferredPetType: json['preferredPetType']?.toString() ?? 'All Pets',
+      isPremium: json['isPremium'] == true || json['is_premium'] == true,
+      premiumPlanId: json['premiumPlanId']?.toString() ?? json['premium_plan_id']?.toString(),
+      premiumExpiresAt: expiry,
+      subscriptionStatus: json['subscriptionStatus']?.toString() ?? json['subscription_status']?.toString() ?? 'NONE',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'email': email,
+    'phone': phone,
+    'role': role.name,
+    'isVerified': isVerified,
+    'avatarUrl': avatarUrl,
+    'permissions': permissions,
+    'location': location,
+    'bio': bio,
+    'googlePhotoUrl': googlePhotoUrl,
+    'preferredPetType': preferredPetType,
+    'isPremium': isPremium,
+    'premiumPlanId': premiumPlanId,
+    'premiumExpiresAt': premiumExpiresAt?.toIso8601String(),
+    'subscriptionStatus': subscriptionStatus,
+  };
+
   UserProfile copyWith({
     String? id,
     String? name,
@@ -188,6 +266,8 @@ abstract class AuthEvent extends Equatable {
   List<Object?> get props => [];
 }
 
+class CheckSessionEvent extends AuthEvent {}
+
 class SignUpWithEmailEvent extends AuthEvent {
   final String fullName;
   final String email;
@@ -206,7 +286,9 @@ class SignUpWithEmailEvent extends AuthEvent {
 class LoginWithEmailEvent extends AuthEvent {
   final String email;
   final String password;
+
   const LoginWithEmailEvent(this.email, this.password);
+
   @override
   List<Object?> get props => [email, password];
 }
@@ -214,7 +296,9 @@ class LoginWithEmailEvent extends AuthEvent {
 class AdminLoginWithEmailEvent extends AuthEvent {
   final String email;
   final String password;
+
   const AdminLoginWithEmailEvent(this.email, this.password);
+
   @override
   List<Object?> get props => [email, password];
 }
@@ -357,31 +441,16 @@ class AuthFailure extends AuthState {
 
 // --- BLoC ---
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
-  UserProfile _currentUser = const UserProfile(
-    id: 'u-101',
-    name: 'Elias Ahmed',
-    email: 'elias3224@gmail.com',
-    phone: '+880 1711 234567',
-    role: UserRole.adopter,
-    isVerified: true,
-  );
-
+  UserProfile? _currentUser;
+  final AuthRepository _authRepository;
   final _laravelAuthService = LaravelAuthService();
   StreamSubscription<sb.AuthState>? _supabaseAuthSubscription;
 
-  AuthBloc()
-    : super(
-        const Authenticated(
-          UserProfile(
-            id: 'u-101',
-            name: 'Elias Ahmed',
-            email: 'elias3224@gmail.com',
-            phone: '+880 1711 234567',
-            role: UserRole.adopter,
-            isVerified: true,
-          ),
-        ),
-      ) {
+  AuthBloc({UserProfile? initialUser, AuthRepository? authRepository})
+      : _currentUser = initialUser,
+        _authRepository = authRepository ?? AuthRepository(),
+        super(initialUser != null ? Authenticated(initialUser) : AuthInitial()) {
+    on<CheckSessionEvent>(_onCheckSession);
     on<SignUpWithEmailEvent>(_onSignUpWithEmail);
     on<LoginWithEmailEvent>(_onLoginWithEmail);
     on<AdminLoginWithEmailEvent>(_onAdminLoginWithEmail);
@@ -432,6 +501,20 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
+  Future<void> _onCheckSession(
+    CheckSessionEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    final user = await _authRepository.verifyCurrentSession();
+    if (user != null) {
+      _currentUser = user;
+      emit(Authenticated(user));
+    } else {
+      _currentUser = null;
+      emit(AuthUnauthenticated());
+    }
+  }
+
   Future<void> _onSignUpWithEmail(
     SignUpWithEmailEvent event,
     Emitter<AuthState> emit,
@@ -449,30 +532,39 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           emit(
             AuthSignUpConfirmationPending(
               email: event.email,
-              message: 'Account created on AdoptMatch! You can now log in.',
+              message:
+                  'Your account has been created! A confirmation email has been sent to your Gmail. Please verify your inbox before logging in.',
             ),
           );
           return;
         }
       } catch (laravelErr) {
-        debugPrint('[AuthBloc] Laravel register fallback: ');
+        debugPrint('[AuthBloc] Laravel register notice: $laravelErr');
       }
 
       if (SupabaseService.isInitialized) {
-        await SupabaseService.signUpWithEmail(
+        final response = await SupabaseService.signUpWithEmail(
           email: event.email,
           password: event.password,
           fullName: event.fullName,
         );
-      } else {
-        await Future.delayed(const Duration(milliseconds: 600));
+        if (response.user != null) {
+          emit(
+            AuthSignUpConfirmationPending(
+              email: event.email,
+              message:
+                  'A confirmation link has been sent to ${event.email}. Please verify your inbox to activate your account.',
+            ),
+          );
+          return;
+        }
       }
 
-      // Do NOT automatically log them into dashboard
       emit(
         AuthSignUpConfirmationPending(
           email: event.email,
-          message: 'A confirmation email has been sent to your Gmail. Please click the link in your email to verify and activate your account.',
+          message:
+              'A confirmation email has been sent to your Gmail. Please check your inbox.',
         ),
       );
     } on sb.AuthException catch (e) {
@@ -488,36 +580,20 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     emit(AuthLoading());
     try {
-      final emailLower = event.email.trim().toLowerCase();
-
-      // 1. Try Live Laravel 11 Backend API Authentication
+      // 1. Primary: Live Laravel 11 Backend API Authentication
       try {
-        final res = await _laravelAuthService.login(
+        final user = await _authRepository.loginWithEmail(
           email: event.email,
           password: event.password,
         );
-        if (res['status'] == 'success' || res['success'] == true) {
-          final userMap = res['user'] as Map<String, dynamic>?;
-          if (userMap != null) {
-            final roleStr = userMap['role']?.toString();
-            _currentUser = UserProfile(
-              id: userMap['id']?.toString() ?? '1',
-              name: userMap['name'] ?? 'User',
-              email: userMap['email'] ?? event.email,
-              phone: userMap['phone'] ?? '',
-              role: UserRole.fromCode(roleStr),
-              avatarUrl: userMap['avatar'] ?? '',
-              isVerified: true,
-            );
-            emit(Authenticated(_currentUser));
-            return;
-          }
-        }
+        _currentUser = user;
+        emit(Authenticated(user));
+        return;
       } catch (laravelErr) {
-        debugPrint('[AuthBloc] Laravel login fallback: ');
+        debugPrint('[AuthBloc] Laravel login failed: $laravelErr');
       }
 
-      // 2. Try Live Supabase authentication
+      // 2. Secondary: Live Supabase authentication
       if (SupabaseService.isInitialized) {
         try {
           final response = await SupabaseService.signInWithEmail(
@@ -540,7 +616,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
               role: userRole,
               isVerified: user.emailConfirmedAt != null,
             );
-            emit(Authenticated(_currentUser));
+            await SecureStorageService.instance.saveUserProfile(_currentUser!);
+            emit(Authenticated(_currentUser!));
             return;
           }
         } on sb.AuthException catch (e) {
@@ -553,61 +630,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
             );
             return;
           }
-          // If remote credentials don't match or demo accounts are used,
-          // fall through to demo credentials for admin/shelter/demo users
-          debugPrint(
-            '[AuthBloc] Supabase auth exception (${e.message}), checking demo credentials',
-          );
+          emit(AuthFailure(e.message));
+          return;
         }
       }
 
-      // 2. Demo / Fallback Authentication for Admin, Shelter, and Adopters
-      await Future.delayed(const Duration(milliseconds: 400));
-      if (emailLower == 'superadmin@adoptmatch.org' ||
-          emailLower == 'superadmin@gmail.com') {
-        _currentUser = const UserProfile(
-          id: 'admin-super-01',
-          name: 'Sarah Rahman (Super Admin)',
-          email: 'superadmin@adoptmatch.org',
-          phone: '+880 1819 000001',
-          role: UserRole.superAdmin,
-          isVerified: true,
-        );
-        emit(Authenticated(_currentUser));
-      } else if (emailLower == 'admin@adoptmatch.com' ||
-          emailLower == 'admin@adoptmatch.org' ||
-          emailLower.contains('admin')) {
-        _currentUser = const UserProfile(
-          id: 'admin-ops-02',
-          name: 'Kamrul Hasan (Admin Ops)',
-          email: 'admin@adoptmatch.com',
-          phone: '+880 1819 000002',
-          role: UserRole.admin,
-          isVerified: true,
-        );
-        emit(Authenticated(_currentUser));
-      } else if (emailLower.contains('shelter')) {
-        _currentUser = const UserProfile(
-          id: 'shelter-mgr-01',
-          name: 'Dhaka Paws Shelter (Manager)',
-          email: 'shelter@adoptmatch.com',
-          phone: '+880 1711 000003',
-          role: UserRole.shelter,
-          isVerified: true,
-        );
-        emit(Authenticated(_currentUser));
-      } else {
-        // Standard demo adopter login
-        _currentUser = UserProfile(
-          id: 'u-101',
-          name: 'Elias Ahmed',
-          email: event.email,
-          phone: '+880 1711 234567',
-          role: UserRole.adopter,
-          isVerified: true,
-        );
-        emit(Authenticated(_currentUser));
-      }
+      emit(const AuthFailure('Invalid email or password.'));
     } catch (e) {
       emit(AuthFailure(e.toString()));
     }
@@ -619,9 +647,29 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     emit(AuthLoading());
     try {
-      final emailLower = event.email.trim().toLowerCase();
+      // 1. Primary: Authenticate via Laravel API
+      try {
+        final user = await _authRepository.loginWithEmail(
+          email: event.email,
+          password: event.password,
+        );
+        if (!user.role.hasAdminAccess) {
+          await _authRepository.logout();
+          emit(
+            const AuthFailure(
+              '403 Forbidden: Access Denied. Administrator or Shelter Manager privileges required.',
+            ),
+          );
+          return;
+        }
+        _currentUser = user;
+        emit(Authenticated(user));
+        return;
+      } catch (laravelErr) {
+        debugPrint('[AuthBloc] Admin Laravel login: $laravelErr');
+      }
 
-      // 1. Check live Supabase authentication
+      // 2. Secondary: Supabase Authentication
       if (SupabaseService.isInitialized) {
         try {
           final response = await SupabaseService.signInWithEmail(
@@ -651,63 +699,21 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
               role: userRole,
               isVerified: true,
             );
-            emit(Authenticated(_currentUser));
+            await SecureStorageService.instance.saveUserProfile(_currentUser!);
+            emit(Authenticated(_currentUser!));
             return;
           }
         } on sb.AuthException catch (e) {
-          // If unconfirmed or credentials wrong on live Supabase, check demo admin credentials
-          if (!emailLower.contains('admin') &&
-              !emailLower.contains('shelter') &&
-              !emailLower.contains('manager') &&
-              emailLower != 'superadmin@adoptmatch.org') {
-            emit(AuthFailure(e.message));
-            return;
-          }
+          emit(AuthFailure(e.message));
+          return;
         }
       }
 
-      // 2. Demo / Fallback Administrative Authentication
-      await Future.delayed(const Duration(milliseconds: 600));
-      if (emailLower == 'superadmin@adoptmatch.org' ||
-          emailLower == 'superadmin@gmail.com') {
-        _currentUser = const UserProfile(
-          id: 'admin-super-01',
-          name: 'Sarah Rahman (Super Admin)',
-          email: 'superadmin@adoptmatch.org',
-          phone: '+880 1819 000001',
-          role: UserRole.superAdmin,
-          isVerified: true,
-        );
-        emit(Authenticated(_currentUser));
-      } else if (emailLower == 'admin@adoptmatch.com' ||
-          emailLower == 'admin@adoptmatch.org' ||
-          emailLower.contains('admin')) {
-        _currentUser = const UserProfile(
-          id: 'admin-ops-02',
-          name: 'Kamrul Hasan (Admin Ops)',
-          email: 'admin@adoptmatch.com',
-          phone: '+880 1819 000002',
-          role: UserRole.admin,
-          isVerified: true,
-        );
-        emit(Authenticated(_currentUser));
-      } else if (emailLower.contains('shelter')) {
-        _currentUser = const UserProfile(
-          id: 'shelter-mgr-01',
-          name: 'Dhaka Paws Shelter (Manager)',
-          email: 'shelter@adoptmatch.com',
-          phone: '+880 1711 000003',
-          role: UserRole.shelter,
-          isVerified: true,
-        );
-        emit(Authenticated(_currentUser));
-      } else {
-        emit(
-          const AuthFailure(
-            '403 Forbidden: Access Denied. The provided account does not have administrator or shelter manager privileges.',
-          ),
-        );
-      }
+      emit(
+        const AuthFailure(
+          '403 Forbidden: Access Denied. Invalid administrative credentials.',
+        ),
+      );
     } catch (e) {
       emit(AuthFailure(e.toString()));
     }
@@ -728,15 +734,17 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     emit(AuthLoading());
     await Future.delayed(const Duration(milliseconds: 500));
-    _currentUser = UserProfile(
-      id: 'u-101',
-      name: 'Elias Ahmed',
-      email: 'elias3224@gmail.com',
+    final user = UserProfile(
+      id: 'u-${DateTime.now().millisecondsSinceEpoch}',
+      name: 'Phone User',
+      email: '${event.phoneNumber}@adoptmatch.bd',
       phone: event.phoneNumber,
       role: UserRole.adopter,
       isVerified: true,
     );
-    emit(Authenticated(_currentUser));
+    _currentUser = user;
+    await SecureStorageService.instance.saveUserProfile(user);
+    emit(Authenticated(user));
   }
 
   Future<void> _onSocialLogin(
@@ -749,7 +757,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         final result = await GoogleAuthService.signIn();
         if (result.success && result.user != null) {
           _currentUser = result.user!;
-          emit(Authenticated(_currentUser, isNewUser: result.isNewUser));
+          await SecureStorageService.instance.saveUserProfile(_currentUser!);
+          emit(Authenticated(_currentUser!, isNewUser: result.isNewUser));
           return;
         } else if (result.wasCancelled) {
           emit(AuthUnauthenticated());
@@ -759,41 +768,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           return;
         }
       }
-
-      await Future.delayed(const Duration(milliseconds: 500));
-      _currentUser = UserProfile(
-        id: 'u-${DateTime.now().millisecondsSinceEpoch}',
-        name: 'Google Adopter',
-        email: 'adopter.google@gmail.com',
-        phone: '+880 1700 000000',
-        role: UserRole.adopter,
-        isVerified: true,
-      );
-      emit(Authenticated(_currentUser));
-    } on sb.AuthException catch (e) {
-      final msg = e.message.toLowerCase();
-      if (msg.contains('provider is not enabled') ||
-          msg.contains('unsupported provider')) {
-        emit(
-          const AuthFailure(
-            'Google Provider is not enabled in your Supabase project dashboard. Please enable Google in Supabase Authentication -> Providers -> Google, or configure Google OAuth credentials.',
-          ),
-        );
-      } else {
-        emit(AuthFailure(e.message));
-      }
+      emit(const AuthFailure('Authentication provider unavailable.'));
     } catch (e) {
-      final msg = e.toString().toLowerCase();
-      if (msg.contains('provider is not enabled') ||
-          msg.contains('unsupported provider')) {
-        emit(
-          const AuthFailure(
-            'Google Provider is not enabled in your Supabase project dashboard. Please enable Google in Supabase Authentication -> Providers -> Google, or configure Google OAuth credentials.',
-          ),
-        );
-      } else {
-        emit(AuthFailure(e.toString()));
-      }
+      emit(AuthFailure(e.toString()));
     }
   }
 
@@ -801,19 +778,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     GuestLoginEvent event,
     Emitter<AuthState> emit,
   ) async {
-    emit(AuthLoading());
-    await Future.delayed(const Duration(milliseconds: 250));
-    _currentUser = const UserProfile(
-      id: 'guest-explorer',
-      name: 'Guest Explorer (Demo)',
-      email: 'guest@adoptmatch.demo',
-      phone: '',
-      role: UserRole.guest,
-      isVerified: false,
-      location: 'Dhaka, Bangladesh',
-      bio: 'Exploring AdoptMatch in demo preview mode.',
+    emit(
+      const AuthFailure(
+        'Guest access is disabled. Please create an account or sign in.',
+      ),
     );
-    emit(Authenticated(_currentUser));
   }
 
   void _onUserConfirmedSession(
@@ -821,24 +790,20 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) {
     _currentUser = event.user;
-    emit(Authenticated(_currentUser));
+    emit(Authenticated(_currentUser!));
   }
 
   void _onSwitchRole(SwitchRoleEvent event, Emitter<AuthState> emit) {
-    _currentUser = UserProfile(
-      id: _currentUser.id,
-      name: _currentUser.name,
-      email: _currentUser.email,
-      phone: _currentUser.phone,
-      role: event.role,
-      isVerified: true,
-    );
-    emit(Authenticated(_currentUser));
+    if (_currentUser == null) return;
+    _currentUser = _currentUser!.copyWith(role: event.role);
+    emit(Authenticated(_currentUser!));
   }
 
   Future<void> _onLogout(LogoutEvent event, Emitter<AuthState> emit) async {
+    await _authRepository.logout();
     await GoogleAuthService.signOut();
     await SupabaseService.signOut();
+    _currentUser = null;
     emit(AuthUnauthenticated());
   }
 
@@ -846,24 +811,32 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     UpdateUserProfileEvent event,
     Emitter<AuthState> emit,
   ) async {
-    final updated = _currentUser.copyWith(
+    final base = _currentUser ?? const UserProfile(
+      id: 'usr-updated',
+      name: 'User',
+      email: '',
+      phone: '',
+    );
+
+    final updated = base.copyWith(
       name: (event.name != null && event.name!.trim().isNotEmpty)
           ? event.name!.trim()
-          : _currentUser.name,
+          : base.name,
       phone: (event.phone != null && event.phone!.trim().isNotEmpty)
           ? event.phone!.trim()
-          : _currentUser.phone,
-      avatarUrl: event.avatarUrl ?? _currentUser.avatarUrl,
+          : base.phone,
+      avatarUrl: event.avatarUrl ?? base.avatarUrl,
       location: (event.location != null && event.location!.trim().isNotEmpty)
           ? event.location!.trim()
-          : _currentUser.location,
+          : base.location,
       bio: (event.bio != null && event.bio!.trim().isNotEmpty)
           ? event.bio!.trim()
-          : _currentUser.bio,
-      preferredPetType: event.preferredPetType ?? _currentUser.preferredPetType,
+          : base.bio,
+      preferredPetType: event.preferredPetType ?? base.preferredPetType,
     );
 
     _currentUser = updated;
+    await SecureStorageService.instance.saveUserProfile(updated);
 
     if (SupabaseService.isInitialized &&
         SupabaseService.auth.currentUser != null) {
@@ -880,12 +853,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
             },
           ),
         );
-      } catch (e) {
-        // Silently handled for offline/mock mode
-      }
+      } catch (_) {}
     }
 
-    emit(Authenticated(_currentUser));
+    emit(Authenticated(_currentUser!));
   }
 
   Future<void> _onChangePassword(
@@ -897,31 +868,31 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           SupabaseService.auth.currentUser != null) {
         await SupabaseService.updatePassword(event.newPassword);
       }
-    } catch (_) {
-      // Handled in dialog with specific user feedback
-    }
+    } catch (_) {}
   }
 
   void _onActivateSubscription(
     ActivateSubscriptionEvent event,
     Emitter<AuthState> emit,
   ) {
+    if (_currentUser == null) return;
     final now = DateTime.now();
     DateTime baseDate = now;
-    if (_currentUser.isPremium && _currentUser.premiumExpiresAt != null) {
-      if (_currentUser.premiumExpiresAt!.isAfter(now)) {
-        baseDate = _currentUser.premiumExpiresAt!;
+    if (_currentUser!.isPremium && _currentUser!.premiumExpiresAt != null) {
+      if (_currentUser!.premiumExpiresAt!.isAfter(now)) {
+        baseDate = _currentUser!.premiumExpiresAt!;
       }
     }
     final newExpiry = baseDate.add(Duration(days: event.durationDays));
 
-    _currentUser = _currentUser.copyWith(
+    _currentUser = _currentUser!.copyWith(
       isPremium: true,
       premiumPlanId: event.planId,
       premiumExpiresAt: newExpiry,
       subscriptionStatus: 'ACTIVE',
     );
-    emit(Authenticated(_currentUser));
+    SecureStorageService.instance.saveUserProfile(_currentUser!);
+    emit(Authenticated(_currentUser!));
   }
 
   @override

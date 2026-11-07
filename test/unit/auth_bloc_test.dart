@@ -6,7 +6,7 @@ import 'package:adoptmatch/features/auth/bloc/auth_bloc.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('AuthBloc Supabase Auth Flow Tests', () {
+  group('AuthBloc Production Hardened Auth Flow Tests', () {
     late AuthBloc authBloc;
 
     setUp(() {
@@ -18,8 +18,8 @@ void main() {
       authBloc.close();
     });
 
-    test('initial state has default guest/adopter user', () {
-      expect(authBloc.state, isA<Authenticated>());
+    test('initial state is AuthInitial in production', () {
+      expect(authBloc.state, isA<AuthInitial>());
     });
 
     blocTest<AuthBloc, AuthState>(
@@ -38,9 +38,7 @@ void main() {
         predicate<AuthState>((state) {
           return state is AuthSignUpConfirmationPending &&
               state.email == 'nadia.test@gmail.com' &&
-              state.message.contains(
-                'confirmation email has been sent to your Gmail',
-              );
+              state.message.contains('confirmation email has been sent');
         }),
       ],
     );
@@ -69,49 +67,37 @@ void main() {
     );
 
     blocTest<AuthBloc, AuthState>(
-      'LogoutEvent emits AuthUnauthenticated',
-      build: () => AuthBloc(),
+      'LogoutEvent emits AuthUnauthenticated and revokes session',
+      build: () => AuthBloc(
+        initialUser: const UserProfile(
+          id: 'test-user-1',
+          name: 'Test User',
+          email: 'test@adoptmatch.com',
+          phone: '',
+        ),
+      ),
       act: (bloc) => bloc.add(LogoutEvent()),
       wait: const Duration(milliseconds: 500),
       expect: () => [isA<AuthUnauthenticated>()],
     );
 
     blocTest<AuthBloc, AuthState>(
-      'GuestLoginEvent emits [AuthLoading, Authenticated] with guest role',
+      'GuestLoginEvent is rejected in production',
       build: () => AuthBloc(),
       act: (bloc) => bloc.add(const GuestLoginEvent()),
       wait: const Duration(milliseconds: 500),
       expect: () => [
-        isA<AuthLoading>(),
         predicate<AuthState>((state) {
-          return state is Authenticated &&
-              state.user.role == UserRole.guest &&
-              state.user.role.isGuest == true &&
-              state.user.role.isConsumer == true &&
-              state.user.role.hasAdminAccess == false;
+          return state is AuthFailure &&
+              state.errorMessage.contains('Guest access is disabled');
         }),
       ],
     );
 
     blocTest<AuthBloc, AuthState>(
-      'AdminLoginWithEmailEvent with super admin credentials grants SUPER_ADMIN role',
+      'AdminLoginWithEmailEvent with invalid credentials rejects with Access Denied',
       build: () => AuthBloc(),
-      act: (bloc) => bloc.add(const AdminLoginWithEmailEvent('superadmin@adoptmatch.org', 'adminSecure2026!')),
-      wait: const Duration(milliseconds: 800),
-      expect: () => [
-        isA<AuthLoading>(),
-        predicate<AuthState>((state) {
-          return state is Authenticated &&
-              state.user.role == UserRole.superAdmin &&
-              state.user.role.isAdmin == true;
-        }),
-      ],
-    );
-
-    blocTest<AuthBloc, AuthState>(
-      'AdminLoginWithEmailEvent with non-admin credentials rejects with Access Denied',
-      build: () => AuthBloc(),
-      act: (bloc) => bloc.add(const AdminLoginWithEmailEvent('regular.user@gmail.com', 'password123')),
+      act: (bloc) => bloc.add(const AdminLoginWithEmailEvent('unauthorized@adoptmatch.org', 'invalidPass')),
       wait: const Duration(milliseconds: 800),
       expect: () => [
         isA<AuthLoading>(),
@@ -124,7 +110,14 @@ void main() {
 
     blocTest<AuthBloc, AuthState>(
       'UpdateUserProfileEvent updates user name, phone, avatarUrl, location, and bio',
-      build: () => AuthBloc(),
+      build: () => AuthBloc(
+        initialUser: const UserProfile(
+          id: 'u-101',
+          name: 'Initial User',
+          email: 'user@example.com',
+          phone: '+880 1711 000000',
+        ),
+      ),
       act: (bloc) => bloc.add(
         const UpdateUserProfileEvent(
           name: 'Nadia Karim',
@@ -135,6 +128,7 @@ void main() {
           preferredPetType: 'Cats',
         ),
       ),
+      wait: const Duration(milliseconds: 500),
       expect: () => [
         predicate<AuthState>((state) {
           if (state is! Authenticated) return false;

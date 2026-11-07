@@ -206,4 +206,17 @@ class LocalStorageService {
     final p = await prefs;
     await p.setBool(_keyHasSeenOnboarding, value);
   }
+
+  /// Wipes all cached user applications, chats, messages, favorites, and quiz data on logout
+  Future<void> clearAllUserData() async {
+    try {
+      final p = await prefs;
+      final allKeys = p.getKeys().toList();
+      for (final key in allKeys) {
+        if (key != _keyHasSeenOnboarding) {
+          await p.remove(key);
+        }
+      }
+    } catch (_) {}
+  }
 }

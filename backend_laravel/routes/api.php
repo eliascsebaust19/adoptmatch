@@ -39,6 +39,7 @@ Route::prefix('v1')->group(function () {
 
         // User & Session & FCM Token Registration
         Route::get('/me', [AuthController::class, 'me']);
+        Route::get('/auth/me', [AuthController::class, 'me']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::post('/auth/fcm-token', [AuthController::class, 'updateFcmToken']);
 

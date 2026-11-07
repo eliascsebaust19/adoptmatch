@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:adoptmatch/core/navigation/app_router.dart';
 import 'package:adoptmatch/core/services/local_storage_service.dart';
+import 'package:adoptmatch/core/repositories/application_repository.dart';
 import 'package:adoptmatch/features/auth/bloc/auth_bloc.dart';
 import 'package:adoptmatch/features/admin/screens/admin_dashboard_screen.dart';
 import 'package:adoptmatch/features/application/screens/adoption_application_screen.dart';
@@ -63,11 +63,15 @@ void main() {
   });
 
   testWidgets('AdminDashboardScreen renders without error with KPI cards and tabs', (WidgetTester tester) async {
-    final authBloc = AuthBloc();
-    authBloc.add(const AdminLoginWithEmailEvent('admin@adoptmatch.com', 'admin123'));
-    await tester.pump(const Duration(milliseconds: 700));
-
-    final router = AppRouter.createRouter(authBloc);
+    final authBloc = AuthBloc(
+      initialUser: const UserProfile(
+        id: 'admin-test-01',
+        name: 'Admin Test',
+        email: 'admin@adoptmatch.com',
+        phone: '+880 1800 000000',
+        role: UserRole.admin,
+      ),
+    );
 
     tester.view.physicalSize = const Size(400, 800);
     tester.view.devicePixelRatio = 1.0;
@@ -76,12 +80,11 @@ void main() {
     await tester.pumpWidget(
       BlocProvider<AuthBloc>.value(
         value: authBloc,
-        child: MaterialApp.router(
-          routerConfig: router,
+        child: const MaterialApp(
+          home: AdminDashboardScreen(),
         ),
       ),
     );
-    router.go('/admin/dashboard');
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
@@ -91,6 +94,7 @@ void main() {
 
   testWidgets('AdoptionApplicationScreen renders and advances to step 2', (WidgetTester tester) async {
     LocalStorageService.instance.resetForTesting();
+    ApplicationRepository().resetForTesting();
     SharedPreferences.setMockInitialValues({});
     tester.view.physicalSize = const Size(400, 800);
     tester.view.devicePixelRatio = 1.0;

@@ -57,8 +57,8 @@ class Pet extends Equatable {
     required this.shelterAddress,
     this.shelterRating = 4.9,
     required this.story,
-    required this.medicalHistory,
-    required this.qrHash,
+    this.medicalHistory = 'Vaccinated, dewormed, certified healthy.',
+    this.qrHash = '',
   });
 
   Pet copyWith({

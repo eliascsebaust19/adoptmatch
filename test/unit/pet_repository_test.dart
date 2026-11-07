@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:adoptmatch/core/repositories/pet_repository.dart';
+import '../fixtures/sample_pets.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -9,6 +10,7 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     repository = PetRepository();
+    repository.setPetsForTesting(sampleTestPets);
   });
 
   group('PetRepository Tests', () {

@@ -9,6 +9,7 @@ void main() {
 
   setUp(() {
     LocalStorageService.instance.resetForTesting();
+    ApplicationRepository().resetForTesting();
     SharedPreferences.setMockInitialValues({});
   });
 
@@ -18,7 +19,7 @@ void main() {
       final storage = LocalStorageService.instance;
 
       final initialApps = await repo.getApplications();
-      expect(initialApps.length, greaterThanOrEqualTo(2));
+      expect(initialApps.isEmpty, isTrue);
 
       final newApp = await repo.submitApplication(
         petId: 'p23',

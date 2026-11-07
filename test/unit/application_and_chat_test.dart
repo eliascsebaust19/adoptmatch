@@ -4,7 +4,7 @@ import 'package:adoptmatch/core/models/application_model.dart';
 import 'package:adoptmatch/core/models/chat_message_model.dart';
 import 'package:adoptmatch/core/repositories/application_repository.dart';
 import 'package:adoptmatch/core/repositories/chat_repository.dart';
-import 'package:adoptmatch/core/repositories/pet_repository.dart';
+import '../fixtures/sample_pets.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -76,18 +76,43 @@ void main() {
 
     test('updates application status and reviewer notes', () async {
       final appRepo = ApplicationRepository();
-      final apps = await appRepo.getApplications();
-      expect(apps.isNotEmpty, isTrue);
+      final app = await appRepo.submitApplication(
+        petId: 'p-test',
+        petName: 'Test Pet',
+        petBreed: 'Test Breed',
+        petImageUrl: 'https://example.com/test.jpg',
+        applicantName: 'Test Applicant',
+        applicantPhone: '+880 1700 000000',
+        applicantEmail: 'test@example.com',
+        nidNumber: '123456789',
+        emergencyContactName: 'Contact',
+        emergencyContactPhone: '+880 1800 000000',
+        address: 'Dhaka',
+        housingType: 'Apartment',
+        ownershipStatus: 'Own',
+        landlordAllowsPets: true,
+        yardType: 'Balcony',
+        petLivingSpace: 'Indoor',
+        totalAdults: 2,
+        hasKids: false,
+        hasAllergies: false,
+        hasOtherPets: false,
+        petExperience: 'Experienced',
+        dailyHoursAlone: '2 hours',
+        primaryCaregiver: 'Self',
+        emergencyVetFund: true,
+        monthlyBudget: '5,000 BDT',
+        whyAdopt: 'Love animals',
+      );
 
-      final firstApp = apps.first;
       await appRepo.updateApplicationStatus(
-        firstApp.id,
+        app.id,
         ApplicationStatus.approved,
         notes: 'Background checks and landlord clearance verified successfully.',
       );
 
       final updatedApps = await appRepo.getApplications();
-      final target = updatedApps.firstWhere((a) => a.id == firstApp.id);
+      final target = updatedApps.firstWhere((a) => a.id == app.id);
       expect(target.status, equals(ApplicationStatus.approved));
       expect(target.reviewerNotes, contains('landlord clearance verified'));
     });
@@ -95,10 +120,8 @@ void main() {
 
   group('ChatRepository Tests', () {
     test('creates or retrieves dedicated conversation for pet', () async {
-      final petRepo = PetRepository();
       final chatRepo = ChatRepository();
-
-      final pet = (await petRepo.getAllPets()).first;
+      final pet = sampleTestPets.first;
       final conv = await chatRepo.getOrCreateConversationForPet(pet);
 
       expect(conv.petId, equals(pet.id));
@@ -111,8 +134,8 @@ void main() {
 
     test('sends a message and receives simulated shelter reply', () async {
       final chatRepo = ChatRepository();
-      final convs = await chatRepo.getConversations();
-      final testConv = convs.first;
+      final pet = sampleTestPets.first;
+      final testConv = await chatRepo.getOrCreateConversationForPet(pet);
 
       final initialCount = (await chatRepo.getMessages(testConv.id)).length;
 
@@ -132,8 +155,8 @@ void main() {
 
     test('marks conversation as read', () async {
       final chatRepo = ChatRepository();
-      final convs = await chatRepo.getConversations();
-      final testConv = convs.first;
+      final pet = sampleTestPets.first;
+      final testConv = await chatRepo.getOrCreateConversationForPet(pet);
 
       await chatRepo.markConversationAsRead(testConv.id);
       final updatedConvs = await chatRepo.getConversations();
