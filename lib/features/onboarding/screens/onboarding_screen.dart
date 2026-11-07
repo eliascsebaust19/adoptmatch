@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../core/services/local_storage_service.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -17,8 +18,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _OnboardingCardData(
       title: 'Swipe to Match Pets 🐾',
       subtitle: 'Location-Based Smart Pet Matching',
-      description:
-          'Find your perfect animal companion tailored to your living space, lifestyle, and preferences. Discover adoptable shelter pets near you with ease.',
+      description: 'Find your perfect animal companion tailored to your living space, lifestyle, and preferences. Discover adoptable shelter pets near you with ease.',
       icon: Icons.pets_rounded,
       primaryColor: Color(0xFF0D9488),
       secondaryColor: Color(0xFF14B8A6),
@@ -31,8 +31,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _OnboardingCardData(
       title: 'Digital Health Passport 🏥',
       subtitle: 'Medical History, QR Code Access & Vet Reminders',
-      description:
-          'Every pet has a digital medical profile. Access vaccination history, upcoming treatment schedules, and verified vet health records anytime.',
+      description: 'Every pet has a digital medical profile. Access vaccination history, upcoming treatment schedules, and verified vet health records anytime.',
       icon: Icons.health_and_safety_rounded,
       primaryColor: Color(0xFF0284C7),
       secondaryColor: Color(0xFF38BDF8),
@@ -45,8 +44,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _OnboardingCardData(
       title: 'Real-time Chat & SOS 🚨',
       subtitle: 'Direct Shelter Messaging & 5km Lost-Pet Broadcast',
-      description:
-          'Coordinate directly with shelters throughout your adoption process, or trigger emergency alerts to notify pet lovers in your area if a pet goes missing.',
+      description: 'Coordinate directly with shelters throughout your adoption process, or trigger emergency alerts to notify pet lovers in your area if a pet goes missing.',
       icon: Icons.notifications_active_rounded,
       primaryColor: Color(0xFFE05626),
       secondaryColor: Color(0xFFF97316),
@@ -198,7 +196,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                   height: 100,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color: card.secondaryColor.withOpacity(0.08),
+                                    color: card.secondaryColor.withOpacity(
+                                      0.08,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -208,13 +208,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   gradient: LinearGradient(
-                                    colors: [card.primaryColor, card.secondaryColor],
+                                    colors: [
+                                      card.primaryColor,
+                                      card.secondaryColor,
+                                    ],
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: card.primaryColor.withOpacity(0.35),
+                                      color: card.primaryColor.withOpacity(
+                                        0.35,
+                                      ),
                                       blurRadius: 20,
                                       offset: const Offset(0, 8),
                                     ),
@@ -286,12 +291,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: card.features.map((feature) {
                               return Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 4),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 4,
+                                ),
                                 child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Padding(
-                                      padding: const EdgeInsets.only(top: 2, right: 10),
+                                      padding: const EdgeInsets.only(
+                                        top: 2,
+                                        right: 10,
+                                      ),
                                       child: Icon(
                                         Icons.check_circle_rounded,
                                         size: 16,
@@ -328,9 +338,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
               decoration: const BoxDecoration(
                 color: Colors.white,
-                border: Border(
-                  top: BorderSide(color: Color(0xFFE2E8F0)),
-                ),
+                border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,

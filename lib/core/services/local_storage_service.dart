@@ -1,5 +1,7 @@
 import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/application_model.dart';
 import '../models/chat_message_model.dart';
 
@@ -76,7 +78,10 @@ class LocalStorageService {
     }
   }
 
-  Future<void> saveApplicationDraft(String petId, Map<String, dynamic> draftData) async {
+  Future<void> saveApplicationDraft(
+    String petId,
+    Map<String, dynamic> draftData,
+  ) async {
     final p = await prefs;
     await p.setString('$_keyDraftPrefix$petId', jsonEncode(draftData));
   }
@@ -93,7 +98,11 @@ class LocalStorageService {
       final raw = p.getString(_keyConversations);
       if (raw == null) return null;
       final List<dynamic> list = jsonDecode(raw);
-      return list.map((item) => ChatConversation.fromJson(item as Map<String, dynamic>)).toList();
+      return list
+          .map(
+            (item) => ChatConversation.fromJson(item as Map<String, dynamic>),
+          )
+          .toList();
     } catch (_) {
       return null;
     }
@@ -111,13 +120,18 @@ class LocalStorageService {
       final raw = p.getString('$_keyMessagesPrefix$conversationId');
       if (raw == null) return null;
       final List<dynamic> list = jsonDecode(raw);
-      return list.map((item) => ChatMessage.fromJson(item as Map<String, dynamic>)).toList();
+      return list
+          .map((item) => ChatMessage.fromJson(item as Map<String, dynamic>))
+          .toList();
     } catch (_) {
       return null;
     }
   }
 
-  Future<void> saveMessages(String conversationId, List<ChatMessage> messages) async {
+  Future<void> saveMessages(
+    String conversationId,
+    List<ChatMessage> messages,
+  ) async {
     final p = await prefs;
     final encoded = jsonEncode(messages.map((m) => m.toJson()).toList());
     await p.setString('$_keyMessagesPrefix$conversationId', encoded);

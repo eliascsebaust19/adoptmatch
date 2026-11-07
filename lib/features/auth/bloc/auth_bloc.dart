@@ -555,7 +555,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           }
           // If remote credentials don't match or demo accounts are used,
           // fall through to demo credentials for admin/shelter/demo users
-          debugPrint('[AuthBloc] Supabase auth exception (${e.message}), checking demo credentials');
+          debugPrint(
+            '[AuthBloc] Supabase auth exception (${e.message}), checking demo credentials',
+          );
         }
       }
 

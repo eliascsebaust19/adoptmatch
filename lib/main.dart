@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+
 import 'core/theme/app_theme.dart';
 import 'core/localization/app_locale.dart';
 import 'core/navigation/app_router.dart';
@@ -39,17 +40,14 @@ class _AdoptMatchAppState extends State<AdoptMatchApp> {
   @override
   Widget build(BuildContext context) {
     return MultiRepositoryProvider(
-      providers: [
-        RepositoryProvider.value(value: widget.petRepository),
-      ],
+      providers: [RepositoryProvider.value(value: widget.petRepository)],
       child: MultiBlocProvider(
         providers: [
-          BlocProvider<AuthBloc>.value(
-            value: AppRouter.defaultAuthBloc,
-          ),
+          BlocProvider<AuthBloc>.value(value: AppRouter.defaultAuthBloc),
           BlocProvider<PetMatchBloc>(
-            create: (context) => PetMatchBloc(repository: widget.petRepository)
-              ..add(const LoadPetsEvent()),
+            create: (context) =>
+                PetMatchBloc(repository: widget.petRepository)
+                  ..add(const LoadPetsEvent()),
           ),
         ],
         child: AppLocaleScope(

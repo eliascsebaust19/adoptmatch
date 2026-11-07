@@ -234,7 +234,7 @@ class _HappyTailsFeedScreenState extends State<HappyTailsFeedScreen> {
                     children: [
                       CircleAvatar(
                         radius: 20,
-                        backgroundImage: NetworkImage(post.authorAvatar),
+                        backgroundImage: AppNetworkImage.provider(post.authorAvatar),
                       ),
                       const SizedBox(width: 10),
                       Expanded(

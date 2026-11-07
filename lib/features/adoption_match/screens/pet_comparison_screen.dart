@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/models/pet_model.dart';
 import '../../../core/repositories/pet_repository.dart';
+import '../../../shared/widgets/app_network_image.dart';
 
 class PetComparisonScreen extends StatefulWidget {
   final String? initialPetId;
@@ -53,7 +53,7 @@ class _PetComparisonScreenState extends State<PetComparisonScreen> {
           itemBuilder: (context, index) {
             final p = _allPets[index];
             return ListTile(
-              leading: CircleAvatar(backgroundImage: NetworkImage(p.imageUrl)),
+              leading: CircleAvatar(backgroundImage: AppNetworkImage.provider(p.imageUrl)),
               title: Text('${p.name} (${p.breed})', style: const TextStyle(fontWeight: FontWeight.bold)),
               subtitle: Text('${p.matchScore}% Match • ${p.ageDisplay}'),
               onTap: () => Navigator.pop(context, p),
@@ -197,7 +197,7 @@ class _PetComparisonScreenState extends State<PetComparisonScreen> {
                           child: SizedBox(
                             width: 110,
                             height: 110,
-                            child: CachedNetworkImage(
+                            child: AppNetworkImage(
                               imageUrl: pA.imageUrl,
                               fit: BoxFit.cover,
                             ),
@@ -246,7 +246,7 @@ class _PetComparisonScreenState extends State<PetComparisonScreen> {
                           child: SizedBox(
                             width: 110,
                             height: 110,
-                            child: CachedNetworkImage(
+                            child: AppNetworkImage(
                               imageUrl: pB.imageUrl,
                               fit: BoxFit.cover,
                             ),

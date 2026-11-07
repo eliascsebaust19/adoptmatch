@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../core/services/storage_service.dart';
 
 class AppNetworkImage extends StatelessWidget {
   final String imageUrl;
@@ -10,6 +11,8 @@ class AppNetworkImage extends StatelessWidget {
   final double? height;
   final Widget? placeholder;
   final Widget? errorWidget;
+  final int? memCacheWidth;
+  final int? memCacheHeight;
 
   const AppNetworkImage({
     super.key,
@@ -19,7 +22,38 @@ class AppNetworkImage extends StatelessWidget {
     this.height,
     this.placeholder,
     this.errorWidget,
+    this.memCacheWidth = 600,
+    this.memCacheHeight = 600,
   });
+
+  /// Injects bearer token for private Vercel Blob store URLs
+  static Map<String, String>? getHeadersForUrl(String url) {
+    if (url.contains('blob.vercel-storage.com')) {
+      return {
+        'Authorization': 'Bearer ${StorageService.vercelBlobToken}',
+      };
+    }
+    return null;
+  }
+
+  /// Convenience image provider for CircleAvatar and decoration images
+  static ImageProvider provider(
+    String url, {
+    int? memCacheWidth = 600,
+    int? memCacheHeight = 600,
+  }) {
+    if (url.startsWith('data:image')) {
+      final commaIdx = url.indexOf(',');
+      final base64Str = commaIdx != -1 ? url.substring(commaIdx + 1) : url;
+      return MemoryImage(base64Decode(base64Str));
+    }
+    return CachedNetworkImageProvider(
+      url,
+      headers: getHeadersForUrl(url),
+      maxWidth: memCacheWidth,
+      maxHeight: memCacheHeight,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +63,10 @@ class AppNetworkImage extends StatelessWidget {
         child: SizedBox(
           width: 24,
           height: 24,
-          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0D9488)),
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: Color(0xFF0D9488),
+          ),
         ),
       ),
     );
@@ -38,6 +75,10 @@ class AppNetworkImage extends StatelessWidget {
       color: const Color(0xFFE2E8F0),
       child: const Icon(Icons.pets, size: 36, color: Colors.grey),
     );
+
+    if (imageUrl.isEmpty) {
+      return errorWidget ?? defaultError;
+    }
 
     if (imageUrl.startsWith('data:image')) {
       try {
@@ -62,6 +103,7 @@ class AppNetworkImage extends StatelessWidget {
         width: width,
         height: height,
         fit: fit,
+        headers: getHeadersForUrl(imageUrl),
         loadingBuilder: (context, child, progress) {
           if (progress == null) return child;
           return placeholder ?? defaultPlaceholder;
@@ -77,9 +119,15 @@ class AppNetworkImage extends StatelessWidget {
       width: width,
       height: height,
       fit: fit,
+      httpHeaders: getHeadersForUrl(imageUrl),
+      memCacheWidth: memCacheWidth,
+      memCacheHeight: memCacheHeight,
+      maxWidthDiskCache: 1200,
+      maxHeightDiskCache: 1200,
+      fadeInDuration: const Duration(milliseconds: 200),
+      fadeOutDuration: const Duration(milliseconds: 150),
       placeholder: (context, url) => placeholder ?? defaultPlaceholder,
       errorWidget: (context, url, error) => errorWidget ?? defaultError,
     );
   }
 }
-

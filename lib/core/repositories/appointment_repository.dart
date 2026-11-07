@@ -21,7 +21,7 @@ class AppointmentRepository {
       id: 'apt-001',
       petId: 'p1',
       petName: 'Luna',
-      petImageUrl: 'https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&w=800&q=80',
+      petImageUrl: 'https://3kht7mdtcvdag9ff.private.blob.vercel-storage.com/pets/pet_1.jpg',
       shelterName: 'Dhaka Animal Rescue',
       shelterPhone: '+880 17•• ••••12',
       shelterAddress: 'Dhanmondi 27, Dhaka',

@@ -63,19 +63,19 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
   static const List<Map<String, String>> _samplePresets = [
     {
       'label': 'Golden Pup',
-      'url': 'https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&w=800&q=80',
+      'url': 'https://3kht7mdtcvdag9ff.private.blob.vercel-storage.com/pets/pet_1.jpg',
     },
     {
       'label': 'Tabby Cat',
-      'url': 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=800&q=80',
+      'url': 'https://3kht7mdtcvdag9ff.private.blob.vercel-storage.com/pets/pet_4.jpg',
     },
     {
       'label': 'Husky',
-      'url': 'https://images.unsplash.com/photo-1537151625747-768eb6cf92b2?auto=format&fit=crop&w=800&q=80',
+      'url': 'https://3kht7mdtcvdag9ff.private.blob.vercel-storage.com/pets/pet_2.jpg',
     },
     {
       'label': 'Fluffy Bunny',
-      'url': 'https://images.unsplash.com/photo-1585110396000-c9ffd4e4b308?auto=format&fit=crop&w=800&q=80',
+      'url': 'https://3kht7mdtcvdag9ff.private.blob.vercel-storage.com/pets/pet_15.jpg',
     },
   ];
 
@@ -115,7 +115,7 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
       }
     } else {
       _carouselImages.add(
-        'https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&w=800&q=80',
+        'https://3kht7mdtcvdag9ff.private.blob.vercel-storage.com/pets/pet_1.jpg',
       );
     }
   }

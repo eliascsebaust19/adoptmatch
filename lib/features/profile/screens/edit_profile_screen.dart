@@ -340,7 +340,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 borderRadius: BorderRadius.circular(35),
                 child: CircleAvatar(
                   radius: 32,
-                  backgroundImage: NetworkImage(url),
+                  backgroundImage: AppNetworkImage.provider(url),
                 ),
               );
             }).toList(),

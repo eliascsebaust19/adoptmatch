@@ -34,6 +34,16 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Vercel Blob High-Speed Edge Storage Configuration
+    |--------------------------------------------------------------------------
+    */
+    'vercel' => [
+        'blob_token' => env('BLOB_READ_WRITE_TOKEN', 'vercel_blob_rw_3kHT7mDTcvdaG9fF_Q2HYrNy68uqXIFyT9NpMdXM22v6cvQ'),
+        'store_id' => env('VERCEL_BLOB_STORE_ID', '3kHT7mDTcvdaG9fF'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Cloudinary Configuration for Multi-Image CDN
     |--------------------------------------------------------------------------
     */

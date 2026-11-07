@@ -6,6 +6,8 @@ class NotificationService {
     required String title,
     required String body,
   }) async {
-    debugPrint('[NotificationService] Notification Triggered: "$title" - "$body"');
+    debugPrint(
+      '[NotificationService] Notification Triggered: "$title" - "$body"',
+    );
   }
 }

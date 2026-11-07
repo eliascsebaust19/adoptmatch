@@ -11,6 +11,7 @@ import '../../../core/localization/app_locale.dart';
 import '../../../core/widgets/language_selector_sheet.dart';
 import '../../auth/bloc/auth_bloc.dart';
 import '../../../core/services/notification_service.dart';
+import '../../../shared/widgets/app_network_image.dart';
 
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key});
@@ -28,6 +29,20 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   bool _filterVaccinated = false;
   int _unreadNotifs = 0;
   bool _hasShownWelcome = false;
+  final Set<String> _precachedPetIds = <String>{};
+
+  void _precachePetImages(List<dynamic> pets) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      for (int i = 0; i < pets.length && i < 10; i++) {
+        final p = pets[i];
+        if (p.imageUrl != null && p.imageUrl.isNotEmpty && !_precachedPetIds.contains(p.id)) {
+          _precachedPetIds.add(p.id);
+          precacheImage(AppNetworkImage.provider(p.imageUrl), context);
+        }
+      }
+    });
+  }
 
   final List<String> _categories = [
     'All Pets',
@@ -271,7 +286,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   ? CircleAvatar(
                       radius: 17,
                       backgroundColor: const Color(0xFFE0E7FF),
-                      backgroundImage: NetworkImage(
+                      backgroundImage: AppNetworkImage.provider(
                         user.avatarUrl.isNotEmpty ? user.avatarUrl : user.googlePhotoUrl,
                       ),
                     )
@@ -578,6 +593,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
                   if (state is PetMatchLoaded) {
                     final pets = state.pets;
+                    _precachePetImages(pets);
                     if (pets.isEmpty) {
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 48.0),
