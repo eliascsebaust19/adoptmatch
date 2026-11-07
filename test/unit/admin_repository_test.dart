@@ -13,6 +13,7 @@ void main() {
 
     setUp(() {
       adminRepo = AdminRepository();
+      adminRepo.initSeedDataForTesting();
       petRepo = PetRepository();
     });
 

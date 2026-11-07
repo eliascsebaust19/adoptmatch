@@ -33,17 +33,13 @@ class _AdoptionApplicationScreenState extends State<AdoptionApplicationScreen> {
   bool _hasDraft = false;
 
   // Step 1: Applicant & Contact
-  final _nameController = TextEditingController(text: 'Elias Ahmed');
-  final _phoneController = TextEditingController(text: '+880 1711 234567');
-  final _emailController = TextEditingController(text: 'elias3224@gmail.com');
-  final _nidController = TextEditingController(text: '1995-2692-4581-0023');
-  final _emergencyNameController = TextEditingController(text: 'Farhana Ahmed');
-  final _emergencyPhoneController = TextEditingController(
-    text: '+880 1812 345678',
-  );
-  final _addressController = TextEditingController(
-    text: 'House 42, Road 11, Banani, Dhaka-1213',
-  );
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _nidController = TextEditingController();
+  final _emergencyNameController = TextEditingController();
+  final _emergencyPhoneController = TextEditingController();
+  final _addressController = TextEditingController();
 
   // Step 2: Living Environment
   String _housingType = 'Apartment';
@@ -55,7 +51,7 @@ class _AdoptionApplicationScreenState extends State<AdoptionApplicationScreen> {
   String? _step2ValidationError;
 
   // Step 3: Household & Existing Pets
-  int _totalAdults = 2;
+  int _totalAdults = 1;
   bool _hasKids = false;
   final _childrenAgesController = TextEditingController();
   bool _hasAllergies = false;
@@ -65,14 +61,10 @@ class _AdoptionApplicationScreenState extends State<AdoptionApplicationScreen> {
 
   // Step 4: Daily Care & Financial Readiness
   String _dailyHoursAlone = '2-4 hours';
-  final _primaryCaregiverController = TextEditingController(
-    text: 'Self & Family',
-  );
+  final _primaryCaregiverController = TextEditingController();
   bool _emergencyVetFund = true;
   String _monthlyBudget = '5,000 - 10,000 BDT';
-  final _whyAdoptController = TextEditingController(
-    text: 'We are committed to providing a loving, safe forever home with daily exercise, high quality nutrition, and regular vet checkups.',
-  );
+  final _whyAdoptController = TextEditingController();
 
   // Step 5: Consent & Signature
   bool _declarationAgreed = false;
@@ -955,7 +947,7 @@ class _AdoptionApplicationScreenState extends State<AdoptionApplicationScreen> {
           controller: _nameController,
           label: 'Full Legal Name *',
           icon: Icons.person_outline,
-          hint: 'e.g. Elias Ahmed',
+          hint: 'e.g. Tanvir Ahmed',
         ),
         const SizedBox(height: 14),
         _buildTextField(

@@ -293,37 +293,7 @@ class SubscriptionRepository {
       debugPrint('[SubscriptionRepository] fetchAdminPayments fallback: $e');
     }
 
-    // Default mock list for offline admin inspection
-    return [
-      PaymentRecord(
-        tranId: 'AM-BKASH-MOCK-1',
-        userId: 'u-101',
-        userName: 'Elias Ahmed',
-        userEmail: 'elias3224@gmail.com',
-        planId: 'plan-quarterly',
-        planName: '3 Months Saver',
-        amount: 200,
-        status: 'PENDING_APPROVAL',
-        paymentMethod: 'bKash (Manual)',
-        senderPhone: '+880 1711 234567',
-        trxId: '9G7A2K1092',
-        createdAt: DateTime.now().subtract(const Duration(hours: 2)),
-      ),
-      PaymentRecord(
-        tranId: 'AM-SUB-MOCK-2',
-        userId: 'u-102',
-        userName: 'Care For Paws Staff',
-        userEmail: 'info@careforpaws.bd',
-        planId: 'plan-annual',
-        planName: '1 Year VIP Rescuer',
-        amount: 499,
-        status: 'SUCCESS',
-        paymentMethod: 'bKash via SSLCommerz',
-        cardType: 'BKASH-bKash',
-        createdAt: DateTime.now().subtract(const Duration(days: 3)),
-        verifiedAt: DateTime.now().subtract(const Duration(days: 3)),
-      ),
-    ];
+    return [];
   }
 
   /// Admin approves a pending manual bKash payment

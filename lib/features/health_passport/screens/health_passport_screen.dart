@@ -85,11 +85,8 @@ class _HealthPassportScreenState extends State<HealthPassportScreen> {
                     fontSize: 16,
                   ),
                 ),
-                const Text('Registered Owner: Elias Ahmed'),
-                const Text('Emergency Contact: +880 1711 234567'),
-                const Text(
-                  'Allergies: None known (Diet: Standard Hypoallergenic)',
-                ),
+                Text('Registered Owner: ${widget.petName != null ? 'Verified Adopter' : (_pet?.shelterName ?? 'AdoptMatch Community')}'),
+                const Text('Allergies: None known (Diet: Standard Hypoallergenic)'),
                 const Text(
                   'Primary Hospital: Central Veterinary Hospital, Farmgate',
                 ),
@@ -121,7 +118,7 @@ class _HealthPassportScreenState extends State<HealthPassportScreen> {
     const teal = Color(0xFF0D9488);
     const slateDark = Color(0xFF0F172A);
 
-    final petName = widget.petName ?? _pet?.name ?? 'Luna';
+    final petName = widget.petName ?? _pet?.name ?? 'Pet';
     final payload =
         widget.qrPayload ?? _pet?.qrHash ?? 'ADOPT-PET-PASSPORT-BD-2026-X88';
 

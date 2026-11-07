@@ -1,40 +1,11 @@
 import '../models/emergency_alert_model.dart';
 
 class EmergencyRepository {
-  final List<EmergencyAlert> _alerts = [
-    EmergencyAlert(
-      id: 'sos-001',
-      petId: 'p3',
-      petName: 'Rocky',
-      petBreed: 'Golden Retriever Pup',
-      imageUrl: 'https://3kht7mdtcvdag9ff.private.blob.vercel-storage.com/pets/pet_6.jpg',
-      lastSeenLocation: 'Gulshan 1 Circle near Lake Park, Dhaka',
-      lat: 23.7781,
-      lng: 90.4182,
-      radiusKm: 5,
-      rewardBdt: 10000,
-      reportedTime: DateTime.now().subtract(const Duration(hours: 2)),
-      description: 'Wearing a blue nylon collar with silver bell. Very friendly, responds to name Rocky. Slipped leash at 6:30 PM.',
-      contactPhone: '+880 18•• ••••21',
-      isActive: true,
-    ),
-    EmergencyAlert(
-      id: 'sos-002',
-      petId: 'p2',
-      petName: 'Bella',
-      petBreed: 'White & Grey Domestic Short-hair',
-      imageUrl: 'https://3kht7mdtcvdag9ff.private.blob.vercel-storage.com/pets/pet_4.jpg',
-      lastSeenLocation: 'Dhanmondi Road 8/A, Dhaka',
-      lat: 23.7461,
-      lng: 90.3742,
-      radiusKm: 5,
-      rewardBdt: 5000,
-      reportedTime: DateTime.now().subtract(const Duration(hours: 5)),
-      description: 'Microchipped cat, very shy. Please do not chase, call emergency number immediately with sightings.',
-      contactPhone: '+880 17•• ••••88',
-      isActive: true,
-    ),
-  ];
+  List<EmergencyAlert> _alerts = [];
+
+  void setAlertsForTesting(List<EmergencyAlert> alerts) {
+    _alerts = List.from(alerts);
+  }
 
   final List<VetClinic> _clinics = const [
     VetClinic(

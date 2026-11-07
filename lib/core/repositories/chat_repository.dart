@@ -136,6 +136,7 @@ class ChatRepository {
     String conversationId,
     String text, {
     String? attachmentUrl,
+    String? senderName,
   }) async {
     if (!_initialized) await _init();
 
@@ -143,7 +144,7 @@ class ChatRepository {
       id: 'm-${DateTime.now().millisecondsSinceEpoch}',
       conversationId: conversationId,
       senderId: 'user',
-      senderName: 'Elias Ahmed',
+      senderName: senderName ?? 'You',
       text: text,
       timestamp: DateTime.now(),
       isFromUser: true,

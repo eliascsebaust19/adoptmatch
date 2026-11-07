@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/models/appointment_model.dart';
 import '../../../core/models/pet_model.dart';
 import '../../../core/repositories/appointment_repository.dart';
+import '../../auth/bloc/auth_bloc.dart';
 
 class BookAppointmentModal extends StatefulWidget {
   final Pet pet;
@@ -58,6 +60,10 @@ class _BookAppointmentModalState extends State<BookAppointmentModal> {
       _errorMessage = null;
     });
 
+    final authState = context.read<AuthBloc>().state;
+    final userName = authState is Authenticated ? authState.user.name : 'Adopter';
+    final userPhone = authState is Authenticated ? authState.user.phone : '';
+
     try {
       await _aptRepo.bookAppointment(
         petId: widget.pet.id,
@@ -66,8 +72,8 @@ class _BookAppointmentModalState extends State<BookAppointmentModal> {
         shelterName: widget.pet.shelterName,
         shelterPhone: widget.pet.shelterPhone,
         shelterAddress: widget.pet.shelterAddress,
-        applicantName: 'Elias Ahmed',
-        applicantPhone: '+880 1711 234567',
+        applicantName: userName,
+        applicantPhone: userPhone,
         date: _selectedDate,
         timeSlot: _selectedSlot,
         type: _selectedType,

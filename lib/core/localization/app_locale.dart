@@ -35,10 +35,6 @@ class AppStrings {
       AppLanguage.en: 'AdoptMatch',
       AppLanguage.bn: 'অ্যাডপ্টম্যাচ',
     },
-    'greeting_elias': {
-      AppLanguage.en: 'Good Morning, Elias 👋',
-      AppLanguage.bn: 'শুভ সকাল, ইলিয়াস 👋',
-    },
     'hero_title': {
       AppLanguage.en: 'Find your new best friend.',
       AppLanguage.bn: 'খুঁজে নিন আপনার নতুন প্রিয় সঙ্গী।',

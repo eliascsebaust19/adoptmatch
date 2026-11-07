@@ -255,7 +255,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             label: 'Full Name',
                             controller: _nameController,
                             keyboardType: TextInputType.name,
-                            hintText: 'e.g. Elias Ahmed',
+                            hintText: 'e.g. Full Name',
                             prefixIcon: const Icon(Icons.person_outline, color: Colors.grey, size: 20),
                           ),
                           const SizedBox(height: 16),

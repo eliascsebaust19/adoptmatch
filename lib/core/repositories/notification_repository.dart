@@ -81,45 +81,6 @@ class NotificationRepository {
   List<AppNotificationItem> _notifications = [];
   bool _initialized = false;
 
-  final List<AppNotificationItem> _defaultNotifications = [
-    AppNotificationItem(
-      id: 'notif-1',
-      title: 'Home Inspection Scheduled! 🏡',
-      body: 'Shelter Officer Tanvir has scheduled a virtual home tour for Luna on Sunday at 4:00 PM.',
-      category: NotificationCategory.application,
-      timestamp: DateTime.now().subtract(const Duration(hours: 2)),
-      isRead: false,
-      targetRoute: '/applications',
-    ),
-    AppNotificationItem(
-      id: 'notif-2',
-      title: 'New Message from Care For Paws BD 💬',
-      body: 'Coordinator: "Luna is doing wonderful! She loves morning walks around Dhanmondi Lake."',
-      category: NotificationCategory.chat,
-      timestamp: DateTime.now().subtract(const Duration(hours: 5)),
-      isRead: false,
-      targetRoute: '/chat/c-001',
-    ),
-    AppNotificationItem(
-      id: 'notif-3',
-      title: 'Rabies Booster Due Soon 💉',
-      body: 'Luna\'s annual rabies booster is scheduled in 14 days. Don\'t forget to consult your vet.',
-      category: NotificationCategory.care,
-      timestamp: DateTime.now().subtract(const Duration(days: 1)),
-      isRead: true,
-      targetRoute: '/health/p1',
-    ),
-    AppNotificationItem(
-      id: 'notif-4',
-      title: '5km SOS Alert Dispatched 🚨',
-      body: 'Lost Beagle reported near Dhanmondi 27. Please keep an eye out for Milo.',
-      category: NotificationCategory.emergency,
-      timestamp: DateTime.now().subtract(const Duration(days: 2)),
-      isRead: true,
-      targetRoute: '/emergency',
-    ),
-  ];
-
   Future<void> _init() async {
     if (_initialized) return;
     try {
@@ -129,11 +90,10 @@ class NotificationRepository {
         final List<dynamic> list = jsonDecode(raw);
         _notifications = list.map((item) => AppNotificationItem.fromJson(item as Map<String, dynamic>)).toList();
       } else {
-        _notifications = List.from(_defaultNotifications);
-        await _save();
+        _notifications = [];
       }
     } catch (_) {
-      _notifications = List.from(_defaultNotifications);
+      _notifications = [];
     }
     _initialized = true;
     _streamController.add(List.unmodifiable(_notifications));

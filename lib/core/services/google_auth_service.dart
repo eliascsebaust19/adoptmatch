@@ -45,35 +45,36 @@ class GoogleAuthService {
       try {
         account = await _googleSignIn.signIn();
       } catch (nativeErr) {
-        debugPrint('[GoogleAuthService] Native GoogleSignIn error: $nativeErr. Falling back to backend Google auth.');
+        debugPrint('[GoogleAuthService] Native GoogleSignIn error: $nativeErr');
       }
 
-      // If user deliberately cancelled the native dialog
-      if (account == null && await _googleSignIn.isSignedIn()) {
-        debugPrint('[GoogleAuthService] User cancelled Google sign-in dialog.');
-        return const GoogleAuthResult(success: false, wasCancelled: true);
+      if (account == null) {
+        debugPrint('[GoogleAuthService] Native Google sign-in was not completed or cancelled.');
+        return const GoogleAuthResult(
+          success: false,
+          wasCancelled: true,
+          errorMessage: 'Google Sign-In was cancelled or unavailable.',
+        );
       }
 
       String? idToken;
       String? accessToken;
 
-      if (account != null) {
-        try {
-          final authHeaders = await account.authentication;
-          idToken = authHeaders.idToken;
-          accessToken = authHeaders.accessToken;
-        } catch (_) {}
-      }
+      try {
+        final authHeaders = await account.authentication;
+        idToken = authHeaders.idToken;
+        accessToken = authHeaders.accessToken;
+      } catch (_) {}
 
-      // Profile details from native account or default Google account
-      final userEmail = account?.email ?? 'mdeliasahmad99@gmail.com';
-      final userName = account?.displayName ?? 'Md Elias Ahmad';
-      final userPhoto = account?.photoUrl ??
-          'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80';
-      final googleId = account?.id ?? 'google_user_99';
+      // Profile details strictly from the authenticated Google account
+      final userEmail = account.email;
+      final userName = account.displayName?.isNotEmpty == true
+          ? account.displayName!
+          : account.email.split('@').first;
+      final userPhoto = account.photoUrl ?? '';
+      final googleId = account.id;
 
       UserProfile? userProfile;
-
       bool isNewUser = false;
 
       // Sync with Laravel 11 Backend API
@@ -85,7 +86,7 @@ class GoogleAuthService {
             'Accept': 'application/json',
           },
           body: jsonEncode({
-            'id_token': idToken ?? 'native_google_token',
+            'id_token': idToken ?? '',
             'accessToken': accessToken,
             'profile': {
               'id': googleId,
@@ -104,8 +105,6 @@ class GoogleAuthService {
 
           if (sanctumToken != null) {
             await ApiClient.saveToken(sanctumToken.toString());
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('auth_token', sanctumToken.toString());
           }
 
           if (u != null) {
@@ -117,8 +116,8 @@ class GoogleAuthService {
               role: UserRole.fromCode(u['role']?.toString()),
               avatarUrl: u['avatar'] ?? userPhoto,
               googlePhotoUrl: userPhoto,
-              location: 'Dhaka, Bangladesh',
-              bio: 'Animal advocate & pet rescuer',
+              location: u['location']?.toString() ?? 'Dhaka, Bangladesh',
+              bio: u['bio']?.toString() ?? 'Animal advocate & pet rescuer',
               preferredPetType: 'All Pets',
               isVerified: true,
             );
@@ -128,7 +127,6 @@ class GoogleAuthService {
         debugPrint('[GoogleAuthService] Backend sync notice: $backendErr');
       }
 
-      // If backend was cold or unreachable, construct profile locally
       userProfile ??= UserProfile(
         id: googleId,
         name: userName,
@@ -142,14 +140,6 @@ class GoogleAuthService {
         preferredPetType: 'All Pets',
         isVerified: true,
       );
-
-      // Persist user in SharedPreferences
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('cached_user_id', userProfile.id);
-      await prefs.setString('cached_user_email', userProfile.email);
-      await prefs.setString('cached_user_name', userProfile.name);
-      await prefs.setString('cached_user_photo', userProfile.avatarUrl);
-      await prefs.setString('cached_user_role', userProfile.role.code);
 
       return GoogleAuthResult(
         success: true,

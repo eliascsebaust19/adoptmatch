@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/models/community_post_model.dart';
 import '../../../shared/widgets/custom_button.dart';
 import '../../../shared/widgets/app_network_image.dart';
+import '../../auth/bloc/auth_bloc.dart';
 
 class HappyTailsFeedScreen extends StatefulWidget {
   const HappyTailsFeedScreen({super.key});
@@ -11,38 +13,7 @@ class HappyTailsFeedScreen extends StatefulWidget {
 }
 
 class _HappyTailsFeedScreenState extends State<HappyTailsFeedScreen> {
-  final List<CommunityPost> _posts = [
-    const CommunityPost(
-      id: 'p-1',
-      authorName: 'Nadia Rahman',
-      authorLocation: 'Gulshan, Dhaka',
-      authorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
-      petName: 'Barnaby (now Simba)',
-      title: '1 Year Since Adopting Our Gentle Senior!',
-      story: 'Adopting a senior dog was the best decision our family ever made. Barnaby has brought endless joy, slow peaceful walks, and unconditional warmth to our home. Thank you AdoptMatch!',
-      imageUrl: 'https://images.unsplash.com/photo-1543466835-00a7907e9de1?auto=format&fit=crop&w=800&q=80',
-      likesCount: 128,
-      commentsCount: 24,
-      isLiked: true,
-      timeAgo: '2 hours ago',
-      tags: ['SeniorRescue', 'AdoptDontShop', 'DhakaDogs'],
-    ),
-    const CommunityPost(
-      id: 'p-2',
-      authorName: 'Tanvir Hossain',
-      authorLocation: 'Uttara, Dhaka',
-      authorAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
-      petName: 'Luna & Leo',
-      title: 'Double Trouble, Double Love!',
-      story: 'Initially we only planned on fostering one kitten, but seeing how closely bonded they were with their brother, we adopted both! They sleep in sync every afternoon.',
-      imageUrl: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=800&q=80',
-      likesCount: 95,
-      commentsCount: 16,
-      isLiked: false,
-      timeAgo: '1 day ago',
-      tags: ['FosterFailure', 'CatLoversBD', 'BondedPair'],
-    ),
-  ];
+  final List<CommunityPost> _posts = [];
 
   void _openCreatePostModal() {
     final petCtrl = TextEditingController();
@@ -99,14 +70,21 @@ class _HappyTailsFeedScreenState extends State<HappyTailsFeedScreen> {
                   backgroundColor: const Color(0xFFE05626),
                   onPressed: () {
                     if (titleCtrl.text.isNotEmpty) {
+                      final authState = context.read<AuthBloc>().state;
+                      final currentName = authState is Authenticated ? authState.user.name : 'Pet Parent';
+                      final currentLocation = authState is Authenticated ? authState.user.location : 'Dhaka, Bangladesh';
+                      final currentAvatar = authState is Authenticated && authState.user.avatarUrl.isNotEmpty
+                          ? authState.user.avatarUrl
+                          : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80';
+
                       setState(() {
                         _posts.insert(
                           0,
                           CommunityPost(
                             id: 'p-${DateTime.now().millisecondsSinceEpoch}',
-                            authorName: 'Elias Ahmed',
-                            authorLocation: 'Banani, Dhaka',
-                            authorAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80',
+                            authorName: currentName,
+                            authorLocation: currentLocation,
+                            authorAvatar: currentAvatar,
                             petName: petCtrl.text.isNotEmpty ? petCtrl.text : 'My Pet',
                             title: titleCtrl.text,
                             story: storyCtrl.text,
@@ -205,7 +183,41 @@ class _HappyTailsFeedScreenState extends State<HappyTailsFeedScreen> {
           ),
         ],
       ),
-      body: ListView.separated(
+      body: _posts.isEmpty
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.auto_stories_outlined, size: 56, color: Colors.grey.shade400),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'No Stories Yet',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Be the first to share an adoption milestone or rescue memory with our pet parent community!',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      onPressed: _openCreatePostModal,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Share Your Story'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFE05626),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : ListView.separated(
         padding: const EdgeInsets.all(16),
         itemCount: _posts.length,
         separatorBuilder: (context, index) => const SizedBox(height: 16),

@@ -109,6 +109,18 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
 
+    final textFields = find.byType(TextField);
+    if (textFields.evaluate().length >= 7) {
+      await tester.enterText(textFields.at(0), 'Test Applicant');
+      await tester.enterText(textFields.at(1), '+880 1711 000000');
+      await tester.enterText(textFields.at(2), 'test@example.com');
+      await tester.enterText(textFields.at(3), '1995-1234-5678-0000');
+      await tester.enterText(textFields.at(4), 'Emergency Contact');
+      await tester.enterText(textFields.at(5), '+880 1811 000000');
+      await tester.enterText(textFields.at(6), 'House 1, Road 1, Dhaka');
+      await tester.pump();
+    }
+
     final nextBtn = find.text('Continue to Step 2');
     await tester.ensureVisible(nextBtn);
     await tester.pump();

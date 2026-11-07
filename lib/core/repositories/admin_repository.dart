@@ -102,7 +102,9 @@ class AdminRepository {
   static final AdminRepository _instance = AdminRepository._internal();
   factory AdminRepository() => _instance;
 
-  AdminRepository._internal() {
+  AdminRepository._internal();
+
+  void initSeedDataForTesting() {
     _initSeedData();
   }
 
@@ -226,9 +228,9 @@ class AdminRepository {
     _users = [
       AdminManagedUser(
         id: 'u-101',
-        name: 'Elias Ahmed',
-        email: 'elias3224@gmail.com',
-        phone: '+880 1711 234567',
+        name: 'Adopter Test Account',
+        email: 'adopter.test@adoptmatch.com',
+        phone: '+880 1711 000101',
         role: UserRole.adopter,
         status: 'Active',
         permissions: const [],
@@ -330,7 +332,7 @@ class AdminRepository {
         id: 'DISP-502',
         adopterName: 'Tanzina Sultana',
         shelterName: 'Paw Haven Chittagong',
-        petName: 'Bella (Calico Cat)',
+        petName: 'Rescue Cat #502',
         contractStatus: 'Signed',
         trialPeriod: 'Completed',
         disputeStatus: 'Resolved',
