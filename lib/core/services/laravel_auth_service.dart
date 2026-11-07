@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../network/api_client.dart';
+import 'google_auth_service.dart';
 
 class LaravelAuthService {
   final ApiClient _apiClient;
@@ -9,7 +10,12 @@ class LaravelAuthService {
 
   LaravelAuthService({ApiClient? apiClient, GoogleSignIn? googleSignIn})
       : _apiClient = apiClient ?? ApiClient(),
-        _googleSignIn = googleSignIn ?? GoogleSignIn(scopes: ['email', 'profile']);
+        _googleSignIn = googleSignIn ??
+            GoogleSignIn(
+              scopes: ['email', 'profile'],
+              clientId: kIsWeb ? GoogleAuthService.webClientId : null,
+              serverClientId: GoogleAuthService.webClientId,
+            );
 
   /// Sign in with Google: Obtains the real Google idToken and exchanges it
   /// with Laravel 11 for a Sanctum Personal Access Token without Firebase.
