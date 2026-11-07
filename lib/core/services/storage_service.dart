@@ -115,7 +115,7 @@ class StorageService {
     // 1. Primary: Upload to high-speed Vercel Blob Storage
     final vercelUrl = await uploadToVercelBlob(
       bytes: bytes,
-      fileName: sanitizedFileName,
+      fileName: uniquePath,
       contentType: 'image/jpeg',
     );
     if (vercelUrl != null && vercelUrl.isNotEmpty) {
@@ -157,6 +157,41 @@ class StorageService {
     } catch (_) {}
 
     // 4. Resilient Base64 Data URI Fallback
+    final base64String = base64Encode(bytes);
+    return 'data:image/jpeg;base64,$base64String';
+  }
+
+  /// Uploads pet photo directly to Vercel Blob Store (Global High-Speed Edge Storage)
+  static Future<String> uploadPetImage({
+    required Uint8List bytes,
+    required String fileName,
+    String? petId,
+  }) async {
+    final sanitizedFileName = fileName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+    final uniquePath = 'pets/${petId ?? "pet"}_${DateTime.now().millisecondsSinceEpoch}_$sanitizedFileName';
+
+    // 1. Primary: Upload directly to high-speed Vercel Blob Edge CDN
+    final vercelUrl = await uploadToVercelBlob(
+      bytes: bytes,
+      fileName: uniquePath,
+      contentType: 'image/jpeg',
+    );
+    if (vercelUrl != null && vercelUrl.isNotEmpty) {
+      return vercelUrl;
+    }
+
+    // 2. Secondary: Cloudinary / Backend upload
+    try {
+      final backendUrl = await uploadToCloudinaryOrBackend(
+        bytes: bytes,
+        fileName: sanitizedFileName,
+      );
+      if (backendUrl != null && backendUrl.isNotEmpty) {
+        return backendUrl;
+      }
+    } catch (_) {}
+
+    // 3. Fallback: Base64 Data URI
     final base64String = base64Encode(bytes);
     return 'data:image/jpeg;base64,$base64String';
   }

@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
@@ -184,13 +183,9 @@ class _ApplicationStatusCard extends StatelessWidget {
                 child: SizedBox(
                   width: 54,
                   height: 54,
-                  child: CachedNetworkImage(
+                  child: AppNetworkImage(
                     imageUrl: app.petImageUrl,
                     fit: BoxFit.cover,
-                    errorWidget: (context, url, error) => Container(
-                      color: const Color(0xFFF1F5F9),
-                      child: const Icon(Icons.pets, color: Colors.grey),
-                    ),
                   ),
                 ),
               ),

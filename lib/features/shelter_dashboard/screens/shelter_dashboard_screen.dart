@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
+import '../../../shared/widgets/app_network_image.dart';
 import '../../../core/models/application_model.dart';
 import '../../../core/models/pet_model.dart';
 import '../../../core/models/appointment_model.dart';
@@ -678,10 +678,9 @@ class _ShelterDashboardScreenState extends State<ShelterDashboardScreen> with Si
                       child: SizedBox(
                         width: 50,
                         height: 50,
-                        child: CachedNetworkImage(
+                        child: AppNetworkImage(
                           imageUrl: app.petImageUrl,
                           fit: BoxFit.cover,
-                          errorWidget: (context, url, error) => const Icon(Icons.pets),
                         ),
                       ),
                     ),
@@ -846,10 +845,9 @@ class _ShelterDashboardScreenState extends State<ShelterDashboardScreen> with Si
                   child: SizedBox(
                     width: 70,
                     height: 70,
-                    child: CachedNetworkImage(
+                    child: AppNetworkImage(
                       imageUrl: pet.imageUrl,
                       fit: BoxFit.cover,
-                      errorWidget: (context, url, error) => const Icon(Icons.pets),
                     ),
                   ),
                 ),
@@ -1033,17 +1031,11 @@ class _ShelterDashboardScreenState extends State<ShelterDashboardScreen> with Si
                   children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      child: CachedNetworkImage(
+                      child: AppNetworkImage(
                         imageUrl: apt.petImageUrl,
                         width: 52,
                         height: 52,
                         fit: BoxFit.cover,
-                        errorWidget: (context, url, error) => Container(
-                          width: 52,
-                          height: 52,
-                          color: const Color(0xFFE2E8F0),
-                          child: const Icon(Icons.pets, color: Color(0xFF94A3B8)),
-                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -1556,7 +1548,7 @@ class _ApplicationDossierSheetState extends State<_ApplicationDossierSheet> {
                   child: SizedBox(
                     width: 56,
                     height: 56,
-                    child: CachedNetworkImage(imageUrl: app.petImageUrl, fit: BoxFit.cover),
+                    child: AppNetworkImage(imageUrl: app.petImageUrl, fit: BoxFit.cover),
                   ),
                 ),
                 const SizedBox(width: 12),

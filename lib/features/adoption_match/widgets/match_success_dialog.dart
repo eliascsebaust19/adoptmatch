@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/models/pet_model.dart';
 import '../../../shared/widgets/custom_button.dart';
+import '../../../shared/widgets/app_network_image.dart';
 
 class MatchSuccessDialog extends StatelessWidget {
   final Pet pet;
@@ -56,13 +56,9 @@ class MatchSuccessDialog extends StatelessWidget {
               child: SizedBox(
                 width: 140,
                 height: 140,
-                child: CachedNetworkImage(
+                child: AppNetworkImage(
                   imageUrl: pet.imageUrl,
                   fit: BoxFit.cover,
-                  errorWidget: (context, url, error) => Container(
-                    color: const Color(0xFFF1F5F9),
-                    child: const Icon(Icons.pets, size: 48, color: Colors.grey),
-                  ),
                 ),
               ),
             ),

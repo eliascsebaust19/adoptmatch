@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/models/appointment_model.dart';
 import '../../../core/repositories/appointment_repository.dart';
 import '../../../core/widgets/adoptmatch_back_button.dart';
+import '../../../shared/widgets/shared_widgets.dart';
 
 class AppointmentsScreen extends StatefulWidget {
   const AppointmentsScreen({super.key});
@@ -130,13 +130,9 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                                 child: SizedBox(
                                   width: 52,
                                   height: 52,
-                                  child: CachedNetworkImage(
+                                  child: AppNetworkImage(
                                     imageUrl: apt.petImageUrl,
                                     fit: BoxFit.cover,
-                                    errorWidget: (context, url, error) => Container(
-                                      color: const Color(0xFFE2E8F0),
-                                      child: const Icon(Icons.pets, color: Colors.grey),
-                                    ),
                                   ),
                                 ),
                               ),

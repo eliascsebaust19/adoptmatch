@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
+import '../../../shared/widgets/app_network_image.dart';
 
 import '../../../core/models/pet_model.dart';
 import '../../../core/repositories/pet_repository.dart';
@@ -516,13 +516,9 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
             child: SizedBox(
               width: 160,
               height: 90,
-              child: CachedNetworkImage(
+              child: AppNetworkImage(
                 imageUrl: pet.imageUrl,
                 fit: BoxFit.cover,
-                errorWidget: (context, url, error) => Container(
-                  color: const Color(0xFFE2E8F0),
-                  child: const Icon(Icons.pets, color: Colors.grey),
-                ),
               ),
             ),
           ),

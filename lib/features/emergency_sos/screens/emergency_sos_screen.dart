@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/models/emergency_alert_model.dart';
 import '../../../core/repositories/emergency_repository.dart';
 import '../../../shared/widgets/custom_button.dart';
+import '../../../shared/widgets/app_network_image.dart';
 
 class EmergencySosScreen extends StatefulWidget {
   const EmergencySosScreen({super.key});
@@ -279,13 +279,9 @@ class _LostPetAlertCard extends StatelessWidget {
                 child: SizedBox(
                   width: 72,
                   height: 72,
-                  child: CachedNetworkImage(
+                  child: AppNetworkImage(
                     imageUrl: alert.imageUrl,
                     fit: BoxFit.cover,
-                    errorWidget: (context, url, error) => Container(
-                      color: const Color(0xFFF1F5F9),
-                      child: const Icon(Icons.pets, color: Colors.grey),
-                    ),
                   ),
                 ),
               ),

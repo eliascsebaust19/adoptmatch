@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
@@ -268,13 +267,9 @@ class _ChatInboxScreenState extends State<ChatInboxScreen> {
                                           child: SizedBox(
                                             width: 54,
                                             height: 54,
-                                            child: CachedNetworkImage(
+                                            child: AppNetworkImage(
                                               imageUrl: conv.petImageUrl,
                                               fit: BoxFit.cover,
-                                              errorWidget: (context, url, error) => Container(
-                                                color: const Color(0xFFE2E8F0),
-                                                child: const Icon(Icons.pets, color: Colors.grey),
-                                              ),
                                             ),
                                           ),
                                         ),

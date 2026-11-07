@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
+import '../../../shared/widgets/app_network_image.dart';
 
 import '../../../core/models/pet_model.dart';
 import '../../../core/models/application_model.dart';
@@ -662,11 +662,9 @@ class _AdoptionApplicationScreenState extends State<AdoptionApplicationScreen> {
                       child: SizedBox(
                         width: 54,
                         height: 54,
-                        child: CachedNetworkImage(
+                        child: AppNetworkImage(
                           imageUrl: pet.imageUrl,
                           fit: BoxFit.cover,
-                          errorWidget: (context, url, error) =>
-                              const Icon(Icons.pets, color: Colors.grey),
                         ),
                       ),
                     ),

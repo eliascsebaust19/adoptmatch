@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../../core/models/pet_model.dart';
 import '../../../core/repositories/admin_repository.dart';
@@ -140,9 +139,12 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
       final file = await StorageService.pickImageFromGallery();
       if (file != null) {
         final bytes = await file.readAsBytes();
-        final base64String = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+        final uploadedUrl = await StorageService.uploadPetImage(
+          bytes: bytes,
+          fileName: file.name,
+        );
         setState(() {
-          _carouselImages.add(base64String);
+          _carouselImages.add(uploadedUrl);
         });
       }
     } catch (e) {
@@ -158,9 +160,12 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
       final file = await StorageService.pickImageFromCamera();
       if (file != null) {
         final bytes = await file.readAsBytes();
-        final base64String = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+        final uploadedUrl = await StorageService.uploadPetImage(
+          bytes: bytes,
+          fileName: file.name,
+        );
         setState(() {
-          _carouselImages.add(base64String);
+          _carouselImages.add(uploadedUrl);
         });
       }
     } catch (e) {

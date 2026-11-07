@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../../shared/widgets/app_network_image.dart';
 
 import '../../../core/models/application_model.dart';
 import '../../../core/models/pet_model.dart';
@@ -1363,10 +1363,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               child: SizedBox(
                 width: 44,
                 height: 44,
-                child: CachedNetworkImage(
+                child: AppNetworkImage(
                   imageUrl: app.petImageUrl,
                   fit: BoxFit.cover,
-                  errorWidget: (context, url, error) => const Icon(Icons.pets, color: Colors.grey),
                 ),
               ),
             ),
@@ -1521,10 +1520,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 child: SizedBox(
                   height: 120,
                   width: double.infinity,
-                  child: CachedNetworkImage(
+                  child: AppNetworkImage(
                     imageUrl: pet.imageUrl,
                     fit: BoxFit.cover,
-                    errorWidget: (context, url, error) => Container(color: Colors.grey.shade200, child: const Icon(Icons.pets)),
                   ),
                 ),
               ),

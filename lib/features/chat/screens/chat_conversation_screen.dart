@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/models/chat_message_model.dart';
 import '../../../core/repositories/chat_repository.dart';
 import '../../../core/widgets/guest_restriction_dialog.dart';
+import '../../../shared/widgets/shared_widgets.dart';
 
 class ChatConversationScreen extends StatefulWidget {
   final String conversationId;
@@ -227,10 +227,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                       child: SizedBox(
                         width: 40,
                         height: 40,
-                        child: CachedNetworkImage(
+                        child: AppNetworkImage(
                           imageUrl: conv.petImageUrl,
                           fit: BoxFit.cover,
-                          errorWidget: (context, url, error) => const Icon(Icons.pets, color: Colors.grey),
                         ),
                       ),
                     ),
@@ -358,7 +357,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                                     if (msg.attachmentUrl != null) ...[
                                       ClipRRect(
                                         borderRadius: BorderRadius.circular(10),
-                                        child: CachedNetworkImage(
+                                        child: AppNetworkImage(
                                           imageUrl: msg.attachmentUrl!,
                                           height: 150,
                                           width: double.infinity,
