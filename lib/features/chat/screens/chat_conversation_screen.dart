@@ -1,6 +1,8 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../core/models/chat_message_model.dart';
 import '../../../core/repositories/chat_repository.dart';
 import '../../../core/widgets/guest_restriction_dialog.dart';
@@ -51,7 +53,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       _scrollToBottom();
     }
 
-    _messageSub = _chatRepo.getMessagesStream(widget.conversationId).listen((newMsgs) {
+    _messageSub = _chatRepo.getMessagesStream(widget.conversationId).listen((
+      newMsgs,
+    ) {
       if (mounted) {
         setState(() {
           _messages = List.from(newMsgs);
@@ -111,19 +115,34 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Share Home / Living Area Photo', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+            const Text(
+              'Share Home / Living Area Photo',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0F172A),
+              ),
+            ),
             const SizedBox(height: 6),
-            const Text('Share photos of your living space or yard to expedite adoption screening.', style: TextStyle(fontSize: 13, color: Color(0xFF64748B))),
+            const Text(
+              'Share photos of your living space or yard to expedite adoption screening.',
+              style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+            ),
             const SizedBox(height: 20),
             ListTile(
-              leading: const CircleAvatar(backgroundColor: Color(0xFFCCFBF1), child: Icon(Icons.home, color: Color(0xFF0D9488))),
+              leading: const CircleAvatar(
+                backgroundColor: Color(0xFFCCFBF1),
+                child: Icon(Icons.home, color: Color(0xFF0D9488)),
+              ),
               title: const Text('Living Room & Indoor Space'),
               subtitle: const Text('Photo of pet resting area'),
               onTap: () {
@@ -136,7 +155,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
               },
             ),
             ListTile(
-              leading: const CircleAvatar(backgroundColor: Color(0xFFE0E7FF), child: Icon(Icons.fence, color: Color(0xFF6366F1))),
+              leading: const CircleAvatar(
+                backgroundColor: Color(0xFFE0E7FF),
+                child: Icon(Icons.fence, color: Color(0xFF6366F1)),
+              ),
               title: const Text('Fenced Yard / Balcony Area'),
               subtitle: const Text('Verification of perimeter fencing'),
               onTap: () {
@@ -175,7 +197,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
             const SizedBox(height: 8),
             Text(
               'Virtual Number: ${conv?.shelterPhoneMasked ?? '+880 17•• •••567'}',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A)),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+                color: Color(0xFF0F172A),
+              ),
             ),
             const SizedBox(height: 12),
             const Text(
@@ -185,20 +211,30 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton.icon(
             onPressed: () {
               Navigator.of(ctx).pop();
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('Calling ${conv?.shelterName} via Masked Relay...'),
+                  content: Text(
+                    'Calling ${conv?.shelterName} via Masked Relay...',
+                  ),
                   backgroundColor: const Color(0xFF0D9488),
                 ),
               );
             },
             icon: const Icon(Icons.call, size: 16, color: Colors.white),
-            label: const Text('Connect Call', style: TextStyle(color: Colors.white)),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D9488)),
+            label: const Text(
+              'Connect Call',
+              style: TextStyle(color: Colors.white),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0D9488),
+            ),
           ),
         ],
       ),
@@ -241,11 +277,18 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                       children: [
                         Text(
                           conv.petName,
-                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                         Text(
                           '${conv.shelterName} • Masked 🔒',
-                          style: const TextStyle(fontSize: 11, color: Color(0xFF0D9488), fontWeight: FontWeight.w600),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF0D9488),
+                            fontWeight: FontWeight.w600,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -264,12 +307,22 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
             TextButton(
               onPressed: () => context.push('/apply/${conv.petId}'),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: teal,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Text('Apply', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                child: const Text(
+                  'Apply',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ),
         ],
@@ -284,7 +337,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                     onTap: () => context.push('/pet/${conv.petId}'),
                     child: Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                       color: Colors.white,
                       child: Row(
                         children: [
@@ -293,10 +349,18 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                           Expanded(
                             child: Text(
                               'Inquiry for ${conv.petName} (${conv.petBreed}). Tap to view full profile & health passport.',
-                              style: const TextStyle(fontSize: 11, color: slateDark, fontWeight: FontWeight.w500),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: slateDark,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           ),
-                          const Icon(Icons.arrow_forward_ios, size: 12, color: Color(0xFF94A3B8)),
+                          const Icon(
+                            Icons.arrow_forward_ios,
+                            size: 12,
+                            color: Color(0xFF94A3B8),
+                          ),
                         ],
                       ),
                     ),
@@ -308,7 +372,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                 Expanded(
                   child: ListView.builder(
                     controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                     itemCount: _messages.length,
                     itemBuilder: (context, index) {
                       final msg = _messages[index];
@@ -317,23 +384,33 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: Row(
-                          mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+                          mainAxisAlignment: isMe
+                              ? MainAxisAlignment.end
+                              : MainAxisAlignment.start,
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             if (!isMe) ...[
                               CircleAvatar(
                                 radius: 15,
                                 backgroundColor: const Color(0xFFCCFBF1),
-                                child: const Icon(Icons.pets, size: 16, color: teal),
+                                child: const Icon(
+                                  Icons.pets,
+                                  size: 16,
+                                  color: teal,
+                                ),
                               ),
                               const SizedBox(width: 8),
                             ],
                             Flexible(
                               child: Container(
                                 constraints: BoxConstraints(
-                                  maxWidth: MediaQuery.of(context).size.width * 0.76,
+                                  maxWidth:
+                                      MediaQuery.of(context).size.width * 0.76,
                                 ),
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 10,
+                                ),
                                 decoration: BoxDecoration(
                                   color: isMe ? teal : Colors.white,
                                   borderRadius: BorderRadius.only(
@@ -342,7 +419,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                                     bottomLeft: Radius.circular(isMe ? 16 : 4),
                                     bottomRight: Radius.circular(isMe ? 4 : 16),
                                   ),
-                                  border: isMe ? null : Border.all(color: const Color(0xFFE2E8F0)),
+                                  border: isMe
+                                      ? null
+                                      : Border.all(
+                                          color: const Color(0xFFE2E8F0),
+                                        ),
                                   boxShadow: [
                                     BoxShadow(
                                       color: Colors.black.withOpacity(0.03),
@@ -352,7 +433,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                                   ],
                                 ),
                                 child: Column(
-                                  crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                                  crossAxisAlignment: isMe
+                                      ? CrossAxisAlignment.end
+                                      : CrossAxisAlignment.start,
                                   children: [
                                     if (msg.attachmentUrl != null) ...[
                                       ClipRRect(
@@ -381,20 +464,27 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                                         Text(
                                           '${msg.timestamp.hour.toString().padLeft(2, '0')}:${msg.timestamp.minute.toString().padLeft(2, '0')}',
                                           style: TextStyle(
-                                            color: isMe ? Colors.white.withOpacity(0.75) : const Color(0xFF94A3B8),
+                                            color: isMe
+                                                ? Colors.white.withOpacity(0.75)
+                                                : const Color(0xFF94A3B8),
                                             fontSize: 10,
                                           ),
                                         ),
                                         if (isMe) ...[
                                           const SizedBox(width: 4),
                                           Icon(
-                                            msg.deliveryStatus == MessageDeliveryStatus.read
+                                            msg.deliveryStatus ==
+                                                    MessageDeliveryStatus.read
                                                 ? Icons.done_all_rounded
-                                                : msg.deliveryStatus == MessageDeliveryStatus.delivered
-                                                    ? Icons.done_all_rounded
-                                                    : Icons.done_rounded,
+                                                : msg.deliveryStatus ==
+                                                      MessageDeliveryStatus
+                                                          .delivered
+                                                ? Icons.done_all_rounded
+                                                : Icons.done_rounded,
                                             size: 14,
-                                            color: msg.deliveryStatus == MessageDeliveryStatus.read
+                                            color:
+                                                msg.deliveryStatus ==
+                                                    MessageDeliveryStatus.read
                                                 ? const Color(0xFF93C5FD)
                                                 : Colors.white70,
                                           ),
@@ -420,13 +510,18 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     scrollDirection: Axis.horizontal,
                     itemCount: _quickInquiries.length,
-                    separatorBuilder: (context, index) => const SizedBox(width: 8),
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(width: 8),
                     itemBuilder: (context, index) {
                       final inquiry = _quickInquiries[index];
                       return ActionChip(
                         label: Text(
                           inquiry,
-                          style: const TextStyle(fontSize: 11, color: Color(0xFF0F766E), fontWeight: FontWeight.w600),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF0F766E),
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         backgroundColor: const Color(0xFFF0FDFA),
                         side: const BorderSide(color: Color(0xFF99F6E4)),
@@ -441,7 +536,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    border: const Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+                    border: const Border(
+                      top: BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.04),
@@ -455,7 +552,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                     child: Row(
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.add_photo_alternate_outlined, color: teal),
+                          icon: const Icon(
+                            Icons.add_photo_alternate_outlined,
+                            color: teal,
+                          ),
                           tooltip: 'Send Living Space Photo',
                           onPressed: _simulateSendHomePhoto,
                         ),
@@ -463,24 +563,40 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                           child: TextField(
                             controller: _textController,
                             textCapitalization: TextCapitalization.sentences,
-                            style: const TextStyle(fontSize: 14, color: slateDark),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: slateDark,
+                            ),
                             decoration: InputDecoration(
                               hintText: 'Type your message to shelter...',
-                              hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
+                              hintStyle: const TextStyle(
+                                fontSize: 13,
+                                color: Color(0xFF94A3B8),
+                              ),
                               filled: true,
                               fillColor: const Color(0xFFF8FAFC),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(24),
-                                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                                borderSide: const BorderSide(
+                                  color: Color(0xFFE2E8F0),
+                                ),
                               ),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(24),
-                                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                                borderSide: const BorderSide(
+                                  color: Color(0xFFE2E8F0),
+                                ),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(24),
-                                borderSide: const BorderSide(color: teal, width: 1.5),
+                                borderSide: const BorderSide(
+                                  color: teal,
+                                  width: 1.5,
+                                ),
                               ),
                             ),
                             onSubmitted: (_) => _sendText(),
@@ -491,7 +607,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                           radius: 22,
                           backgroundColor: teal,
                           child: IconButton(
-                            icon: const Icon(Icons.send_rounded, size: 20, color: Colors.white),
+                            icon: const Icon(
+                              Icons.send_rounded,
+                              size: 20,
+                              color: Colors.white,
+                            ),
                             onPressed: () => _sendText(),
                           ),
                         ),

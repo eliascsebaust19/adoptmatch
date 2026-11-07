@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../core/models/pet_model.dart';
 import '../../../shared/widgets/custom_button.dart';
 import '../../../shared/widgets/app_network_image.dart';
@@ -46,7 +47,11 @@ class MatchSuccessDialog extends StatelessWidget {
             Text(
               'You and ${pet.name} share an amazing ${pet.matchScore}% compatibility score!',
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14, color: Color(0xFF64748B), height: 1.4),
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF64748B),
+                height: 1.4,
+              ),
             ),
             const SizedBox(height: 20),
 
@@ -98,4 +103,3 @@ class MatchSuccessDialog extends StatelessWidget {
     );
   }
 }
-

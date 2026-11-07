@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../../core/models/emergency_alert_model.dart';
 import '../../../core/repositories/emergency_repository.dart';
 import '../../../shared/widgets/custom_button.dart';
@@ -11,7 +12,8 @@ class EmergencySosScreen extends StatefulWidget {
   State<EmergencySosScreen> createState() => _EmergencySosScreenState();
 }
 
-class _EmergencySosScreenState extends State<EmergencySosScreen> with SingleTickerProviderStateMixin {
+class _EmergencySosScreenState extends State<EmergencySosScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final _emergencyRepo = EmergencyRepository();
 
@@ -71,11 +73,18 @@ class _EmergencySosScreenState extends State<EmergencySosScreen> with SingleTick
               children: [
                 Row(
                   children: const [
-                    Icon(Icons.warning_amber_rounded, color: Color(0xFFE11D48), size: 28),
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      color: Color(0xFFE11D48),
+                      size: 28,
+                    ),
                     SizedBox(width: 8),
                     Text(
                       'Broadcast 5km SOS Alert',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
@@ -87,29 +96,43 @@ class _EmergencySosScreenState extends State<EmergencySosScreen> with SingleTick
                 const SizedBox(height: 16),
                 TextField(
                   controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: 'Pet Name', hintText: 'e.g. Bruno'),
+                  decoration: const InputDecoration(
+                    labelText: 'Pet Name',
+                    hintText: 'e.g. Bruno',
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: breedCtrl,
-                  decoration: const InputDecoration(labelText: 'Breed / Species', hintText: 'e.g. Golden Retriever'),
+                  decoration: const InputDecoration(
+                    labelText: 'Breed / Species',
+                    hintText: 'e.g. Golden Retriever',
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: locationCtrl,
-                  decoration: const InputDecoration(labelText: 'Last Seen Location', hintText: 'Road, Area, Landmark'),
+                  decoration: const InputDecoration(
+                    labelText: 'Last Seen Location',
+                    hintText: 'Road, Area, Landmark',
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: rewardCtrl,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Reward (BDT)', hintText: '5000'),
+                  decoration: const InputDecoration(
+                    labelText: 'Reward (BDT)',
+                    hintText: '5000',
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: descCtrl,
                   maxLines: 2,
-                  decoration: const InputDecoration(labelText: 'Collar details, markings, temperament'),
+                  decoration: const InputDecoration(
+                    labelText: 'Collar details, markings, temperament',
+                  ),
                 ),
                 const SizedBox(height: 20),
                 CustomButton(
@@ -119,7 +142,9 @@ class _EmergencySosScreenState extends State<EmergencySosScreen> with SingleTick
                     if (nameCtrl.text.isNotEmpty) {
                       await _emergencyRepo.broadcastAlert(
                         petName: nameCtrl.text.trim(),
-                        petBreed: breedCtrl.text.trim().isNotEmpty ? breedCtrl.text.trim() : 'Dog',
+                        petBreed: breedCtrl.text.trim().isNotEmpty
+                            ? breedCtrl.text.trim()
+                            : 'Dog',
                         imageUrl: 'https://images.unsplash.com/photo-1558788353-f76d92427f16?auto=format&fit=crop&w=800&q=80',
                         lastSeenLocation: locationCtrl.text.trim(),
                         lat: 23.75,
@@ -134,7 +159,9 @@ class _EmergencySosScreenState extends State<EmergencySosScreen> with SingleTick
                       _loadData();
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('🚨 Alert dispatched to 420 nearby active devices!'),
+                          content: Text(
+                            '🚨 Alert dispatched to 420 nearby active devices!',
+                          ),
                           backgroundColor: Color(0xFFE11D48),
                         ),
                       );
@@ -177,7 +204,10 @@ class _EmergencySosScreenState extends State<EmergencySosScreen> with SingleTick
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: rose,
         icon: const Icon(Icons.campaign, color: Colors.white),
-        label: const Text('Report Lost Pet', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        label: const Text(
+          'Report Lost Pet',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
         onPressed: _openBroadcastDialog,
       ),
       body: _isLoading
@@ -192,7 +222,8 @@ class _EmergencySosScreenState extends State<EmergencySosScreen> with SingleTick
                   child: ListView.separated(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
                     itemCount: _alerts.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 14),
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 14),
                     itemBuilder: (context, index) {
                       final alert = _alerts[index];
                       return _LostPetAlertCard(alert: alert);
@@ -204,7 +235,8 @@ class _EmergencySosScreenState extends State<EmergencySosScreen> with SingleTick
                 ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
                   itemCount: _clinics.length,
-                  separatorBuilder: (context, index) => const SizedBox(height: 14),
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 14),
                   itemBuilder: (context, index) {
                     final clinic = _clinics[index];
                     return _VetClinicCard(clinic: clinic);
@@ -257,7 +289,11 @@ class _LostPetAlertCard extends StatelessWidget {
                     SizedBox(width: 4),
                     Text(
                       '5KM BROADCAST ACTIVE',
-                      style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
@@ -265,7 +301,11 @@ class _LostPetAlertCard extends StatelessWidget {
               const Spacer(),
               Text(
                 'Reward: ৳${alert.rewardBdt}',
-                style: const TextStyle(color: Color(0xFF059669), fontWeight: FontWeight.w800, fontSize: 13),
+                style: const TextStyle(
+                  color: Color(0xFF059669),
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                ),
               ),
             ],
           ),
@@ -292,11 +332,18 @@ class _LostPetAlertCard extends StatelessWidget {
                   children: [
                     Text(
                       alert.petName,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0F172A),
+                      ),
                     ),
                     Text(
                       alert.petBreed,
-                      style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF64748B),
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Row(
@@ -306,7 +353,11 @@ class _LostPetAlertCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             alert.lastSeenLocation,
-                            style: const TextStyle(fontSize: 12, color: Color(0xFF334155), fontWeight: FontWeight.w500),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF334155),
+                              fontWeight: FontWeight.w500,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -321,7 +372,11 @@ class _LostPetAlertCard extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             alert.description,
-            style: const TextStyle(fontSize: 12, color: Color(0xFF475569), height: 1.4),
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFF475569),
+              height: 1.4,
+            ),
           ),
           const SizedBox(height: 12),
 
@@ -330,21 +385,35 @@ class _LostPetAlertCard extends StatelessWidget {
             children: [
               OutlinedButton.icon(
                 icon: const Icon(Icons.map_outlined, size: 16),
-                label: const Text('Open in Maps', style: TextStyle(fontSize: 12)),
+                label: const Text(
+                  'Open in Maps',
+                  style: TextStyle(fontSize: 12),
+                ),
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Opening coordinates ${alert.lat}, ${alert.lng} in Maps...')),
+                    SnackBar(
+                      content: Text(
+                        'Opening coordinates ${alert.lat}, ${alert.lng} in Maps...',
+                      ),
+                    ),
                   );
                 },
               ),
               const SizedBox(width: 8),
               ElevatedButton.icon(
                 icon: const Icon(Icons.call, size: 16, color: Colors.white),
-                label: const Text('Call Owner (Masked)', style: TextStyle(color: Colors.white, fontSize: 12)),
+                label: const Text(
+                  'Call Owner (Masked)',
+                  style: TextStyle(color: Colors.white, fontSize: 12),
+                ),
                 style: ElevatedButton.styleFrom(backgroundColor: rose),
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Connecting via secure masked proxy to ${alert.contactPhone}...')),
+                    SnackBar(
+                      content: Text(
+                        'Connecting via secure masked proxy to ${alert.contactPhone}...',
+                      ),
+                    ),
                   );
                 },
               ),
@@ -396,7 +465,11 @@ class _VetClinicCard extends StatelessWidget {
                     SizedBox(width: 4),
                     Text(
                       'OPEN 24/7',
-                      style: TextStyle(color: Color(0xFF15803D), fontSize: 11, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: Color(0xFF15803D),
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
@@ -404,14 +477,22 @@ class _VetClinicCard extends StatelessWidget {
               const Spacer(),
               Text(
                 '${clinic.distanceKm} km away',
-                style: const TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  color: Color(0xFF64748B),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 10),
           Text(
             clinic.name,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF0F172A),
+            ),
           ),
           const SizedBox(height: 2),
           Text(
@@ -421,17 +502,26 @@ class _VetClinicCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             'Services: ${clinic.services}',
-            style: const TextStyle(fontSize: 12, color: Color(0xFF334155), fontStyle: FontStyle.italic),
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFF334155),
+              fontStyle: FontStyle.italic,
+            ),
           ),
           const SizedBox(height: 14),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
               icon: const Icon(Icons.call, size: 18, color: Colors.white),
-              label: Text('Emergency Hotline: ${clinic.phone}', style: const TextStyle(color: Colors.white, fontSize: 13)),
+              label: Text(
+                'Emergency Hotline: ${clinic.phone}',
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+              ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: teal,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
               onPressed: () {
                 ScaffoldMessenger.of(context).showSnackBar(

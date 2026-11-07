@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/services/local_storage_service.dart';
+import '../../../shared/widgets/app_network_image.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -19,6 +20,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       title: 'Swipe to Match Pets 🐾',
       subtitle: 'Location-Based Smart Pet Matching',
       description: 'Find your perfect animal companion tailored to your living space, lifestyle, and preferences. Discover adoptable shelter pets near you with ease.',
+      imageUrl: 'https://images.unsplash.com/photo-1543466835-00a7907e9de1?auto=format&fit=crop&w=800&q=80',
+      badgeText: 'Smart Pet Match 🐾',
+      petTag: 'Meet lovable pups & dogs near you',
       icon: Icons.pets_rounded,
       primaryColor: Color(0xFF0D9488),
       secondaryColor: Color(0xFF14B8A6),
@@ -32,6 +36,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       title: 'Digital Health Passport 🏥',
       subtitle: 'Medical History, QR Code Access & Vet Reminders',
       description: 'Every pet has a digital medical profile. Access vaccination history, upcoming treatment schedules, and verified vet health records anytime.',
+      imageUrl: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=800&q=80',
+      badgeText: 'Digital Health Passport 🏥',
+      petTag: 'Vaccinations & QR medical record',
       icon: Icons.health_and_safety_rounded,
       primaryColor: Color(0xFF0284C7),
       secondaryColor: Color(0xFF38BDF8),
@@ -45,6 +52,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       title: 'Real-time Chat & SOS 🚨',
       subtitle: 'Direct Shelter Messaging & 5km Lost-Pet Broadcast',
       description: 'Coordinate directly with shelters throughout your adoption process, or trigger emergency alerts to notify pet lovers in your area if a pet goes missing.',
+      imageUrl: 'https://images.unsplash.com/photo-1587300003388-59208cc962cb?auto=format&fit=crop&w=800&q=80',
+      badgeText: 'Live Shelter Chat & SOS 🚨',
+      petTag: 'Instant rescue & emergency alert',
       icon: Icons.notifications_active_rounded,
       primaryColor: Color(0xFFE05626),
       secondaryColor: Color(0xFFF97316),
@@ -154,84 +164,128 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         const SizedBox(height: 16),
-                        // Visual Illustration Card
+                        // Real Pet Visual Card
                         Container(
                           width: double.infinity,
-                          height: 220,
+                          height: 240,
                           decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                card.primaryColor.withOpacity(0.15),
-                                card.secondaryColor.withOpacity(0.05),
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
                             borderRadius: BorderRadius.circular(24),
-                            border: Border.all(
-                              color: card.primaryColor.withOpacity(0.2),
-                              width: 1.5,
-                            ),
-                          ),
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              Positioned(
-                                right: -20,
-                                bottom: -20,
-                                child: Container(
-                                  width: 120,
-                                  height: 120,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: card.primaryColor.withOpacity(0.08),
-                                  ),
-                                ),
-                              ),
-                              Positioned(
-                                left: -30,
-                                top: -30,
-                                child: Container(
-                                  width: 100,
-                                  height: 100,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: card.secondaryColor.withOpacity(
-                                      0.08,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Container(
-                                width: 88,
-                                height: 88,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      card.primaryColor,
-                                      card.secondaryColor,
-                                    ],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: card.primaryColor.withOpacity(
-                                        0.35,
-                                      ),
-                                      blurRadius: 20,
-                                      offset: const Offset(0, 8),
-                                    ),
-                                  ],
-                                ),
-                                child: Icon(
-                                  card.icon,
-                                  size: 44,
-                                  color: Colors.white,
-                                ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: card.primaryColor.withOpacity(0.22),
+                                blurRadius: 24,
+                                offset: const Offset(0, 10),
                               ),
                             ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(24),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                // Real Pet Image via AppNetworkImage (with Vercel/CDN fast caching)
+                                AppNetworkImage(
+                                  imageUrl: card.imageUrl,
+                                  fit: BoxFit.cover,
+                                ),
+
+                                // Gradient Scrim for crisp text contrast
+                                Positioned.fill(
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          Colors.black.withOpacity(0.15),
+                                          Colors.transparent,
+                                          Colors.black.withOpacity(0.75),
+                                        ],
+                                        stops: const [0.0, 0.45, 1.0],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+
+                                // Top Right: Feature Icon Glass Pill
+                                Positioned(
+                                  top: 14,
+                                  right: 14,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withOpacity(0.4),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.white.withOpacity(0.3),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Icon(
+                                      card.icon,
+                                      size: 20,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+
+                                // Bottom Overlay: Real Pet Tag & Feature Badge
+                                Positioned(
+                                  left: 16,
+                                  right: 16,
+                                  bottom: 16,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: card.primaryColor,
+                                          borderRadius: BorderRadius.circular(20),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: card.primaryColor.withOpacity(0.4),
+                                              blurRadius: 8,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Text(
+                                          card.badgeText,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                            letterSpacing: 0.3,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        card.petTag,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: -0.2,
+                                          shadows: [
+                                            Shadow(
+                                              color: Colors.black54,
+                                              blurRadius: 6,
+                                              offset: Offset(0, 1),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
 
@@ -404,6 +458,9 @@ class _OnboardingCardData {
   final String title;
   final String subtitle;
   final String description;
+  final String imageUrl;
+  final String badgeText;
+  final String petTag;
   final IconData icon;
   final Color primaryColor;
   final Color secondaryColor;
@@ -413,6 +470,9 @@ class _OnboardingCardData {
     required this.title,
     required this.subtitle,
     required this.description,
+    required this.imageUrl,
+    required this.badgeText,
+    required this.petTag,
     required this.icon,
     required this.primaryColor,
     required this.secondaryColor,
