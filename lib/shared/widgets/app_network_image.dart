@@ -60,14 +60,7 @@ class AppNetworkImage extends StatelessWidget {
     final defaultPlaceholder = Container(
       color: const Color(0xFFF1F5F9),
       child: const Center(
-        child: SizedBox(
-          width: 24,
-          height: 24,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: Color(0xFF0D9488),
-          ),
-        ),
+        child: Icon(Icons.pets, size: 20, color: Color(0xFF0D9488)),
       ),
     );
 

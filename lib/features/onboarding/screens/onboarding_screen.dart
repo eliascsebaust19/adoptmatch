@@ -37,7 +37,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       subtitle: 'Medical History, QR Code Access & Vet Reminders',
       description: 'Every pet has a digital medical profile. Access vaccination history, upcoming treatment schedules, and verified vet health records anytime.',
       imageUrl: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=800&q=80',
-      badgeText: 'Digital Health Passport 🏥',
+      badgeText: 'Verified Care 🏥',
       petTag: 'Vaccinations & QR medical record',
       icon: Icons.health_and_safety_rounded,
       primaryColor: Color(0xFF0284C7),

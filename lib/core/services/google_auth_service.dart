@@ -37,7 +37,7 @@ class GoogleAuthService {
   static final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email', 'profile'],
     clientId: kIsWeb ? webClientId : null,
-    serverClientId: webClientId,
+    serverClientId: kIsWeb ? null : webClientId,
   );
 
   /// Performs Google Sign-In with resilience:

@@ -14,7 +14,7 @@ class LaravelAuthService {
             GoogleSignIn(
               scopes: ['email', 'profile'],
               clientId: kIsWeb ? GoogleAuthService.webClientId : null,
-              serverClientId: GoogleAuthService.webClientId,
+              serverClientId: kIsWeb ? null : GoogleAuthService.webClientId,
             );
 
   /// Sign in with Google: Obtains the real Google idToken and exchanges it
