@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/auth/bloc/auth_bloc.dart';
 import '../network/api_client.dart';
+import '../storage/secure_storage_service.dart';
 
 class GoogleAuthResult {
   final bool success;
@@ -23,6 +24,11 @@ class GoogleAuthResult {
 }
 
 class GoogleAuthService {
+  static const String webClientId = String.fromEnvironment(
+    'GOOGLE_CLIENT_ID',
+    defaultValue: '94403915199-50ug4q14m66gn3pjmhh441givdf0etie.apps.googleusercontent.com',
+  );
+
   static const String backendBaseUrl = String.fromEnvironment(
     'BACKEND_URL',
     defaultValue: 'https://adoptmatch-api.onrender.com',
@@ -30,6 +36,7 @@ class GoogleAuthService {
 
   static final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email', 'profile'],
+    serverClientId: webClientId,
   );
 
   /// Performs Google Sign-In with resilience:
@@ -104,6 +111,7 @@ class GoogleAuthService {
           final sanctumToken = data['access_token'] ?? data['token'];
 
           if (sanctumToken != null) {
+            await SecureStorageService.instance.saveAuthToken(sanctumToken.toString());
             await ApiClient.saveToken(sanctumToken.toString());
           }
 
