@@ -16,7 +16,7 @@ class AuthConfig {
   static const String googleWebClientId = String.fromEnvironment(
     'GOOGLE_CLIENT_ID',
     defaultValue:
-        '94403915199-c47hcn9ols70b1gikoamlrgkbqqdmag6.apps.googleusercontent.com',
+        '94403915199-vk45tro12gsp8q2rc2mn9ub754pug849.apps.googleusercontent.com',
   );
 
   /// iOS OAuth client ID (required for the iOS URL scheme; see ios/Flutter/GoogleAuth.xcconfig).
