@@ -51,15 +51,27 @@ class GoogleAuthService {
       debugPrint('[GoogleAuthService] Initiating Google Sign-In flow...');
 
       GoogleSignInAccount? account;
+      String? nativeError;
       try {
         account = await _googleSignIn.signIn();
       } catch (nativeErr) {
-        debugPrint('[GoogleAuthService] GoogleSignIn notice: $nativeErr. Falling back to backend auth.');
+        nativeError = nativeErr.toString();
+        debugPrint('[GoogleAuthService] Native GoogleSignIn error: $nativeErr');
       }
 
-      // If user deliberately cancelled on mobile where Google Play Services is active
-      if (account == null && !kIsWeb && await _googleSignIn.isSignedIn()) {
-        debugPrint('[GoogleAuthService] Native Google sign-in was cancelled.');
+      if (account == null) {
+        if (nativeError != null) {
+          String userFriendlyMsg = nativeError;
+          if (nativeError.contains('10') || nativeError.contains('ApiException: 10')) {
+            userFriendlyMsg = 'Google Sign-In configuration error (ApiException 10): '
+                'The Android SHA-1 fingerprint (D0:AB:88:E2:C5:41:82:16:4C:15:4D:C5:54:1E:4A:D0:61:66:EE:91) '
+                'must be added to Google Cloud Console for package com.adoptmatch.adoptmatch.';
+          }
+          return GoogleAuthResult(
+            success: false,
+            errorMessage: userFriendlyMsg,
+          );
+        }
         return const GoogleAuthResult(
           success: false,
           wasCancelled: true,
@@ -70,22 +82,21 @@ class GoogleAuthService {
       String? idToken;
       String? accessToken;
 
-      if (account != null) {
-        try {
-          final authHeaders = await account.authentication;
-          idToken = authHeaders.idToken;
-          accessToken = authHeaders.accessToken;
-        } catch (_) {}
+      try {
+        final authHeaders = await account.authentication;
+        idToken = authHeaders.idToken;
+        accessToken = authHeaders.accessToken;
+      } catch (tokenErr) {
+        debugPrint('[GoogleAuthService] Token retrieval error: $tokenErr');
       }
 
-      // Profile details strictly from authenticated Google account or resilient fallback for Web dev
-      final userEmail = account?.email ?? 'mdeliasahmad99@gmail.com';
-      final userName = (account?.displayName?.isNotEmpty == true)
-          ? account!.displayName!
-          : (account != null ? account.email.split('@').first : 'Md Elias Ahmad');
-      final userPhoto = account?.photoUrl ??
-          'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80';
-      final googleId = account?.id ?? '103037407035334399245';
+      // Real user details strictly from authenticated Google account
+      final userEmail = account.email;
+      final userName = (account.displayName?.isNotEmpty == true)
+          ? account.displayName!
+          : account.email.split('@').first;
+      final userPhoto = account.photoUrl ?? '';
+      final googleId = account.id;
 
       UserProfile? userProfile;
       bool isNewUser = false;
@@ -99,7 +110,7 @@ class GoogleAuthService {
             'Accept': 'application/json',
           },
           body: jsonEncode({
-            'id_token': idToken ?? 'web_google_token',
+            'id_token': idToken ?? 'google_android_token',
             'accessToken': accessToken,
             'profile': {
               'id': googleId,
