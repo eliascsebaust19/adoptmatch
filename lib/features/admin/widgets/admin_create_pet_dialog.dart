@@ -148,7 +148,15 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
         });
       }
     } catch (e) {
-      debugPrint('[AdminCreatePet] Gallery pick error: $e');
+      debugPrint('[AdminCreatePet] {label} error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Image was not uploaded: $e'),
+            backgroundColor: const Color(0xFFE11D48),
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isProcessingImage = false);
     }
@@ -169,7 +177,15 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
         });
       }
     } catch (e) {
-      debugPrint('[AdminCreatePet] Camera capture error: $e');
+      debugPrint('[AdminCreatePet] {label} error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Image was not uploaded: $e'),
+            backgroundColor: const Color(0xFFE11D48),
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isProcessingImage = false);
     }
@@ -189,7 +205,7 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
     }
   }
 
-  void _savePet() {
+  Future<void> _savePet() async {
     if (!_formKey.currentState!.validate()) return;
     if (_carouselImages.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -230,13 +246,21 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
       qrHash: 'ADMIN-PET-$id',
     );
 
-    // 1. Add to live catalog
-    PetRepository().addPet(pet);
-
-    // 2. Audit record in AdminRepository
-    AdminRepository().createPetListing(pet);
-
-    widget.onSaved?.call(pet);
+    Pet saved;
+    try {
+      if (widget.existingPet != null) {
+        await AdminRepository().overridePetListing(pet);
+        saved = pet;
+      } else {
+        saved = await AdminRepository().createPetListing(pet);
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: const Color(0xFFE11D48), content: Text('Listing not saved: $e')));
+      return;
+    }
+    if (!mounted) return;
+    widget.onSaved?.call(saved);
     Navigator.of(context).pop();
 
     ScaffoldMessenger.of(context).showSnackBar(

@@ -33,68 +33,12 @@ const VALID_PERMISSIONS = [
 ];
 
 /* ==========================================================================
-   IN-MEMORY ENTERPRISE DATA STORES (Mock Database)
+   PERSISTENT ADMINISTRATIVE RECORDS
+   User records live in models/userStore.js so administrative changes and
+   authentication always read the same authoritative account state.
    ========================================================================== */
 
-let usersDb = [
-  {
-    id: 'u-101',
-    name: 'Elias Ahmed',
-    email: 'elias3224@gmail.com',
-    phone: '+880 1711 234567',
-    role: 'USER',
-    status: 'Active',
-    permissions: [],
-    adoptionsCount: 1,
-    joinedAt: '2026-06-15T00:00:00.000Z',
-  },
-  {
-    id: 'u-102',
-    name: 'Care For Paws Staff',
-    email: 'info@careforpaws.bd',
-    phone: '+880 1712 345678',
-    role: 'SHELTER',
-    status: 'Active',
-    permissions: ['APPROVE_PETS'],
-    adoptionsCount: 38,
-    joinedAt: '2026-01-10T00:00:00.000Z',
-  },
-  {
-    id: 'u-103',
-    name: 'Sarah Rahman',
-    email: 'superadmin@adoptmatch.org',
-    phone: '+880 1819 000001',
-    role: 'SUPER_ADMIN',
-    status: 'Active',
-    permissions: ['APPROVE_PETS', 'FLAG_CONTENT', 'REVIEW_APPLICATIONS', 'MANAGE_USERS', 'AUDIT_LOGS'],
-    adoptionsCount: 0,
-    joinedAt: '2025-08-01T00:00:00.000Z',
-  },
-  {
-    id: 'u-104',
-    name: 'Suspicious Lister 99',
-    email: 'petshopdhaka@fake.com',
-    phone: '+880 1911 000099',
-    role: 'USER',
-    status: 'Banned',
-    permissions: [],
-    adoptionsCount: 0,
-    joinedAt: '2026-10-14T00:00:00.000Z',
-  },
-  {
-    id: 'u-105',
-    name: 'Tanvir Hossain (Volunteer Lead)',
-    email: 'tanvir.mod@adoptmatch.org',
-    phone: '+880 1713 999888',
-    role: 'MODERATOR',
-    status: 'Active',
-    permissions: ['APPROVE_PETS', 'FLAG_CONTENT', 'REVIEW_APPLICATIONS'],
-    adoptionsCount: 4,
-    joinedAt: '2026-03-20T00:00:00.000Z',
-  },
-];
-
-let petsDb = [
+const demoPets = [
   {
     id: 'p1',
     name: 'Luna',
@@ -214,7 +158,7 @@ let petsDb = [
   },
 ];
 
-let sheltersDb = [
+const demoShelters = [
   {
     id: 'SH-801',
     shelterName: 'Care For Paws Foundation (Dhaka)',
@@ -249,7 +193,7 @@ let sheltersDb = [
   },
 ];
 
-let auditLogsDb = [
+const initialAudit = [
   {
     id: 'LOG-9001',
     timestamp: new Date().toISOString(),
@@ -262,10 +206,16 @@ let auditLogsDb = [
   },
 ];
 
+const createRecordStore = require('../models/recordStore');
+const demoData = process.env.NODE_ENV === 'production' ? [] : null;
+const petStore = createRecordStore('admin_pets', demoData ?? demoPets);
+const shelterStore = createRecordStore('admin_shelters', demoData ?? demoShelters);
+const auditStore = createRecordStore('admin_audit', process.env.NODE_ENV === 'production' ? [] : initialAudit);
+
 // Helper to record audit logs
 const logAdminAction = (req, action, target, details) => {
   const logEntry = {
-    id: `LOG-${Date.now()}`,
+    id: `LOG-${require('node:crypto').randomUUID()}`,
     timestamp: new Date().toISOString(),
     actorName: req.user.name,
     actorRole: req.user.role,
@@ -274,7 +224,7 @@ const logAdminAction = (req, action, target, details) => {
     ipAddress: req.ip || req.connection?.remoteAddress || '127.0.0.1',
     details,
   };
-  auditLogsDb.unshift(logEntry);
+  auditStore.insert(logEntry, { prepend: true });
   return logEntry;
 };
 
@@ -282,20 +232,20 @@ const logAdminAction = (req, action, target, details) => {
    1. KPI & OVERVIEW DASHBOARD
    ========================================================================== */
 router.get('/stats', (req, res) => {
-  const pendingShelters = sheltersDb.filter((s) => s.status === 'PENDING').length;
-  const flaggedListings = petsDb.filter((p) => p.reportsCount > 0 && !p.isBanned).length;
+  const pendingShelters = shelterStore.all().filter((s) => s.status === 'PENDING').length;
+  const flaggedListings = petStore.all().filter((p) => p.reportsCount > 0 && !p.isBanned).length;
 
   res.json({
     success: true,
     data: {
-      totalAdoptions: 1284,
+      totalAdoptions: null, // No adoption ledger exists in this service; never invent a count.
       pendingShelters,
-      activeRescues: petsDb.filter((p) => !p.isBanned).length,
-      totalDonationsBDT: 248500,
+      activeRescues: petStore.all().filter((p) => !p.isBanned).length,
+      totalDonationsBDT: null,
       flaggedListings,
-      activeDisputes: 1,
-      totalUsers: usersDb.length,
-      bannedUsers: usersDb.filter((u) => u.status === 'BANNED' || u.status === 'Banned').length,
+      activeDisputes: null,
+      totalUsers: userStore.getAllUsers().length,
+      bannedUsers: userStore.getAllUsers().filter((u) => String(u.status).toUpperCase() === 'BANNED').length,
       generatedAt: new Date().toISOString(),
       requestedBy: req.user,
     },
@@ -314,7 +264,7 @@ router.patch('/users/:userId/block', requirePermission('MANAGE_USERS'), (req, re
   const { userId } = req.params;
   const { reason = 'Policy breach or commercial activity' } = req.body;
 
-  const user = usersDb.find((u) => u.id === userId);
+  const user = userStore.findById(userId);
   if (!user) {
     return res.status(404).json({ success: false, error: 'User not found' });
   }
@@ -328,10 +278,12 @@ router.patch('/users/:userId/block', requirePermission('MANAGE_USERS'), (req, re
   }
 
   // 1. Update user record
-  user.status = 'BANNED';
-  user.bannedAt = new Date().toISOString();
-  user.bannedBy = req.user.email;
-  user.banReason = reason;
+  const banned = userStore.updateUser(user.id, {
+    status: 'BANNED',
+    bannedAt: new Date().toISOString(),
+    bannedBy: req.user.email,
+    banReason: reason,
+  });
 
   // 2. Immediately revoke all active tokens / refresh tokens for this user
   const revocationTimestamp = revokeUserTokens(userId);
@@ -348,8 +300,8 @@ router.patch('/users/:userId/block', requirePermission('MANAGE_USERS'), (req, re
     success: true,
     message: `User ${user.name} (${user.id}) has been banned and all active JWT sessions revoked.`,
     data: {
-      userId: user.id,
-      status: user.status,
+      userId: banned.id,
+      status: banned.status,
       revokedAt: revocationTimestamp,
       bannedBy: req.user.email,
     },
@@ -363,18 +315,19 @@ router.patch('/users/:userId/block', requirePermission('MANAGE_USERS'), (req, re
 router.patch('/users/:userId/unblock', requirePermission('MANAGE_USERS'), (req, res) => {
   const { userId } = req.params;
 
-  const user = usersDb.find((u) => u.id === userId);
+  const user = userStore.findById(userId);
   if (!user) {
     return res.status(404).json({ success: false, error: 'User not found' });
   }
 
-  user.status = 'Active';
-  user.unblockedAt = new Date().toISOString();
-  user.unblockedBy = req.user.email;
-  delete user.banReason;
+  const unblocked = userStore.updateUser(user.id, {
+    status: 'Active',
+    unblockedAt: new Date().toISOString(),
+    unblockedBy: req.user.email,
+    banReason: null,
+  });
 
-  // Clear revocation entry so future tokens can be authorized
-  clearUserRevocation(userId);
+  // Previously revoked sessions stay revoked after an unban.
 
   logAdminAction(
     req,
@@ -386,7 +339,7 @@ router.patch('/users/:userId/unblock', requirePermission('MANAGE_USERS'), (req, 
   res.json({
     success: true,
     message: `User ${user.name} has been unblocked.`,
-    data: user,
+    data: unblocked,
   });
 });
 
@@ -398,7 +351,7 @@ router.patch('/users/:userId/unblock', requirePermission('MANAGE_USERS'), (req, 
  * PATCH /api/v1/admin/users/:userId/role
  * Admin updates a user's role (e.g. USER -> MODERATOR).
  */
-router.patch('/users/:userId/role', (req, res) => {
+router.patch('/users/:userId/role', requireAdmin, (req, res) => {
   const { userId } = req.params;
   const { role, permissions } = req.body;
 
@@ -412,6 +365,10 @@ router.patch('/users/:userId/role', (req, res) => {
     });
   }
 
+  if (permissions !== undefined && (!Array.isArray(permissions) || permissions.some(p => !VALID_PERMISSIONS.includes(p)))) {
+    return res.status(400).json({ success: false, error: 'Invalid permissions array.' });
+  }
+
   // Promoting someone to ADMIN or SUPER_ADMIN requires the requester to be SUPER_ADMIN
   if ((targetRole === 'ADMIN' || targetRole === 'SUPER_ADMIN') && req.user.role !== 'SUPER_ADMIN') {
     return res.status(403).json({
@@ -420,22 +377,24 @@ router.patch('/users/:userId/role', (req, res) => {
     });
   }
 
-  const user = usersDb.find((u) => u.id === userId);
+  const user = userStore.findById(userId);
   if (!user) {
     return res.status(404).json({ success: false, error: 'User not found' });
   }
 
   const previousRole = user.role;
-  user.role = targetRole;
+  const roleUpdate = { role: targetRole };
 
   // Set default moderation permissions if transitioning to MODERATOR and none provided
   if (targetRole === 'MODERATOR') {
-    user.permissions = Array.isArray(permissions) && permissions.length > 0
+    roleUpdate.permissions = Array.isArray(permissions) && permissions.length > 0
       ? permissions
       : ['APPROVE_PETS', 'FLAG_CONTENT', 'REVIEW_APPLICATIONS'];
   } else if (Array.isArray(permissions)) {
-    user.permissions = permissions;
+    roleUpdate.permissions = permissions;
   }
+
+  const delegated = userStore.updateUser(user.id, roleUpdate);
 
   // Revoke previous tokens so new role / claims take effect on next login
   revokeUserTokens(userId);
@@ -450,7 +409,7 @@ router.patch('/users/:userId/role', (req, res) => {
   res.json({
     success: true,
     message: `User ${user.name} role successfully updated to ${targetRole}.`,
-    data: user,
+    data: delegated,
   });
 });
 
@@ -458,7 +417,7 @@ router.patch('/users/:userId/role', (req, res) => {
  * PATCH /api/v1/admin/users/:userId/permissions
  * Dedicated endpoint allowing admins to grant specific moderation powers to trusted users/volunteers.
  */
-router.patch('/users/:userId/permissions', (req, res) => {
+router.patch('/users/:userId/permissions', requireAdmin, (req, res) => {
   const { userId } = req.params;
   const { permissions } = req.body;
 
@@ -480,12 +439,12 @@ router.patch('/users/:userId/permissions', (req, res) => {
     });
   }
 
-  const user = usersDb.find((u) => u.id === userId);
+  const user = userStore.findById(userId);
   if (!user) {
     return res.status(404).json({ success: false, error: 'User not found' });
   }
 
-  user.permissions = permissions;
+  const updated = userStore.updateUser(user.id, { permissions });
   revokeUserTokens(userId);
 
   logAdminAction(
@@ -499,9 +458,9 @@ router.patch('/users/:userId/permissions', (req, res) => {
     success: true,
     message: `Permissions updated for ${user.name}.`,
     data: {
-      userId: user.id,
-      role: user.role,
-      permissions: user.permissions,
+      userId: updated.id,
+      role: updated.role,
+      permissions: updated.permissions,
     },
   });
 });
@@ -510,9 +469,9 @@ router.patch('/users/:userId/permissions', (req, res) => {
  * GET /api/v1/admin/users
  * Returns list of users with roles, statuses, and permissions.
  */
-router.get('/users', (req, res) => {
+router.get('/users', requirePermission('MANAGE_USERS'), (req, res) => {
   const { role, status, q } = req.query;
-  let results = [...usersDb];
+  let results = userStore.getAllUsers();
 
   if (role) {
     results = results.filter((u) => u.role.toUpperCase() === role.toUpperCase());
@@ -548,7 +507,7 @@ router.get('/users', (req, res) => {
  */
 router.get('/pets', (req, res) => {
   const { species, flaggedOnly, q } = req.query;
-  let results = [...petsDb];
+  let results = petStore.all();
 
   if (flaggedOnly === 'true') {
     results = results.filter((p) => p.reportsCount > 0);
@@ -578,7 +537,7 @@ router.get('/pets', (req, res) => {
  * Retrieve a single pet listing in full detail.
  */
 router.get('/pets/:id', (req, res) => {
-  const pet = petsDb.find((p) => p.id === req.params.id);
+  const pet = petStore.find(req.params.id);
   if (!pet) {
     return res.status(404).json({ success: false, error: 'Pet listing not found' });
   }
@@ -668,7 +627,7 @@ router.post('/pets', requirePermission('APPROVE_PETS'), (req, res) => {
     },
   };
 
-  petsDb.unshift(newPet);
+  petStore.insert(newPet, { prepend: true });
 
   logAdminAction(
     req,
@@ -691,7 +650,7 @@ router.post('/pets', requirePermission('APPROVE_PETS'), (req, res) => {
  */
 router.put('/pets/:id', requirePermission('APPROVE_PETS'), (req, res) => {
   const { id } = req.params;
-  const pet = petsDb.find((p) => p.id === id);
+  const pet = petStore.find(id);
 
   if (!pet) {
     return res.status(404).json({ success: false, error: 'Pet listing not found' });
@@ -762,6 +721,7 @@ router.put('/pets/:id', requirePermission('APPROVE_PETS'), (req, res) => {
     notes: adminOverrideNotes || 'Admin anytime override',
   };
 
+  petStore.update(pet.id, pet);
   logAdminAction(
     req,
     'ADMIN_OVERRIDE_PET_LISTING',
@@ -791,7 +751,7 @@ router.patch('/pets/:id/images', requirePermission('APPROVE_PETS'), (req, res) =
     });
   }
 
-  const pet = petsDb.find((p) => p.id === id);
+  const pet = petStore.find(id);
   if (!pet) {
     return res.status(404).json({ success: false, error: 'Pet listing not found' });
   }
@@ -804,6 +764,7 @@ router.patch('/pets/:id/images', requirePermission('APPROVE_PETS'), (req, res) =
     action: 'IMAGE_CAROUSEL_REPLACED',
   };
 
+  petStore.update(pet.id, pet);
   logAdminAction(
     req,
     'ADMIN_REPLACED_PET_CAROUSEL',
@@ -828,13 +789,13 @@ router.patch('/pets/:id/images', requirePermission('APPROVE_PETS'), (req, res) =
  */
 router.delete('/pets/:id', requirePermission('APPROVE_PETS'), (req, res) => {
   const { id } = req.params;
-  const petIndex = petsDb.findIndex((p) => p.id === id);
+  const deletedPet = petStore.find(id);
 
-  if (petIndex === -1) {
+  if (!deletedPet) {
     return res.status(404).json({ success: false, error: 'Pet listing not found' });
   }
 
-  const deletedPet = petsDb.splice(petIndex, 1)[0];
+  petStore.remove(id);
 
   logAdminAction(
     req,
@@ -855,7 +816,7 @@ router.delete('/pets/:id', requirePermission('APPROVE_PETS'), (req, res) => {
  */
 router.patch('/pets/:id/ban', requirePermission('FLAG_CONTENT'), (req, res) => {
   const { id } = req.params;
-  const pet = petsDb.find((p) => p.id === id);
+  const pet = petStore.find(id);
 
   if (!pet) {
     return res.status(404).json({ success: false, error: 'Pet listing not found' });
@@ -863,6 +824,7 @@ router.patch('/pets/:id/ban', requirePermission('FLAG_CONTENT'), (req, res) => {
 
   pet.isBanned = true;
 
+  petStore.update(pet.id, pet);
   logAdminAction(req, 'BANNED_PET_LISTING', `${pet.name} (${pet.id})`, 'Listing banned from discovery.');
 
   res.json({
@@ -880,7 +842,7 @@ router.patch('/pets/:id/badge', requirePermission('APPROVE_PETS'), (req, res) =>
   const { id } = req.params;
   const { isUrgent, isFeatured } = req.body;
 
-  const pet = petsDb.find((p) => p.id === id);
+  const pet = petStore.find(id);
   if (!pet) {
     return res.status(404).json({ success: false, error: 'Pet listing not found' });
   }
@@ -888,6 +850,7 @@ router.patch('/pets/:id/badge', requirePermission('APPROVE_PETS'), (req, res) =>
   if (isUrgent !== undefined) pet.isUrgent = Boolean(isUrgent);
   if (isFeatured !== undefined) pet.isFeatured = Boolean(isFeatured);
 
+  petStore.update(pet.id, pet);
   logAdminAction(
     req,
     'UPDATED_PET_BADGES',
@@ -907,7 +870,7 @@ router.patch('/pets/:id/badge', requirePermission('APPROVE_PETS'), (req, res) =>
    ========================================================================== */
 router.get('/shelters', (req, res) => {
   const { status, city } = req.query;
-  let result = [...sheltersDb];
+  let result = shelterStore.all();
 
   if (status) {
     result = result.filter((s) => s.status.toUpperCase() === status.toUpperCase());
@@ -927,7 +890,7 @@ router.patch('/shelters/:id/approve', requirePermission('APPROVE_PETS'), (req, r
   const { id } = req.params;
   const { notes } = req.body;
 
-  const shelter = sheltersDb.find((s) => s.id === id);
+  const shelter = shelterStore.find(id);
   if (!shelter) {
     return res.status(404).json({ success: false, error: 'Shelter registration not found' });
   }
@@ -937,6 +900,7 @@ router.patch('/shelters/:id/approve', requirePermission('APPROVE_PETS'), (req, r
   shelter.approvedAt = new Date().toISOString();
   shelter.approvedBy = req.user.email;
 
+  shelterStore.update(shelter.id, shelter);
   logAdminAction(req, 'APPROVED_SHELTER', shelter.id, `Shelter "${shelter.shelterName}" approved.`);
 
   res.json({
@@ -954,7 +918,7 @@ router.patch('/shelters/:id/reject', requirePermission('APPROVE_PETS'), (req, re
     return res.status(400).json({ success: false, error: 'Rejection reason is required' });
   }
 
-  const shelter = sheltersDb.find((s) => s.id === id);
+  const shelter = shelterStore.find(id);
   if (!shelter) {
     return res.status(404).json({ success: false, error: 'Shelter registration not found' });
   }
@@ -964,6 +928,7 @@ router.patch('/shelters/:id/reject', requirePermission('APPROVE_PETS'), (req, re
   shelter.reviewedAt = new Date().toISOString();
   shelter.reviewedBy = req.user.email;
 
+  shelterStore.update(shelter.id, shelter);
   logAdminAction(req, 'REJECTED_SHELTER', shelter.id, `Shelter rejected. Reason: ${reason}`);
 
   res.json({
@@ -979,8 +944,8 @@ router.patch('/shelters/:id/reject', requirePermission('APPROVE_PETS'), (req, re
 router.get('/audit-logs', requirePermission('AUDIT_LOGS'), (req, res) => {
   res.json({
     success: true,
-    count: auditLogsDb.length,
-    data: auditLogsDb,
+    count: auditStore.all().length,
+    data: auditStore.all(),
   });
 });
 
@@ -992,7 +957,7 @@ router.get('/audit-logs', requirePermission('AUDIT_LOGS'), (req, res) => {
  * GET /api/v1/admin/subscriptions
  * Aggregated subscription dashboard metrics, active premium users, and plans
  */
-router.get('/subscriptions', (req, res) => {
+router.get('/subscriptions', requireAdmin, (req, res) => {
   const stats = paymentStore.getPaymentStats();
   const plans = planStore.getAllPlans();
   const allUsers = userStore.getAllUsers();
@@ -1021,7 +986,7 @@ router.get('/subscriptions', (req, res) => {
  * GET /api/v1/admin/payments
  * Filterable payment transaction log (SUCCESS, PENDING_APPROVAL, FAILED, ALL)
  */
-router.get('/payments', (req, res) => {
+router.get('/payments', requireAdmin, (req, res) => {
   const { status, search } = req.query;
   const payments = paymentStore.getAllPayments({ status, search });
 
@@ -1036,7 +1001,7 @@ router.get('/payments', (req, res) => {
  * POST /api/v1/admin/payments/:tranId/approve
  * Approves a pending manual bKash payment and activates subscription
  */
-router.post('/payments/:tranId/approve', (req, res) => {
+router.post('/payments/:tranId/approve', requireAdmin, (req, res) => {
   const { tranId } = req.params;
   const payment = paymentStore.getPaymentByTranId(tranId);
 
@@ -1048,12 +1013,12 @@ router.post('/payments/:tranId/approve', (req, res) => {
     return res.status(400).json({ success: false, error: 'This payment has already been approved and activated.' });
   }
 
-  const approved = paymentStore.approveManualPayment(tranId, req.user.email);
-  const plan = planStore.getPlanById(approved.planId);
-  const durationDays = plan ? plan.durationDays : 30;
-
-  // Activate User Subscription
-  const updatedUser = userStore.activateUserSubscription(approved.userId, approved.planId, durationDays, tranId);
+  let settlement;
+  try { settlement = paymentStore.approveManualPayment(tranId, req.user.email); }
+  catch (error) { return res.status(409).json({ success: false, error: error.message }); }
+  const approved = settlement.payment;
+  const durationDays = approved.durationDays;
+  const updatedUser = userStore.findById(approved.userId);
 
   logAdminAction(req, 'APPROVED_BKASH_PAYMENT', tranId, `Approved bKash TrxID "${approved.trxId}" for user "${approved.userName}". Plan: ${approved.planName} (৳${approved.amount} BDT).`);
 
@@ -1069,7 +1034,7 @@ router.post('/payments/:tranId/approve', (req, res) => {
  * POST /api/v1/admin/payments/:tranId/reject
  * Rejects a manual bKash payment request
  */
-router.post('/payments/:tranId/reject', (req, res) => {
+router.post('/payments/:tranId/reject', requireAdmin, (req, res) => {
   const { tranId } = req.params;
   const { reason = 'Invalid or duplicate bKash Transaction ID (TrxID)' } = req.body;
 
@@ -1079,6 +1044,8 @@ router.post('/payments/:tranId/reject', (req, res) => {
   }
 
   const rejected = paymentStore.rejectManualPayment(tranId, reason, req.user.email);
+  if (rejected.status !== 'REJECTED') return res.status(409).json({ success: false,
+    error: `A ${rejected.status} transaction cannot be rejected.` });
 
   logAdminAction(req, 'REJECTED_BKASH_PAYMENT', tranId, `Rejected payment "${tranId}". Reason: ${reason}`);
 
@@ -1097,7 +1064,9 @@ router.put('/plans/:id', requireRole(['ADMIN', 'SUPER_ADMIN']), (req, res) => {
   const { id } = req.params;
   const updates = req.body;
 
-  const updatedPlan = planStore.updatePlan(id, updates);
+  let updatedPlan;
+  try { updatedPlan = planStore.updatePlan(id, updates); }
+  catch (error) { return res.status(400).json({ success: false, error: error.message }); }
   if (!updatedPlan) {
     return res.status(404).json({ success: false, error: 'Plan not found' });
   }

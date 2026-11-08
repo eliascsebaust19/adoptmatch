@@ -15,6 +15,8 @@ class User extends Authenticatable
         'name',
         'email',
         'google_id',
+        'supabase_id',
+        'phone_verified_at',
         'avatar',
         'phone',
         'role',
@@ -33,6 +35,7 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'phone_verified_at' => 'datetime',
             'password' => 'hashed',
             'location_lat' => 'float',
             'location_lng' => 'float',

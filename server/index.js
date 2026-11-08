@@ -62,9 +62,11 @@ app.use((err, req, res, next) => {
 // Start Server & Init DB
 async function startServer() {
   await initDB();
-  app.listen(PORT, () => {
-    console.log(`🚀 AdoptMatch Node Server running on http://localhost:${PORT}`);
+  const server = app.listen(PORT, () => {
+    console.log(`🚀 AdoptMatch Node Server running on http://localhost:${server.address().port}`);
   });
+  return server;
 }
 
-startServer();
+if (require.main === module) startServer();
+module.exports = { app, startServer };

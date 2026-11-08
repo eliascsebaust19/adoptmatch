@@ -22,11 +22,12 @@ class GoPremiumScreen extends StatefulWidget {
 class _GoPremiumScreenState extends State<GoPremiumScreen>
     with SingleTickerProviderStateMixin {
   final _repo = SubscriptionRepository();
-  List<SubscriptionPlan> _plans = SubscriptionPlan.defaultPlans;
+  List<SubscriptionPlan> _plans = const [];
   String _selectedPlanId = 'plan-quarterly'; // Default to Best Value
   bool _isLoadingPlans = true;
   bool _isProcessingPayment = false;
-  String _bkashNumber = '01711234567';
+  String? _bkashNumber;
+  String? _loadError;
 
   // Manual bKash Form controllers
   final _manualFormKey = GlobalKey<FormState>();
@@ -52,12 +53,28 @@ class _GoPremiumScreenState extends State<GoPremiumScreen>
   }
 
   Future<void> _loadPlansAndBkash() async {
-    final plans = await _repo.fetchPlans();
-    final bkash = await _repo.fetchBkashNumber();
-    if (mounted) {
+    setState(() { _isLoadingPlans = true; _loadError = null; });
+    try {
+      final plans = await _repo.fetchPlans();
+      String? bkash;
+      String? manualError;
+      try { bkash = await _repo.fetchBkashNumber(); }
+      catch (_) { manualError = 'Manual bKash is unavailable. Do not send money to an unverified number.'; }
+      if (!mounted) return;
       setState(() {
         _plans = plans;
+        _selectedPlanId = plans.any((p) => p.id == _selectedPlanId)
+            ? _selectedPlanId : plans.first.id;
         _bkashNumber = bkash;
+        _loadError = manualError;
+        _isLoadingPlans = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _plans = const [];
+        _bkashNumber = null;
+        _loadError = 'Could not load current payment options. Please retry. ($e)';
         _isLoadingPlans = false;
       });
     }
@@ -66,23 +83,26 @@ class _GoPremiumScreenState extends State<GoPremiumScreen>
   SubscriptionPlan get _selectedPlan {
     return _plans.firstWhere(
       (p) => p.id == _selectedPlanId,
-      orElse: () => _plans[1],
+      orElse: () => _plans.first,
     );
   }
 
   Future<void> _handleSslCommerzSubscribe() async {
+    if (_plans.isEmpty || _isLoadingPlans) return;
     final authState = context.read<AuthBloc>().state;
     final user = authState is Authenticated ? authState.user : null;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in before subscribing.')),
+      );
+      return;
+    }
 
     setState(() => _isProcessingPayment = true);
 
     try {
       final result = await _repo.initiateSslCommerzPayment(
         planId: _selectedPlanId,
-        userId: user?.id ?? 'u-101',
-        userName: user?.name ?? 'AdoptMatch Supporter',
-        userEmail: user?.email ?? 'supporter@adoptmatch.org',
-        userPhone: user?.phone,
       );
 
       final gatewayUrl = result['gatewayUrl'] as String?;
@@ -184,7 +204,7 @@ class _GoPremiumScreenState extends State<GoPremiumScreen>
             ),
             onPressed: () {
               Navigator.pop(ctx);
-              // Activate locally for demo verification & navigate to profile
+              // Ask the server whether the transaction settled; never grant locally.
               context.read<AuthBloc>().add(
                 ActivateSubscriptionEvent(
                   planId: _selectedPlan.id,
@@ -193,7 +213,7 @@ class _GoPremiumScreenState extends State<GoPremiumScreen>
               );
               context.push('/subscription/my');
             },
-            child: const Text('I Have Completed Payment'),
+            child: const Text('Check Payment Status'),
           ),
         ],
       ),
@@ -201,10 +221,21 @@ class _GoPremiumScreenState extends State<GoPremiumScreen>
   }
 
   Future<void> _handleManualBkashSubmit() async {
+    if (_plans.isEmpty || _bkashNumber == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Manual payments are unavailable. Refresh payment options before sending money.')));
+      return;
+    }
     if (!_manualFormKey.currentState!.validate()) return;
 
     final authState = context.read<AuthBloc>().state;
     final user = authState is Authenticated ? authState.user : null;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in before submitting a payment.')),
+      );
+      return;
+    }
 
     setState(() => _isSubmittingManual = true);
 
@@ -214,9 +245,6 @@ class _GoPremiumScreenState extends State<GoPremiumScreen>
 
       await _repo.submitManualBkashPayment(
         planId: _selectedPlanId,
-        userId: user?.id ?? 'u-101',
-        userName: user?.name ?? 'Adopter',
-        userEmail: user?.email ?? 'adopter@adoptmatch.org',
         senderPhone: sender,
         trxId: trx,
       );
@@ -283,6 +311,7 @@ class _GoPremiumScreenState extends State<GoPremiumScreen>
   }
 
   void _copyBkashNumber() {
+    if (_bkashNumber == null) return;
     Clipboard.setData(ClipboardData(text: _bkashNumber));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -317,16 +346,31 @@ class _GoPremiumScreenState extends State<GoPremiumScreen>
           ),
         ],
       ),
-      body: _isLoadingPlans
-          ? const Center(
-              child: AppLoadingIndicator(
-                message: 'Loading subscription packages...',
-              ),
+      body: _isLoadingPlans || _plans.isEmpty
+          ? Center(
+              child: _isLoadingPlans
+                  ? const AppLoadingIndicator(message: 'Loading subscription packages...')
+                  : Padding(
+                      padding: const EdgeInsets.all(AppSpacing.xl),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(_loadError ?? 'No subscription plans are available.', textAlign: TextAlign.center),
+                          const SizedBox(height: AppSpacing.md),
+                          AppPrimaryButton(text: 'Retry', onPressed: _loadPlansAndBkash),
+                        ],
+                      ),
+                    ),
             )
           : SingleChildScrollView(
               padding: const EdgeInsets.all(AppSpacing.xl),
               child: Column(
                 children: [
+                  if (_loadError != null) ...[
+                    Text(_loadError!, style: const TextStyle(color: AppColors.error)),
+                    TextButton(onPressed: _loadPlansAndBkash, child: const Text('Refresh payment options')),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
                   // Hero Header Card
                   Container(
                     width: double.infinity,
@@ -788,7 +832,7 @@ class _GoPremiumScreenState extends State<GoPremiumScreen>
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  _bkashNumber,
+                  _bkashNumber ?? 'Not configured — do not send money',
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w900,

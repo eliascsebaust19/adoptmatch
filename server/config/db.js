@@ -24,7 +24,12 @@ async function initDB() {
     conn.release();
     useMemoryFallback = false;
   } catch (err) {
-    console.warn('⚠️ MySQL Connection failed (', err.message, '). Switched to robust in-memory database provider for seamless demo.');
+    if (process.env.NODE_ENV === 'production') {
+      // Serving seeded demo accounts instead of the real database would be a
+      // silent authentication and data-integrity failure.
+      throw new Error(`MySQL connection failed in production: ${err.message}`);
+    }
+    console.warn('⚠️ MySQL Connection failed (', err.message, '). Using the in-memory demo provider (non-production only).');
     useMemoryFallback = true;
   }
 }

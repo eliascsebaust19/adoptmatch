@@ -10,141 +10,73 @@ use Illuminate\Support\Str;
 
 class UploadController extends Controller
 {
-    /**
-     * Upload an image to Vercel Blob, Cloudinary Multi-Image CDN, or Local Storage.
-     */
+    /** Authenticated image upload. Never accept a caller-supplied URL as proof of storage. */
     public function uploadImage(Request $request)
     {
         $request->validate([
-            'image' => 'required', // Can be file upload, base64 data URI, or external URL
-            'folder' => 'nullable|string',
+            'image' => 'required|file|mimes:jpg,jpeg,png,webp,gif|max:5120',
+            'folder' => 'nullable|in:avatars,pets',
         ]);
 
-        $folder = $request->folder ?? 'adoptmatch/pets';
-
-        // 1. Primary: Vercel Blob High-Speed Global CDN upload
-        $vercelToken = env('BLOB_READ_WRITE_TOKEN');
-        $storeId = env('VERCEL_BLOB_STORE_ID');
-
-        if (!empty($vercelToken)) {
-            try {
-                $filename = 'uploads/' . time() . '_' . Str::random(10) . '.jpg';
-                $contentType = 'image/jpeg';
-                $binaryContent = null;
-
-                if ($request->hasFile('image')) {
-                    $file = $request->file('image');
-                    $binaryContent = file_get_contents($file->getRealPath());
-                    $contentType = $file->getMimeType() ?: 'image/jpeg';
-                } else {
-                    $imageData = $request->input('image');
-                    if (str_starts_with($imageData, 'data:image')) {
-                        $parts = explode(',', $imageData);
-                        $binaryContent = base64_decode($parts[1] ?? $parts[0]);
-                    } elseif (filter_var($imageData, FILTER_VALIDATE_URL)) {
-                        $binaryContent = Http::get($imageData)->body();
-                    } else {
-                        $binaryContent = base64_decode($imageData);
-                    }
-                }
-
-                if ($binaryContent) {
-                    $pathname = urlencode($filename);
-                    $response = Http::withHeaders([
-                        'x-api-version' => '13',
-                        'x-vercel-blob-store-id' => $storeId,
-                        'authorization' => 'Bearer ' . $vercelToken,
-                        'x-vercel-blob-access' => 'private',
-                        'x-allow-overwrite' => '1',
-                        'content-type' => $contentType,
-                    ])->withBody($binaryContent, $contentType)
-                      ->put("https://vercel.com/api/blob/?pathname={$pathname}");
-
-                    if ($response->successful()) {
-                        $result = $response->json();
-                        return response()->json([
-                            'status' => 'success',
-                            'message' => 'Image uploaded to Vercel Blob successfully',
-                            'url' => $result['url'],
-                            'public_id' => $result['pathname'] ?? $filename,
-                        ], 200);
-                    } else {
-                        Log::warning("[Vercel Blob Upload Warning] HTTP {$response->status()}: " . $response->body());
-                    }
-                }
-            } catch (\Exception $e) {
-                Log::error("[Vercel Blob Upload Exception] " . $e->getMessage());
-            }
+        $file = $request->file('image');
+        $bytes = file_get_contents($file->getRealPath());
+        $mime = $file->getMimeType();
+        $allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+        if ($bytes === false || strlen($bytes) === 0 || strlen($bytes) > 5242880 ||
+            !in_array($mime, $allowed, true) || @getimagesizefromstring($bytes) === false) {
+            return response()->json(['status' => 'error', 'message' => 'A genuine image of at most 5 MB is required.'], 415);
         }
 
-        // 2. Secondary: Cloudinary upload if configured
-        $cloudinaryUrl = env('CLOUDINARY_URL');
-        $cloudName = config('services.cloudinary.cloud_name');
-        $apiKey = config('services.cloudinary.api_key');
-        $uploadPreset = config('services.cloudinary.upload_preset', 'ml_default');
+        $extensions = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif'];
+        $folder = $request->input('folder', 'pets');
+        $filename = $request->user()->id . '-' . Str::uuid() . '.' . $extensions[$mime];
+        $path = 'uploads/' . $folder . '/' . $filename;
+        $cloud = config('services.cloudinary');
 
-        if (!empty($cloudinaryUrl) && preg_match('/cloudinary:\/\/([^:]+):([^@]+)@(.+)/', $cloudinaryUrl, $matches)) {
-            $apiKey = $matches[1];
-            $cloudName = $matches[3];
-        }
-
-        if (!empty($cloudName)) {
+        if (!empty($cloud['cloud_name']) && !empty($cloud['api_key']) && !empty($cloud['api_secret'])) {
+            $timestamp = time();
+            $folderName = 'adoptmatch/' . $folder;
+            $publicId = $request->user()->id . '-' . Str::uuid();
+            // Signed uploads do not depend on an unrestricted unsigned preset.
+            $signature = sha1('folder=' . $folderName . '&public_id=' . $publicId . '&timestamp=' . $timestamp . $cloud['api_secret']);
             try {
-                $endpoint = "https://api.cloudinary.com/v1_1/{$cloudName}/image/upload";
-
-                if ($request->hasFile('image')) {
-                    $file = $request->file('image');
-                    $response = Http::attach('file', file_get_contents($file), $file->getClientOriginalName())
-                        ->post($endpoint, [
-                            'upload_preset' => $uploadPreset,
-                            'folder' => $folder,
-                        ]);
-                } else {
-                    $imageData = $request->input('image');
-                    $response = Http::post($endpoint, [
-                        'file' => $imageData,
-                        'upload_preset' => $uploadPreset,
-                        'folder' => $folder,
+                $response = Http::timeout(20)
+                    ->attach('file', $bytes, $filename)
+                    ->post('https://api.cloudinary.com/v1_1/' . $cloud['cloud_name'] . '/image/upload', [
+                        'api_key' => $cloud['api_key'],
+                        'timestamp' => $timestamp,
+                        'signature' => $signature,
+                        'folder' => $folderName,
+                        'public_id' => $publicId,
                     ]);
-                }
-
-                if ($response->successful()) {
-                    $result = $response->json();
+                $result = $response->json();
+                if ($response->successful() && !empty($result['secure_url']) &&
+                    ($result['bytes'] ?? null) === strlen($bytes)) {
                     return response()->json([
-                        'status' => 'success',
-                        'message' => 'Image uploaded to Cloudinary successfully',
-                        'url' => $result['secure_url'],
-                        'public_id' => $result['public_id'] ?? null,
-                    ], 200);
-                } else {
-                    Log::warning("[Cloudinary Error] " . $response->body());
+                        'status' => 'success', 'url' => $result['secure_url'],
+                        'public_id' => $result['public_id'], 'provider' => 'cloudinary',
+                    ], 201);
                 }
+                Log::warning('Cloudinary did not confirm the image upload.', ['status' => $response->status()]);
             } catch (\Exception $e) {
-                Log::error("[Cloudinary Exception] " . $e->getMessage());
+                Log::warning('Cloudinary upload failed.', ['error' => $e->getMessage()]);
             }
         }
 
-        // 3. Fallback to Local Public Storage or Direct URL
-        if ($request->hasFile('image')) {
-            $file = $request->file('image');
-            $filename = Str::uuid() . '.' . $file->getClientOriginalExtension();
-            $path = $file->storeAs('public/uploads', $filename);
-            $url = url('storage/uploads/' . $filename);
-
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Image stored on server storage',
-                'url' => $url,
-                'public_id' => $filename,
-            ], 200);
+        // Laravel's public directory is served directly; no missing storage symlink fallback.
+        $directory = public_path('uploads/' . $folder);
+        if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) {
+            return response()->json(['status' => 'error', 'message' => 'Image storage is unavailable.'], 503);
+        }
+        $destination = $directory . '/' . $filename;
+        if (file_put_contents($destination, $bytes, LOCK_EX) !== strlen($bytes) ||
+            !is_file($destination) || filesize($destination) !== strlen($bytes)) {
+            return response()->json(['status' => 'error', 'message' => 'Image storage did not confirm the write.'], 503);
         }
 
-        $inputStr = $request->input('image');
         return response()->json([
-            'status' => 'success',
-            'message' => 'Image URL accepted',
-            'url' => $inputStr,
-            'public_id' => 'url_' . md5($inputStr),
-        ], 200);
+            'status' => 'success', 'url' => asset($path), 'public_id' => $filename,
+            'provider' => 'local', 'bytes' => strlen($bytes),
+        ], 201);
     }
 }

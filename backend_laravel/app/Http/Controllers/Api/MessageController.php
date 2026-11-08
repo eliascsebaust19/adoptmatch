@@ -7,6 +7,7 @@ use App\Models\Message;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class MessageController extends Controller
 {
@@ -79,16 +80,22 @@ class MessageController extends Controller
     public function sendMessage(Request $request)
     {
         $request->validate([
-            'receiver_id' => 'required|exists:users,id',
-            'pet_id' => 'nullable|exists:pets,id',
+            'receiver_id' => ['required', 'integer', Rule::exists('users', 'id')],
+            'sender_id' => 'prohibited',
+            'pet_id' => 'nullable|integer|exists:pets,id',
             'message_text' => 'required|string|max:1000',
+            'attachment_url' => 'nullable|url:http,https|max:2048',
         ]);
 
+        if ((int) $request->receiver_id === (int) $request->user()->id) {
+            return response()->json(['status' => 'error', 'message' => 'Choose a different recipient.'], 422);
+        }
         $message = Message::create([
             'sender_id' => $request->user()->id,
             'receiver_id' => $request->receiver_id,
             'pet_id' => $request->pet_id,
             'message_text' => $request->message_text,
+            'attachment_url' => $request->input('attachment_url'),
             'is_read' => false,
         ]);
 

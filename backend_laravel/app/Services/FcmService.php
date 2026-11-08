@@ -17,12 +17,11 @@ class FcmService
             return false;
         }
 
-        $serverKey = env('FCM_SERVER_KEY');
+        $serverKey = config('services.fcm.server_key');
 
         if (empty($serverKey)) {
-            // Simulated FCM notification delivery (Useful for testing without live Firebase project)
-            Log::info("[FCM Simulated Delivery] To: {$deviceToken} | Title: {$title} | Body: {$body}", $data);
-            return true;
+            Log::warning("[FCM] Not configured; notification was not delivered: {$title}");
+            return false;
         }
 
         try {

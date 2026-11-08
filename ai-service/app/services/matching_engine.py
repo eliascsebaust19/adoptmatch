@@ -16,6 +16,29 @@ class TransparentMatchingEngine:
 
     @staticmethod
     def calculate_match(assessment: AdopterAssessmentSchema, pet: PetDataSchema) -> MatchResultSchema:
+        # Safety/welfare constraints cannot be compensated for by other weights.
+        blockers: List[str] = []
+        if not assessment.landlord_allows_pets:
+            blockers.append("Housing permission is required before adoption")
+        if assessment.housing_type in ["APARTMENT", "CONDO"] and not pet.apartment_friendly:
+            blockers.append("This pet requires a house or larger outdoor living space")
+        if assessment.has_children and not pet.child_friendly:
+            blockers.append("This pet requires an adult-only home")
+        if pet.special_needs and not assessment.special_needs_willingness:
+            blockers.append("This pet requires special-needs care capacity")
+        if assessment.has_other_pets:
+            if pet.species == "Dog" and not pet.dog_friendly:
+                blockers.append("This pet must be the only dog in the household")
+            if pet.species == "Cat" and not pet.cat_friendly:
+                blockers.append("This pet must be the only cat in the household")
+        required_hours = {"Low": 1, "Moderate": 2, "High": 4, "Very High": 6}.get(pet.exercise_requirement, 2)
+        if assessment.daily_free_time_hours < required_hours:
+            blockers.append(f"At least {required_hours} daily care/exercise hours are required")
+        if blockers:
+            return MatchResultSchema(pet_id=pet.id, score=0,
+                classification="Not Recommended", reasons=[], considerations=blockers,
+                eligible=False, blocking_reasons=blockers)
+
         score = 0
         reasons: List[str] = []
         considerations: List[str] = []
@@ -80,6 +103,8 @@ class TransparentMatchingEngine:
             "VERY HIGH": 4,
             "VERY_HIGH": 4,
         }
+        activity = assessment.activity_level.upper()
+        p_energy = pet.energy_level.upper()
         act_val = activity_scale.get(activity, 2)
         eng_val = energy_scale.get(p_energy, 2)
         diff = abs(act_val - eng_val)

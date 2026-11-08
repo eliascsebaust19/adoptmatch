@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../models/pet_model.dart';
 import '../services/local_storage_service.dart';
 import '../services/laravel_pet_service.dart';
+import '../storage/secure_storage_service.dart';
 
 class PetRepository {
   static final PetRepository _instance = PetRepository._internal();
@@ -11,7 +12,9 @@ class PetRepository {
     _initStorage();
   }
 
-  final _laravelPetService = LaravelPetService();
+  LaravelPetService _laravelPetService = LaravelPetService();
+  bool _useDemoCatalog = false;
+  void setRemoteServiceForTesting(LaravelPetService service) { _laravelPetService = service; }
   final _storage = LocalStorageService.instance;
   final _petStreamController = StreamController<List<Pet>>.broadcast();
   Stream<List<Pet>> get petsStream => _petStreamController.stream;
@@ -768,6 +771,7 @@ class PetRepository {
 
   /// Sets test fixture pets during unit testing
   void setPetsForTesting(List<Pet> testPets) {
+    _useDemoCatalog = true;
     _pets = List.from(testPets);
     _petStreamController.add(List.unmodifiable(_pets));
   }
@@ -864,6 +868,7 @@ class PetRepository {
     bool? apartmentOnly,
     bool? vaccinatedOnly,
   }) async {
+    if (_useDemoCatalog) return _filterLocalPets(category, searchQuery, maxDistanceKm, kidSafeOnly, apartmentOnly, vaccinatedOnly);
     try {
       final remotePets = await _laravelPetService.getPets(
         species: (category != null && category != 'All Pets' && !category.toLowerCase().startsWith('all'))
@@ -871,7 +876,7 @@ class PetRepository {
             : null,
         search: searchQuery,
       );
-      if (remotePets.isNotEmpty) {
+      {
         // Cache and merge remote pets into local state for detail & favorite lookup
         for (final rp in remotePets) {
           final idx = _pets.indexWhere((p) => p.id == rp.id);
@@ -882,7 +887,7 @@ class PetRepository {
           }
         }
         var result = List<Pet>.from(remotePets);
-        if (maxDistanceKm != null && maxDistanceKm < 50) {
+        if (maxDistanceKm != null) {
           result = result.where((p) => p.distanceKm <= maxDistanceKm).toList();
         }
         if (kidSafeOnly == true) {
@@ -894,11 +899,18 @@ class PetRepository {
         if (vaccinatedOnly == true) {
           result = result.where((p) => p.isVaccinated).toList();
         }
+        result.sort((a, b) => b.matchScore.compareTo(a.matchScore));
+        _petStreamController.add(List.unmodifiable(_pets));
         return result;
       }
     } catch (e) {
-      debugPrint('[PetRepository] Live fetch fallback to local list: ');
+      debugPrint('[PetRepository] Catalog load failed: $e');
+      rethrow;
     }
+  }
+
+  Future<List<Pet>> _filterLocalPets(String? category, String? searchQuery, double? maxDistanceKm,
+      bool? kidSafeOnly, bool? apartmentOnly, bool? vaccinatedOnly) async {
     await Future.delayed(const Duration(milliseconds: 150));
     var result = List<Pet>.from(_pets);
 
@@ -929,7 +941,7 @@ class PetRepository {
       result = result.where((p) => _matchesSmartSearch(p, searchQuery)).toList();
     }
 
-    if (maxDistanceKm != null && maxDistanceKm < 50) {
+    if (maxDistanceKm != null) {
       result = result.where((p) => p.distanceKm <= maxDistanceKm).toList();
     }
 
@@ -948,30 +960,52 @@ class PetRepository {
     return result;
   }
 
+  Future<void> clearUserCache() async {
+    _pets = _pets.map((p) => p.copyWith(isFavorite: false)).toList();
+    await _storage.saveFavorites({});
+    _petStreamController.add(List.unmodifiable(_pets));
+  }
+
   Future<Pet?> getPetById(String id) async {
-    try {
-      return _pets.firstWhere((p) => p.id == id);
-    } catch (_) {
-      try {
-        final remote = await _laravelPetService.getPetDetails(id);
-        if (remote != null) {
-          _pets.add(remote);
-          return remote;
-        }
-      } catch (_) {}
-      return null;
+    if (!_useDemoCatalog && int.tryParse(id) != null) {
+      final remote = await _laravelPetService.getPetDetails(id);
+      if (remote == null) return null;
+      final token = await SecureStorageService.instance.getAuthToken();
+      final favorite = token == null || token.isEmpty
+          ? false : await _laravelPetService.getFavoriteStatus(id);
+      final pet = remote.copyWith(isFavorite: favorite);
+      cacheRemotePet(pet);
+      return pet;
     }
+    try { return _pets.firstWhere((p) => p.id == id); }
+    catch (_) { return null; }
+  }
+
+  /// Remote results use server identity, never an unrelated seeded listing.
+  void cacheRemotePet(Pet pet) {
+    final index = _pets.indexWhere((p) => p.id == pet.id);
+    if (index == -1) { _pets.add(pet); } else { _pets[index] = pet; }
+    _petStreamController.add(List.unmodifiable(_pets));
+  }
+
+  Future<void> recordSwipe(String id, {required bool isLike}) async {
+    if (_useDemoCatalog || int.tryParse(id) == null) return;
+    final acknowledged = await _laravelPetService.recordSwipe(id, isLike: isLike);
+    if (!acknowledged) throw Exception('The server did not record this swipe.');
   }
 
   Future<void> toggleFavorite(String id) async {
     final index = _pets.indexWhere((p) => p.id == id);
-    if (index != -1) {
-      final pet = _pets[index];
+    if (index == -1) throw Exception('Load the pet before saving it.');
+    final pet = _pets[index];
+    if (!_useDemoCatalog && int.tryParse(id) != null) {
+      final favorite = await _laravelPetService.setFavorite(id, !pet.isFavorite);
+      _pets[index] = pet.copyWith(isFavorite: favorite);
+    } else {
       _pets[index] = pet.copyWith(isFavorite: !pet.isFavorite);
-      final favIds = _pets.where((p) => p.isFavorite).map((p) => p.id).toSet();
-      await _storage.saveFavorites(favIds);
-      _petStreamController.add(List.unmodifiable(_pets));
+      await _storage.saveFavorites(_pets.where((p) => p.isFavorite).map((p) => p.id).toSet());
     }
+    _petStreamController.add(List.unmodifiable(_pets));
   }
 
   Future<void> addPet(Pet pet) async {
@@ -1004,7 +1038,10 @@ class PetRepository {
   }
 
   Future<List<Pet>> getFavoritePets() async {
-    return _pets.where((p) => p.isFavorite).toList();
+    if (_useDemoCatalog) return _pets.where((p) => p.isFavorite).toList();
+    final favorites = await _laravelPetService.getFavorites();
+    for (final pet in favorites) { cacheRemotePet(pet); }
+    return favorites;
   }
 
   void updateCompatibilityScoreFromQuiz({

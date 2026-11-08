@@ -90,7 +90,7 @@ class _EmergencySosScreenState extends State<EmergencySosScreen>
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Instantly notify all AdoptMatch users, shelters, and clinics in a 5km radius.',
+                  'SOS broadcasting requires a configured emergency backend. No alert is sent until the server confirms it.',
                   style: TextStyle(color: Colors.grey, fontSize: 13),
                 ),
                 const SizedBox(height: 16),
@@ -140,6 +140,7 @@ class _EmergencySosScreenState extends State<EmergencySosScreen>
                   backgroundColor: const Color(0xFFE11D48),
                   onPressed: () async {
                     if (nameCtrl.text.isNotEmpty) {
+                      try {
                       await _emergencyRepo.broadcastAlert(
                         petName: nameCtrl.text.trim(),
                         petBreed: breedCtrl.text.trim().isNotEmpty
@@ -156,15 +157,11 @@ class _EmergencySosScreenState extends State<EmergencySosScreen>
                       );
                       if (!context.mounted) return;
                       Navigator.pop(context);
-                      _loadData();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            '🚨 Alert dispatched to 420 nearby active devices!',
-                          ),
-                          backgroundColor: Color(0xFFE11D48),
-                        ),
-                      );
+                      await _loadData();
+                      } catch (e) {
+                        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(backgroundColor: const Color(0xFFE11D48), content: Text('$e')));
+                      }
                     }
                   },
                 ),

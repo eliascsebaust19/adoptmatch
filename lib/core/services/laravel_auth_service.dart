@@ -50,6 +50,35 @@ class LaravelAuthService {
     }
   }
 
+  static String normalizePhone(String input) {
+    final raw = input.trim();
+    final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
+    if (raw.startsWith('+') && digits.length >= 8 && digits.length <= 15) return '+$digits';
+    if (digits.startsWith('880') && digits.length == 13) return '+$digits';
+    if (digits.startsWith('0') && digits.length == 11) return '+880${digits.substring(1)}';
+    throw Exception('Enter a valid phone number in international format.');
+  }
+
+  Future<void> requestPhoneOtp(String phone) async {
+    final response = await _apiClient.dio.post('/auth/phone/request',
+      data: {'phone': normalizePhone(phone)});
+    if (response.statusCode != 200 || response.data['status'] != 'success') {
+      throw Exception('The server did not confirm OTP delivery.');
+    }
+  }
+
+  Future<Map<String, dynamic>> verifyPhoneOtp(String phone, String token) async {
+    final response = await _apiClient.dio.post('/auth/phone/verify', data: {
+      'phone': normalizePhone(phone), 'token': token, 'device_name': 'mobile_otp',
+    });
+    if (response.statusCode != 200 || response.data['status'] != 'success' ||
+        response.data['access_token'] == null || response.data['user'] == null) {
+      throw Exception('The server did not verify this OTP.');
+    }
+    await ApiClient.saveToken(response.data['access_token'].toString());
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
   /// Standard Email & Password Authentication
   Future<Map<String, dynamic>> login({
     required String email,

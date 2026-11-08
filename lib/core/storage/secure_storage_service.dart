@@ -4,6 +4,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/auth/bloc/auth_bloc.dart';
 
+/// Session tokens and profiles are kept only in platform secure storage.
+/// Writes fail closed; ordinary preferences are used solely to purge old plaintext copies.
 class SecureStorageService {
   SecureStorageService._internal();
   static final SecureStorageService instance = SecureStorageService._internal();
@@ -12,122 +14,64 @@ class SecureStorageService {
   static const String _keyUserProfile = 'user_profile';
   static const String _keyRefreshToken = 'refresh_token';
 
-  final Map<String, String> _memoryFallback = {};
-
   final FlutterSecureStorage _storage = const FlutterSecureStorage(
-    aOptions: AndroidOptions(
-      resetOnError: true,
-    ),
-    iOptions: IOSOptions(
-      accessibility: KeychainAccessibility.first_unlock,
-    ),
+    aOptions: AndroidOptions(resetOnError: true),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
   );
 
-  /// Saves the Sanctum Bearer token securely in encrypted hardware storage
   Future<void> saveAuthToken(String token) async {
-    _memoryFallback[_keyAuthToken] = token;
-    try {
-      await _storage.write(key: _keyAuthToken, value: token);
-    } catch (e) {
-      debugPrint('[SecureStorageService] Hardware storage notice: $e');
-    }
-    // Only use SharedPreferences fallback when running on Web where KeyStore is unavailable
-    if (kIsWeb) {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_keyAuthToken, token);
-      } catch (_) {}
-    }
+    if (token.trim().isEmpty) throw Exception('Refusing to store an empty session token.');
+    await _storage.write(key: _keyAuthToken, value: token);
   }
 
-  /// Retrieves the saved Sanctum Bearer token with multi-tier fallback
   Future<String?> getAuthToken() async {
     try {
       final token = await _storage.read(key: _keyAuthToken);
-      if (token != null && token.isNotEmpty) return token;
-    } catch (_) {}
-
-    final mem = _memoryFallback[_keyAuthToken];
-    if (mem != null && mem.isNotEmpty) return mem;
-
-    if (kIsWeb) {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final pToken = prefs.getString(_keyAuthToken);
-        if (pToken != null && pToken.isNotEmpty) return pToken;
-      } catch (_) {}
-    }
-
-    return null;
-  }
-
-  /// Saves user profile JSON
-  Future<void> saveUserProfile(UserProfile user) async {
-    final jsonString = jsonEncode(user.toJson());
-    _memoryFallback[_keyUserProfile] = jsonString;
-    try {
-      await _storage.write(key: _keyUserProfile, value: jsonString);
+      return token == null || token.isEmpty ? null : token;
     } catch (e) {
-      debugPrint('[SecureStorageService] Hardware storage notice: $e');
-    }
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keyUserProfile, jsonString);
-      await prefs.setString('cached_user_id', user.id);
-      await prefs.setString('cached_user_email', user.email);
-      await prefs.setString('cached_user_name', user.name);
-      await prefs.setString('cached_user_photo', user.avatarUrl);
-      await prefs.setString('cached_user_role', user.role.code);
-    } catch (_) {}
-  }
-
-  /// Retrieves the cached UserProfile with persistent fallback
-  Future<UserProfile?> getUserProfile() async {
-    String? raw;
-    try {
-      raw = await _storage.read(key: _keyUserProfile);
-    } catch (_) {}
-    raw ??= _memoryFallback[_keyUserProfile];
-
-    if (raw == null || raw.isEmpty) {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        raw = prefs.getString(_keyUserProfile);
-      } catch (_) {}
-    }
-
-    if (raw == null || raw.isEmpty) return null;
-    try {
-      final data = jsonDecode(raw) as Map<String, dynamic>;
-      return UserProfile.fromJson(data);
-    } catch (e) {
-      debugPrint('[SecureStorageService] Error decoding user profile: $e');
+      debugPrint('[SecureStorageService] Token read unavailable: $e');
       return null;
     }
   }
 
-  /// Clears all secure auth session data
+  Future<void> saveUserProfile(UserProfile user) async {
+    await _storage.write(key: _keyUserProfile, value: jsonEncode(user.toJson()));
+  }
+
+  Future<UserProfile?> getUserProfile() async {
+    try {
+      final raw = await _storage.read(key: _keyUserProfile);
+      if (raw == null || raw.isEmpty) return null;
+      return UserProfile.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } catch (e) {
+      debugPrint('[SecureStorageService] Profile read unavailable: $e');
+      return null;
+    }
+  }
+
   Future<void> clearSession() async {
-    _memoryFallback.clear();
     try {
       await _storage.delete(key: _keyAuthToken);
       await _storage.delete(key: _keyUserProfile);
       await _storage.delete(key: _keyRefreshToken);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[SecureStorageService] Secure delete warning: $e');
+    }
+    await purgeLegacyPlaintextCopies();
+  }
+
+  /// Removes plaintext copies left behind by older builds on every platform.
+  Future<void> purgeLegacyPlaintextCopies() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_keyAuthToken);
-      await prefs.remove(_keyUserProfile);
-      await prefs.remove(_keyRefreshToken);
-      await prefs.remove('cached_user_id');
-      await prefs.remove('cached_user_email');
-      await prefs.remove('cached_user_name');
-      await prefs.remove('cached_user_photo');
-      await prefs.remove('cached_user_role');
+      for (final key in [_keyAuthToken, _keyUserProfile, _keyRefreshToken,
+        'cached_user_id', 'cached_user_email', 'cached_user_name',
+        'cached_user_photo', 'cached_user_role']) {
+        await prefs.remove(key);
+      }
     } catch (_) {}
   }
 
-  /// Checks if an active token exists
   Future<bool> hasValidToken() async {
     final token = await getAuthToken();
     return token != null && token.isNotEmpty;

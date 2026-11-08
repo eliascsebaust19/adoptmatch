@@ -67,21 +67,65 @@ class PetController extends Controller
         ], 200);
     }
 
+    /** Favorites are separate from swipe decisions and shared across devices. */
+    public function getFavorites(Request $request)
+    {
+        $favorites = Favorite::where('user_id', $request->user()->id)
+            ->where('is_favorite', true)->with(['pet.images', 'pet.owner:id,name,avatar'])
+            ->get()->pluck('pet')->filter()->values();
+        return response()->json(['status' => 'success', 'data' => $favorites]);
+    }
+
+    public function getFavorite(Request $request, $id)
+    {
+        Pet::findOrFail($id);
+        $favorite = Favorite::where('user_id', $request->user()->id)->where('pet_id', $id)->first();
+        return response()->json(['status' => 'success', 'data' => ['is_favorite' => (bool) ($favorite && $favorite->is_favorite)]]);
+    }
+
+    public function addFavorite(Request $request, $id)
+    {
+        Pet::findOrFail($id);
+        Favorite::updateOrCreate(
+            ['user_id' => $request->user()->id, 'pet_id' => $id],
+            ['is_favorite' => true]
+        );
+        return response()->json(['status' => 'success', 'data' => ['is_favorite' => true]]);
+    }
+
+    public function removeFavorite(Request $request, $id)
+    {
+        Pet::findOrFail($id);
+        Favorite::updateOrCreate(
+            ['user_id' => $request->user()->id, 'pet_id' => $id],
+            ['is_favorite' => false]
+        );
+        return response()->json(['status' => 'success', 'data' => ['is_favorite' => false]]);
+    }
+
     /**
      * Proximity Search using Haversine Distance Formula.
      */
     public function getNearbyPets(Request $request)
     {
-        $lat = (float) ($request->latitude ?? $request->lat);
-        $lng = (float) ($request->longitude ?? $request->lng);
-        $radius = (float) ($request->radius_km ?? $request->radius ?? 30);
+        // Accept both spellings, then validate the resolved values so that a
+        // legitimate 0 coordinate is not treated as "missing".
+        $request->merge([
+            'latitude' => $request->input('latitude', $request->input('lat')),
+            'longitude' => $request->input('longitude', $request->input('lng')),
+            'radius_km' => $request->input('radius_km', $request->input('radius', 30)),
+        ]);
 
-        if (empty($lat) || empty($lng)) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Latitude and longitude coordinates are required.',
-            ], 422);
-        }
+        $request->validate([
+            'latitude' => 'required|numeric|between:-90,90',
+            'longitude' => 'required|numeric|between:-180,180',
+            'radius_km' => 'nullable|numeric|min:0|max:150',
+            'species' => 'nullable|string',
+        ]);
+
+        $lat = (float) $request->input('latitude');
+        $lng = (float) $request->input('longitude');
+        $radius = (float) $request->input('radius_km', 30);
 
         $haversine = "(6371 * acos(least(1.0, cos(radians(?)) 
                       * cos(radians(location_lat)) 
@@ -159,6 +203,14 @@ class PetController extends Controller
         ], 200);
     }
 
+    /** Listings owned by the authenticated shelter/user. */
+    public function myPets(Request $request)
+    {
+        $pets = Pet::with('images')->where('owner_id', $request->user()->id)
+            ->orderBy('created_at', 'desc')->paginate(20);
+        return response()->json(['status' => 'success', 'data' => $pets], 200);
+    }
+
     /**
      * Create New Pet Listing with Multiple Images.
      */
@@ -178,28 +230,28 @@ class PetController extends Controller
             'location_lng' => 'nullable|numeric',
             'adoption_fee' => 'nullable|numeric|min:0',
             'images' => 'required|array|min:1|max:5',
-            'images.*' => 'string', // URLs from Cloudinary or client
+            'images.*' => 'required|url:http,https|max:2048',
         ]);
 
         $pet = Pet::create([
             'owner_id' => $request->user()->id,
             'name' => $request->name,
-            'species' => $request->species,
+            'species' => strtolower($request->species),
             'breed' => $request->breed,
             'age_months' => $request->age_months,
             'gender' => $request->gender,
             'size' => $request->size,
             'vaccination_status' => $request->vaccination_status,
-            'is_spayed_neutered' => $request->boolean('is_spayed_neutered', true),
+            'is_spayed_neutered' => $request->boolean('is_spayed_neutered', false),
             'description' => $request->description,
-            'medical_history' => $request->medical_history ?? 'Fully verified health checks',
+            'medical_history' => $request->input('medical_history'),
             'location_city' => $request->location_city ?? 'Dhaka',
             'location_lat' => $request->location_lat,
             'location_lng' => $request->location_lng,
             'adoption_fee' => $request->adoption_fee ?? 0.00,
             'adoption_status' => 'available',
             'qr_hash' => 'ADOPT-PET-' . strtoupper(Str::random(12)),
-            'match_score' => rand(88, 99),
+            'match_score' => 0, // Compatibility is calculated by the matching service, not invented here.
         ]);
 
         foreach ($request->images as $index => $imageUrl) {
@@ -223,7 +275,22 @@ class PetController extends Controller
     public function update(Request $request, $id)
     {
         $pet = Pet::where('owner_id', $request->user()->id)->findOrFail($id);
-
+        $request->validate([
+            'name' => 'sometimes|required|string|max:100',
+            'species' => 'sometimes|required|string|max:50',
+            'breed' => 'sometimes|required|string|max:100',
+            'age_months' => 'sometimes|required|integer|min:1|max:600',
+            'gender' => 'sometimes|required|in:male,female,unknown',
+            'size' => 'sometimes|required|in:small,medium,large,giant',
+            'vaccination_status' => 'sometimes|required|string|max:100',
+            'is_spayed_neutered' => 'sometimes|boolean',
+            'description' => 'sometimes|required|string',
+            'medical_history' => 'nullable|string',
+            'adoption_status' => 'sometimes|required|in:available,pending,adopted',
+            'location_city' => 'nullable|string|max:150',
+            'location_lat' => 'nullable|numeric|between:-90,90',
+            'location_lng' => 'nullable|numeric|between:-180,180',
+        ]);
         $pet->update($request->only([
             'name',
             'species',
@@ -234,6 +301,7 @@ class PetController extends Controller
             'vaccination_status',
             'is_spayed_neutered',
             'description',
+            'medical_history',
             'adoption_status',
             'location_city',
             'location_lat',

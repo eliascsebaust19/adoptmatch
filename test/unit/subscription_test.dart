@@ -1,4 +1,8 @@
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import '../helpers/secure_storage_mock.dart';
 import 'package:adoptmatch/core/models/subscription_plan_model.dart';
 import 'package:adoptmatch/core/models/payment_record_model.dart';
 import 'package:adoptmatch/core/repositories/subscription_repository.dart';
@@ -87,26 +91,42 @@ void main() {
       expect(expiredUser.remainingDays, 0);
     });
 
-    test('SubscriptionRepository offline resilience and default values', () async {
-      final repo = SubscriptionRepository();
+    test('subscription repository fails closed without server configuration', () async {
+      await installSecureStorageMock();
+      final repo = SubscriptionRepository()..configureForTesting(MockClient((request) async {
+        if (request.url.path.endsWith('/plans')) return http.Response('{}', 503);
+        if (request.url.path.endsWith('/bkash-number')) return http.Response(jsonEncode({
+          'success': false, 'configured': false}), 503);
+        return http.Response(jsonEncode({'success': false, 'error': 'unauthorized'}), 401);
+      }));
+      await expectLater(repo.fetchPlans(), throwsException);
+      await expectLater(repo.fetchBkashNumber(), throwsException);
+      expect(repo.officialBkashNumber, isNull);
+      final init = await repo.initiateSslCommerzPayment(planId: 'plan-monthly');
+      expect(init['success'], false);
+      expect(await repo.approveManualPayment('txn'), false);
+    });
 
-      final plans = await repo.fetchPlans();
-      expect(plans.length, 3);
-      expect(plans[1].isBestValue, true);
-
-      final bkash = await repo.fetchBkashNumber();
-      expect(bkash.isNotEmpty, true);
-
-      final initResult = await repo.initiateSslCommerzPayment(
-        planId: 'plan-monthly',
-        userId: 'u-101',
-        userName: 'Elias',
-        userEmail: 'elias@test.com',
-      );
-      expect(initResult['success'], true);
-      expect(initResult['tranId'], isNotNull);
-      expect(initResult['gatewayUrl'], isNotNull);
+    test('manual payment and admin decisions require successful server responses', () async {
+      await installSecureStorageMock();
+      final repo = SubscriptionRepository()..configureForTesting(MockClient((request) async {
+        if (request.url.path.endsWith('/manual-bkash')) {
+          expect(request.headers['Authorization'], isNull); // no token installed in this test
+          return http.Response(jsonEncode({'success': true, 'payment': {
+            'tranId': 'AM-1', 'userId': 'u-1', 'userName': 'User', 'userEmail': 'u@example.test',
+            'planId': 'plan-monthly', 'planName': 'Monthly', 'amount': 90, 'currency': 'BDT',
+            'status': 'PENDING_APPROVAL', 'paymentMethod': 'bKash (Manual)',
+            'createdAt': '2026-11-08T00:00:00Z'}}), 200);
+        }
+        if (request.url.path.endsWith('/approve')) return http.Response('{"success":true}', 200);
+        if (request.url.path.endsWith('/reject')) return http.Response('{"success":false}', 409);
+        return http.Response('{}', 404);
+      }));
+      final payment = await repo.submitManualBkashPayment(planId: 'plan-monthly',
+        senderPhone: '01700000000', trxId: 'ABC123');
+      expect(payment.isPendingApproval, true);
+      expect(await repo.approveManualPayment('AM-1'), true);
+      expect(await repo.rejectManualPayment('AM-1', 'duplicate'), false);
     });
   });
 }
-

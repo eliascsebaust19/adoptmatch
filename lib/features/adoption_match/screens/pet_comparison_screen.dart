@@ -295,7 +295,7 @@ class _PetComparisonScreenState extends State<PetComparisonScreen> {
                   _buildComparisonRow('Age', pA.ageDisplay, pB.ageDisplay),
                   _buildComparisonRow('Gender', pA.gender, pB.gender),
                   _buildComparisonRow('Weight', '${pA.weightKg} kg', '${pB.weightKg} kg'),
-                  _buildComparisonRow('Distance', '${pA.distanceKm} km', '${pB.distanceKm} km'),
+                  _buildComparisonRow('Distance', '${pA.distanceLabel}', '${pB.distanceLabel}'),
                   _buildCheckRow('Apartment Friendly', pA.isApartmentFriendly, pB.isApartmentFriendly),
                   _buildCheckRow('Good with Children', pA.isKidSafe, pB.isKidSafe),
                   _buildCheckRow('House Trained', pA.isHouseTrained, pB.isHouseTrained),

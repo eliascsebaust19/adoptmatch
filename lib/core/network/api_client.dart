@@ -7,10 +7,14 @@ import '../storage/secure_storage_service.dart';
 
 class ApiClient {
   // Configurable base URL: Defaults to live Render API, overridable with --dart-define=API_BASE_URL=...
-  static const String defaultBaseUrl = String.fromEnvironment(
+  static const String rootUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://adoptmatch-api.onrender.com/api/v1',
+    defaultValue: String.fromEnvironment(
+      'BACKEND_URL',
+      defaultValue: 'https://adoptmatch-api.onrender.com',
+    ),
   );
+  static String get defaultBaseUrl => '${rootUrl.replaceAll(RegExp(r'/+$'), '')}/api/v1';
 
   late final Dio dio;
 
@@ -37,9 +41,12 @@ class ApiClient {
           return handler.next(options);
         },
         onError: (DioException error, handler) async {
-          // Render free tier cold-start retry logic (502 / 503 Bad Gateway)
-          if (_isColdStartError(error) &&
-              error.requestOptions.extra['retry'] == null) {
+          // Render free tier cold-start retry logic (502 / 503 Bad Gateway).
+          // Never retry a mutation: a lost response may already have created
+            // a payment, application or message on the server.
+            if (error.requestOptions.method == 'GET' &&
+                _isColdStartError(error) &&
+                error.requestOptions.extra['retry'] == null) {
             error.requestOptions.extra['retry'] = true;
             debugPrint(
               '[ApiClient] Cold start detected (${error.response?.statusCode}). Retrying in 3 seconds...',

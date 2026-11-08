@@ -18,10 +18,10 @@ class AuthController extends Controller
     {
         $idToken = $request->input('id_token') ?? $request->input('idToken');
 
-        if (empty($idToken) && !$request->has('profile')) {
+        if (empty($idToken)) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'The id_token or profile field is required.',
+                'message' => 'A Google id_token is required.',
             ], 422);
         }
 
@@ -29,19 +29,21 @@ class AuthController extends Controller
             $payload = null;
             $clientId = config('services.google.client_id');
 
-            // Cryptographic verification with Google API Client
-            if (!empty($idToken)) {
-                try {
-                    $clientConfig = [];
-                    if (!empty($clientId)) {
-                        $clientConfig['client_id'] = $clientId;
-                    }
-                    $client = new GoogleClient($clientConfig);
-                    $payload = $client->verifyIdToken($idToken);
-                } catch (\Exception $e) {
-                    \Illuminate\Support\Facades\Log::warning('Google verifyIdToken failed: ' . $e->getMessage());
-                    $payload = null;
-                }
+            // Without an audience the signature alone does not prove the token
+            // was issued for this application.
+            if (empty($clientId)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Google sign-in is not configured on this server.',
+                ], 503);
+            }
+
+            try {
+                $client = new GoogleClient(['client_id' => $clientId]);
+                $payload = $client->verifyIdToken($idToken);
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::warning('Google verifyIdToken failed: ' . $e->getMessage());
+                $payload = null;
             }
 
             if (!$payload || empty($payload['email'])) {
@@ -51,23 +53,35 @@ class AuthController extends Controller
                 ], 401);
             }
 
-            // Reject unverified emails
-            if (isset($payload['email_verified']) && !$payload['email_verified']) {
+            // A missing claim is not proof of verification.
+            $emailVerified = $payload['email_verified'] ?? false;
+            if (!filter_var($emailVerified, FILTER_VALIDATE_BOOLEAN)) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Google account email is not verified.',
                 ], 403);
             }
 
-            $googleId = $payload['sub'] ?? ('g_' . md5($payload['email']));
+            $issuer = $payload['iss'] ?? '';
+            if (!in_array($issuer, ['accounts.google.com', 'https://accounts.google.com'], true) ||
+                empty($payload['sub']) || empty($payload['exp']) || (int) $payload['exp'] <= time()) {
+                return response()->json(['status' => 'error',
+                    'message' => 'Google token issuer, subject or expiry is invalid.'], 401);
+            }
+            $googleId = $payload['sub'];
             $email = $payload['email'];
             $name = $payload['name'] ?? 'AdoptMatch User';
-            $avatar = $payload['picture'] ?? 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80';
+            $avatar = $payload['picture'] ?? '';
 
-            $user = User::where('google_id', $googleId)
-                ->orWhere('email', $email)
-                ->first();
-
+            $user = User::where('google_id', $googleId)->first();
+            if (!$user) {
+                $byEmail = User::where('email', $email)->first();
+                if ($byEmail && (in_array($byEmail->role, ['admin', 'shelter'], true) || !empty($byEmail->google_id))) {
+                    return response()->json(['status' => 'error',
+                        'message' => 'This account cannot be linked automatically. Contact support.'], 409);
+                }
+                $user = $byEmail;
+            }
             $isNewUser = !$user;
 
             if (!$user) {
@@ -149,7 +163,7 @@ class AuthController extends Controller
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:6',
             'phone' => 'nullable|string|max:20',
-            'role' => 'nullable|in:adopter,pet_owner,shelter',
+            'role' => 'nullable|in:adopter,pet_owner',
         ]);
 
         $user = User::create([
@@ -158,7 +172,7 @@ class AuthController extends Controller
             'password' => Hash::make($request->password),
             'phone' => $request->phone,
             'role' => $request->role ?? 'adopter',
-            'avatar' => 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
+            'avatar' => null,
         ]);
 
         $token = $user->createToken('mobile_app')->plainTextToken;

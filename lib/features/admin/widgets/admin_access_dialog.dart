@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../auth/bloc/auth_bloc.dart';
 
 /// Shows a secure dialog requesting the Administrator password.
@@ -10,7 +9,8 @@ void showAdminAccessDialog(BuildContext context) {
   showDialog(
     context: context,
     barrierDismissible: false,
-    builder: (dialogCtx) => const _AdminAccessDialog(),
+    builder: (dialogCtx) => BlocProvider.value(
+      value: context.read<AuthBloc>(), child: const _AdminAccessDialog()),
   );
 }
 
@@ -23,7 +23,7 @@ class _AdminAccessDialog extends StatefulWidget {
 
 class _AdminAccessDialogState extends State<_AdminAccessDialog> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController(text: 'admin@adoptmatch.com');
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
@@ -36,60 +36,29 @@ class _AdminAccessDialogState extends State<_AdminAccessDialog> {
     super.dispose();
   }
 
-  void _verifyAndProceed() async {
-    setState(() {
-      _errorMessage = null;
-    });
-
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
-    final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
-
+  void _verifyAndProceed() {
+    setState(() => _errorMessage = null);
+    if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
-
-    // Strict Admin Password Check:
-    // Recognized passwords: Admin@123456, SuperAdmin@123456
-    final isKnownAdminPass = (password == 'Admin@123456' || password == 'SuperAdmin@123456');
-
-    if (!isKnownAdminPass) {
-      await Future.delayed(const Duration(milliseconds: 400));
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'ভুল পাসওয়ার্ড! সঠিক অ্যাডমিন পাসওয়ার্ড দিন।\n(Incorrect password! Please provide the correct admin password)';
-      });
-      return;
-    }
-
-    // Authenticate Admin session via AuthBloc
-    final authBloc = context.read<AuthBloc>();
-    authBloc.add(AdminLoginWithEmailEvent(email, password));
-
-    // Wait briefly for Bloc state update
-    await Future.delayed(const Duration(milliseconds: 500));
-    if (!mounted) return;
-
-    setState(() => _isLoading = false);
-    Navigator.of(context).pop(); // Close dialog
-
-    // Navigate to Admin Dashboard
-    context.go('/admin/dashboard');
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('অ্যাডমিন অ্যাক্সেস সফল! (Admin Access Granted)'),
-        backgroundColor: AppColors.secondary,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    context.read<AuthBloc>().add(AdminLoginWithEmailEvent(
+      _emailController.text.trim(), _passwordController.text.trim()));
   }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
+    return BlocListener<AuthBloc, AuthState>(
+      listener: (context, state) {
+        if (state is Authenticated && state.user.role.hasAdminAccess) {
+          final router = GoRouter.of(context);
+          Navigator.of(context).pop();
+          router.go('/admin/dashboard');
+        } else if (state is AuthFailure) {
+          setState(() { _isLoading = false; _errorMessage = state.errorMessage; });
+        } else if (state is AuthLoading) {
+          setState(() => _isLoading = true);
+        }
+      },
+      child: Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       elevation: 10,
       backgroundColor: Colors.white,
@@ -321,6 +290,7 @@ class _AdminAccessDialogState extends State<_AdminAccessDialog> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

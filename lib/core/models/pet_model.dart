@@ -29,6 +29,10 @@ class Pet extends Equatable {
   final String story;
   final String medicalHistory;
   final String qrHash;
+  final String adoptionStatus;
+
+  /// Server-side id of the listing owner, required to send them a message.
+  final String? ownerId;
 
   const Pet({
     required this.id,
@@ -47,19 +51,23 @@ class Pet extends Equatable {
     this.isUrgent = false,
     this.isFeatured = false,
     this.isFoster = false,
-    this.isVaccinated = true,
-    this.isNeutered = true,
-    this.isHouseTrained = true,
-    this.isKidSafe = true,
-    this.isApartmentFriendly = true,
+    this.isVaccinated = false,
+    this.isNeutered = false,
+    this.isHouseTrained = false,
+    this.isKidSafe = false,
+    this.isApartmentFriendly = false,
     required this.shelterName,
     required this.shelterPhone,
     required this.shelterAddress,
-    this.shelterRating = 4.9,
+    this.shelterRating = 0,
     required this.story,
-    this.medicalHistory = 'Vaccinated, dewormed, certified healthy.',
+    this.medicalHistory = 'Medical history not provided.',
     this.qrHash = '',
+    this.adoptionStatus = 'available',
+    this.ownerId,
   });
+
+  String get distanceLabel => distanceKm.isFinite ? '$distanceKm km' : 'Distance unavailable';
 
   Pet copyWith({
     String? id,
@@ -90,6 +98,8 @@ class Pet extends Equatable {
     String? story,
     String? medicalHistory,
     String? qrHash,
+    String? adoptionStatus,
+    String? ownerId,
   }) {
     return Pet(
       id: id ?? this.id,
@@ -120,6 +130,8 @@ class Pet extends Equatable {
       story: story ?? this.story,
       medicalHistory: medicalHistory ?? this.medicalHistory,
       qrHash: qrHash ?? this.qrHash,
+      adoptionStatus: adoptionStatus ?? this.adoptionStatus,
+      ownerId: ownerId ?? this.ownerId,
     );
   }
 
@@ -153,6 +165,8 @@ class Pet extends Equatable {
         story,
         medicalHistory,
         qrHash,
+        adoptionStatus,
+        ownerId,
       ];
 }
 

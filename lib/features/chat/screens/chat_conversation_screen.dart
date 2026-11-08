@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/models/chat_message_model.dart';
 import '../../../core/repositories/chat_repository.dart';
+import '../../../core/services/storage_service.dart';
 import '../../../core/widgets/guest_restriction_dialog.dart';
 import '../../../shared/widgets/shared_widgets.dart';
 
@@ -26,6 +27,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   ChatConversation? _conversation;
   List<ChatMessage> _messages = [];
   bool _isLoading = true;
+  String? _syncError;
+  Timer? _refreshTimer;
 
   final List<String> _quickInquiries = [
     'Is this pet still available for adoption?',
@@ -38,9 +41,14 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   void initState() {
     super.initState();
     _loadConversationAndMessages();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+      try { await _chatRepo.refreshRemote(); await _loadConversationAndMessages(); }
+      catch (e) { if (mounted) setState(() => _syncError = 'Messages may be stale: $e'); }
+    });
   }
 
   Future<void> _loadConversationAndMessages() async {
+    try {
     final conv = await _chatRepo.getConversationById(widget.conversationId);
     final msgs = await _chatRepo.getMessages(widget.conversationId);
 
@@ -65,10 +73,15 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     });
 
     await _chatRepo.markConversationAsRead(widget.conversationId);
+    if (mounted) setState(() => _syncError = null);
+    } catch (e) {
+      if (mounted) setState(() { _syncError = '$e'; _isLoading = false; });
+    }
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _messageSub?.cancel();
     _textController.dispose();
     _scrollController.dispose();
@@ -87,7 +100,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     });
   }
 
-  Future<void> _sendText([String? predefinedText]) async {
+  Future<void> _sendText([String? predefinedText, String? attachmentUrl]) async {
     final isRestricted = await GuestRestrictionDialog.checkAndShow(
       context,
       featureName: 'Direct Shelter Messaging',
@@ -102,143 +115,47 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       _textController.clear();
     }
 
-    await _chatRepo.sendMessage(widget.conversationId, text);
+    try {
+      await _chatRepo.sendMessage(widget.conversationId, text, attachmentUrl: attachmentUrl);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$e'),
+          backgroundColor: const Color(0xFFE11D48),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
-  void _simulateSendHomePhoto() async {
-    final isRestricted = await GuestRestrictionDialog.checkAndShow(
-      context,
-      featureName: 'Living Space Photo Sharing',
-      customMessage: 'Photo sharing with rescues is restricted in demo mode. Please sign in or register.\n\nছবি শেয়ার করতে সাইন ইন করুন।',
-    );
-    if (isRestricted || !mounted) return;
-
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Share Home / Living Area Photo',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0F172A),
-              ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Share photos of your living space or yard to expedite adoption screening.',
-              style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
-            ),
-            const SizedBox(height: 20),
-            ListTile(
-              leading: const CircleAvatar(
-                backgroundColor: Color(0xFFCCFBF1),
-                child: Icon(Icons.home, color: Color(0xFF0D9488)),
-              ),
-              title: const Text('Living Room & Indoor Space'),
-              subtitle: const Text('Photo of pet resting area'),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                _chatRepo.sendMessage(
-                  widget.conversationId,
-                  'Attached: Photo of our indoor living room & dedicated pet bedding area for review.',
-                  attachmentUrl: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=600&q=80',
-                );
-              },
-            ),
-            ListTile(
-              leading: const CircleAvatar(
-                backgroundColor: Color(0xFFE0E7FF),
-                child: Icon(Icons.fence, color: Color(0xFF6366F1)),
-              ),
-              title: const Text('Fenced Yard / Balcony Area'),
-              subtitle: const Text('Verification of perimeter fencing'),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                _chatRepo.sendMessage(
-                  widget.conversationId,
-                  'Attached: Photo of our secured outdoor balcony netting & safety barrier.',
-                  attachmentUrl: 'https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?auto=format&fit=crop&w=600&q=80',
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
+  Future<void> _sendHomePhoto() async {
+    final restricted = await GuestRestrictionDialog.checkAndShow(context,
+      featureName: 'Living Space Photo Sharing');
+    if (restricted || !mounted) return;
+    try {
+      final file = await StorageService.pickImageFromGallery();
+      if (file == null) return;
+      final url = await StorageService.uploadPetImage(
+        bytes: await file.readAsBytes(), fileName: file.name);
+      await _sendText('Home / living area photo', url);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Photo was not sent: $e')));
+    }
   }
 
   void _showMaskedCallDialog() {
-    final conv = _conversation;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: const [
-            Icon(Icons.lock_outline, color: Color(0xFF0D9488)),
-            SizedBox(width: 8),
-            Text('Masked Voice Relay'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Connecting call to ${conv?.shelterName ?? 'Shelter'}...'),
-            const SizedBox(height: 8),
-            Text(
-              'Virtual Number: ${conv?.shelterPhoneMasked ?? '+880 17•• •••567'}',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 15,
-                color: Color(0xFF0F172A),
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Your personal phone number remains private. Calls are routed through the AdoptMatch safety exchange.',
-              style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Calling ${conv?.shelterName} via Masked Relay...',
-                  ),
-                  backgroundColor: const Color(0xFF0D9488),
-                ),
-              );
-            },
-            icon: const Icon(Icons.call, size: 16, color: Colors.white),
-            label: const Text(
-              'Connect Call',
-              style: TextStyle(color: Colors.white),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0D9488),
-            ),
-          ),
-        ],
-      ),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Voice relay is not configured. No call was placed.')));
+  }
+
+  Future<void> _retryMessage(ChatMessage message) async {
+    try { await _chatRepo.retryFailedMessage(message); }
+    catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: const Color(0xFFE11D48), content: Text('Retry failed: $e')));
+    }
   }
 
   @override
@@ -283,7 +200,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                           ),
                         ),
                         Text(
-                          '${conv.shelterName} • Masked 🔒',
+                          '${conv.shelterName} • Secure chat',
                           style: const TextStyle(
                             fontSize: 11,
                             color: Color(0xFF0D9488),
@@ -300,7 +217,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.phone_in_talk_rounded, color: teal),
-            tooltip: 'Masked Call',
+            tooltip: 'Voice relay unavailable',
             onPressed: _showMaskedCallDialog,
           ),
           if (conv != null)
@@ -367,6 +284,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                   ),
 
                 const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                if (_syncError != null) Container(width: double.infinity,
+                  color: const Color(0xFFFFF1F2), padding: const EdgeInsets.all(8),
+                  child: Text(_syncError!, style: const TextStyle(color: Color(0xFFE11D48), fontSize: 12))),
 
                 // Messages Stream List
                 Expanded(
@@ -473,21 +393,22 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                                         if (isMe) ...[
                                           const SizedBox(width: 4),
                                           Icon(
-                                            msg.deliveryStatus ==
-                                                    MessageDeliveryStatus.read
-                                                ? Icons.done_all_rounded
-                                                : msg.deliveryStatus ==
-                                                      MessageDeliveryStatus
-                                                          .delivered
-                                                ? Icons.done_all_rounded
-                                                : Icons.done_rounded,
+                                            msg.deliveryStatus == MessageDeliveryStatus.failed
+                                              ? Icons.error_outline
+                                              : msg.deliveryStatus == MessageDeliveryStatus.sending
+                                                ? Icons.schedule_rounded
+                                                : msg.deliveryStatus == MessageDeliveryStatus.read ||
+                                                  msg.deliveryStatus == MessageDeliveryStatus.delivered
+                                                  ? Icons.done_all_rounded : Icons.done_rounded,
                                             size: 14,
-                                            color:
-                                                msg.deliveryStatus ==
-                                                    MessageDeliveryStatus.read
-                                                ? const Color(0xFF93C5FD)
-                                                : Colors.white70,
+                                            color: msg.deliveryStatus == MessageDeliveryStatus.failed
+                                              ? const Color(0xFFFCA5A5)
+                                              : msg.deliveryStatus == MessageDeliveryStatus.read
+                                                ? const Color(0xFF93C5FD) : Colors.white70,
                                           ),
+                                          if (msg.deliveryStatus == MessageDeliveryStatus.failed)
+                                            TextButton(onPressed: () => _retryMessage(msg),
+                                              child: const Text('Retry', style: TextStyle(fontSize: 10, color: Colors.white))),
                                         ],
                                       ],
                                     ),
@@ -557,7 +478,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                             color: teal,
                           ),
                           tooltip: 'Send Living Space Photo',
-                          onPressed: _simulateSendHomePhoto,
+                          onPressed: _sendHomePhoto,
                         ),
                         Expanded(
                           child: TextField(

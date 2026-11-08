@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/models/pet_model.dart';
 import '../../../core/repositories/admin_repository.dart';
-import '../../../core/repositories/pet_repository.dart';
 import '../../../shared/widgets/app_network_image.dart';
 import '../widgets/admin_create_pet_dialog.dart';
 
@@ -14,9 +13,31 @@ class PetModerationScreen extends StatefulWidget {
 
 class _PetModerationScreenState extends State<PetModerationScreen> {
   final _adminRepo = AdminRepository();
-  final _petRepo = PetRepository();
 
   String _searchQuery = '';
+  String? _adminError;
+  @override
+  void initState() {
+    super.initState();
+    _loadAdminData();
+  }
+  Future<void> _loadAdminData() async {
+    try { await _adminRepo.refresh(); if (mounted) setState(() => _adminError = null); }
+    catch (e) { if (mounted) setState(() => _adminError = 'Could not load server data: $e'); }
+  }
+  Future<void> _runAdminAction(Future<void> action, String success) async {
+    try {
+      await action;
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(_adminRepo.lastSyncError ?? success)));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: const Color(0xFFE11D48), content: Text('Action not saved: $e')));
+    }
+  }
+
   String _selectedFilter = 'ALL'; // ALL, FLAGGED, DOG, CAT
 
   void _confirmBanListing(String petId, String petName) {
@@ -37,14 +58,7 @@ class _PetModerationScreenState extends State<PetModerationScreen> {
             ),
             onPressed: () {
               Navigator.pop(ctx);
-              _adminRepo.banPetListing(petId);
-              setState(() {});
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  backgroundColor: const Color(0xFFE11D48),
-                  content: Text('Pet "$petName" has been banned from public discovery.'),
-                ),
-              );
+              _runAdminAction(_adminRepo.banPetListing(petId), 'Pet "$petName" banned.');
             },
             child: const Text('Confirm Ban'),
           ),
@@ -70,17 +84,8 @@ class _PetModerationScreenState extends State<PetModerationScreen> {
               foregroundColor: Colors.white,
             ),
             onPressed: () async {
-              final messenger = ScaffoldMessenger.of(context);
               Navigator.pop(ctx);
-              await _adminRepo.deletePetListing(pet.id, petName: pet.name);
-              if (!mounted) return;
-              setState(() {});
-              messenger.showSnackBar(
-                SnackBar(
-                  backgroundColor: const Color(0xFFDC2626),
-                  content: Text('Listing "${pet.name}" permanently deleted by Administrator.'),
-                ),
-              );
+              await _runAdminAction(_adminRepo.deletePetListing(pet.id), 'Listing "${pet.name}" deleted.');
             },
             child: const Text('Delete Permanently'),
           ),
@@ -100,8 +105,8 @@ class _PetModerationScreenState extends State<PetModerationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Read pets from PetRepository to enable anytime CRUD across the app
-    final allPets = _petRepo.pets;
+    // Moderation uses the authoritative admin catalog, not local demo pets.
+    final allPets = _adminRepo.getPets();
     final flaggedPets = _adminRepo.getFlaggedPets();
 
     List<Pet> displayedPets = allPets.where((pet) {
@@ -125,6 +130,12 @@ class _PetModerationScreenState extends State<PetModerationScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_adminError != null) Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(children: [Expanded(child: Text(_adminError!,
+              style: const TextStyle(color: Color(0xFFE11D48)))),
+              TextButton(onPressed: _loadAdminData, child: const Text('Retry'))]),
+          ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [

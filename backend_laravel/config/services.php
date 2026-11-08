@@ -27,6 +27,11 @@ return [
     | Google API Client ID for ID Token Verification
     |--------------------------------------------------------------------------
     */
+    'supabase' => [
+        'url' => env('SUPABASE_URL'),
+        'anon_key' => env('SUPABASE_ANON_KEY'),
+    ],
+
     'google' => [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
@@ -53,5 +58,9 @@ return [
         'api_secret' => env('CLOUDINARY_API_SECRET'),
         'upload_preset' => env('CLOUDINARY_UPLOAD_PRESET', 'adoptmatch_pets'),
     ],
+    'fcm' => [
+        'server_key' => env('FCM_SERVER_KEY'),
+    ],
+
 ];
 

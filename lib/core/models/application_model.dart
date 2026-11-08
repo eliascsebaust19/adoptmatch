@@ -51,6 +51,7 @@ extension ApplicationStatusExtension on ApplicationStatus {
 
 class AdoptionApplication extends Equatable {
   final String id;
+  final String? serverId;
   final String petId;
   final String petName;
   final String petBreed;
@@ -89,6 +90,7 @@ class AdoptionApplication extends Equatable {
 
   const AdoptionApplication({
     required this.id,
+    this.serverId,
     required this.petId,
     required this.petName,
     required this.petBreed,
@@ -96,9 +98,9 @@ class AdoptionApplication extends Equatable {
     required this.applicantName,
     required this.applicantPhone,
     required this.applicantEmail,
-    this.nidNumber = '1995-2692-4581-0023',
-    this.emergencyContactName = 'Farhana Ahmed (Spouse)',
-    this.emergencyContactPhone = '+880 1812 345678',
+    this.nidNumber = '',
+    this.emergencyContactName = '',
+    this.emergencyContactPhone = '',
     required this.address,
     required this.housingType,
     this.ownershipStatus = 'Owned',
@@ -128,6 +130,7 @@ class AdoptionApplication extends Equatable {
 
   AdoptionApplication copyWith({
     String? id,
+    String? serverId,
     String? petId,
     String? petName,
     String? petBreed,
@@ -166,6 +169,7 @@ class AdoptionApplication extends Equatable {
   }) {
     return AdoptionApplication(
       id: id ?? this.id,
+      serverId: serverId ?? this.serverId,
       petId: petId ?? this.petId,
       petName: petName ?? this.petName,
       petBreed: petBreed ?? this.petBreed,
@@ -207,6 +211,7 @@ class AdoptionApplication extends Equatable {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'serverId': serverId,
       'petId': petId,
       'petName': petName,
       'petBreed': petBreed,
@@ -263,6 +268,7 @@ class AdoptionApplication extends Equatable {
 
     return AdoptionApplication(
       id: json['id'] as String? ?? 'AM-APP-${DateTime.now().millisecondsSinceEpoch}',
+      serverId: json['serverId']?.toString(),
       petId: json['petId'] as String? ?? '',
       petName: json['petName'] as String? ?? 'Adoptable Pet',
       petBreed: json['petBreed'] as String? ?? 'Rescue',
@@ -270,7 +276,7 @@ class AdoptionApplication extends Equatable {
       applicantName: json['applicantName'] as String? ?? 'Applicant',
       applicantPhone: json['applicantPhone'] as String? ?? '',
       applicantEmail: json['applicantEmail'] as String? ?? '',
-      nidNumber: json['nidNumber'] as String? ?? '1995-2692-4581-0023',
+      nidNumber: json['nidNumber'] as String? ?? '',
       emergencyContactName: json['emergencyContactName'] as String? ?? '',
       emergencyContactPhone: json['emergencyContactPhone'] as String? ?? '',
       address: json['address'] as String? ?? '',
@@ -307,6 +313,7 @@ class AdoptionApplication extends Equatable {
   @override
   List<Object?> get props => [
         id,
+        serverId,
         petId,
         petName,
         petBreed,

@@ -93,11 +93,14 @@ class _PetDetailScreenState extends State<PetDetailScreen> {
                             : slateDark,
                         size: 20,
                       ),
-                      onPressed: () {
-                        setState(() {
-                          _pet = pet.copyWith(isFavorite: !pet.isFavorite);
-                        });
-                        _petRepo.toggleFavorite(pet.id);
+                      onPressed: () async {
+                        try {
+                          await _petRepo.toggleFavorite(pet.id);
+                          if (mounted) setState(() => _pet = pet.copyWith(isFavorite: !pet.isFavorite));
+                        } catch (e) {
+                          if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Favorite was not saved: $e')));
+                        }
                       },
                     ),
                   ),
@@ -223,7 +226,7 @@ class _PetDetailScreenState extends State<PetDetailScreen> {
                           const Icon(Icons.location_on, size: 16, color: teal),
                           const SizedBox(width: 4),
                           Text(
-                            '${pet.distanceKm} km away (${pet.shelterAddress.split(',').first})',
+                            '${pet.distanceLabel} away (${pet.shelterAddress.split(',').first})',
                             style: const TextStyle(
                               color: Color(0xFF475569),
                               fontSize: 13,
@@ -586,10 +589,13 @@ class _PetDetailScreenState extends State<PetDetailScreen> {
                         );
                         if (isRestricted || !context.mounted) return;
 
-                        final conv = await ChatRepository()
-                            .getOrCreateConversationForPet(pet);
-                        if (!context.mounted) return;
-                        context.push('/chat/${conv.id}');
+                        try {
+                          final conv = await ChatRepository().getOrCreateConversationForPet(pet);
+                          if (context.mounted) context.push('/chat/${conv.id}');
+                        } catch (e) {
+                          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('$e')));
+                        }
                       },
                       borderRadius: BorderRadius.circular(14),
                       child: Container(

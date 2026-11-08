@@ -4,15 +4,18 @@ import '../../features/admin/models/admin_pet_moderation_model.dart';
 import '../../features/admin/models/admin_audit_log_model.dart';
 import '../../features/auth/bloc/auth_bloc.dart';
 import '../models/pet_model.dart';
-import './pet_repository.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../network/api_client.dart';
+import '../storage/secure_storage_service.dart';
 
 class AdminKPI {
-  final int totalAdoptions;
+  final int? totalAdoptions;
   final int pendingShelters;
   final int activeRescues;
-  final int totalDonationsBDT;
+  final int? totalDonationsBDT;
   final int flaggedListings;
-  final int activeDisputes;
+  final int? activeDisputes;
 
   const AdminKPI({
     required this.totalAdoptions,
@@ -98,567 +101,170 @@ class AdoptionDisputeRecord {
   });
 }
 
+/// Administrative state is read from and written to the authenticated API only.
 class AdminRepository {
   static final AdminRepository _instance = AdminRepository._internal();
   factory AdminRepository() => _instance;
-
   AdminRepository._internal();
+  http.Client _client = http.Client();
+  Future<String?> Function() _readToken = SecureStorageService.instance.getAuthToken;
+  String? lastSyncError;
 
-  void initSeedDataForTesting() {
-    _initSeedData();
+  void configureForTesting(http.Client client, Future<String?> Function() tokenReader) {
+    _client = client; _readToken = tokenReader;
+    _users = []; _pets = []; _flaggedPets = []; _shelters = []; _auditLogs = []; _kpis = null; lastSyncError = null;
   }
 
   final _sheltersController = StreamController<List<ShelterApplication>>.broadcast();
   final _flaggedPetsController = StreamController<List<FlaggedPetListing>>.broadcast();
   final _usersController = StreamController<List<AdminManagedUser>>.broadcast();
   final _auditLogsController = StreamController<List<AdminAuditLog>>.broadcast();
-
+  final _petsController = StreamController<List<Pet>>.broadcast();
   Stream<List<ShelterApplication>> get sheltersStream => _sheltersController.stream;
   Stream<List<FlaggedPetListing>> get flaggedPetsStream => _flaggedPetsController.stream;
   Stream<List<AdminManagedUser>> get usersStream => _usersController.stream;
   Stream<List<AdminAuditLog>> get auditLogsStream => _auditLogsController.stream;
-
+  Stream<List<Pet>> get petsStream => _petsController.stream;
   List<ShelterApplication> _shelters = [];
+  List<Pet> _pets = [];
   List<FlaggedPetListing> _flaggedPets = [];
   List<AdminManagedUser> _users = [];
   List<AdminAuditLog> _auditLogs = [];
-  List<AdoptionDisputeRecord> _disputes = [];
-
-  void _initSeedData() {
-    _shelters = [
-      ShelterApplication(
-        id: 'SH-801',
-        shelterName: 'Care For Paws Foundation (Dhaka)',
-        registrationNumber: 'REG-DHK-2022-8901',
-        contactPerson: 'Zahirul Islam',
-        email: 'info@careforpaws.bd',
-        phone: '+880 1712 345678',
-        city: 'Dhaka',
-        address: 'House 42, Road 11, Banani, Dhaka',
-        nidNumber: '19892694582910384',
-        tradeLicenseNumber: 'TRAD/DNCC/019283/2023',
-        vetAffiliation: 'Central Veterinary Hospital, Dhaka',
-        status: VerificationStatus.pending,
-        documentUrls: [
-          'https://images.unsplash.com/photo-1584467735871-8e85353a8413?auto=format&fit=crop&w=600&q=80',
-          'https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=600&q=80',
-        ],
-        submittedAt: DateTime.now().subtract(const Duration(hours: 14)),
-        capacity: 45,
-      ),
-      ShelterApplication(
-        id: 'SH-802',
-        shelterName: 'Paw Haven Chittagong Animal Sanctuary',
-        registrationNumber: 'REG-CTG-2021-4412',
-        contactPerson: 'Farhana Kabir',
-        email: 'contact@pawhavenctg.org',
-        phone: '+880 1819 876543',
-        city: 'Chittagong',
-        address: '102 Nasirabad Housing Society, Chattogram',
-        nidNumber: '19921598432109847',
-        tradeLicenseNumber: 'TRAD/CCC/044812/2022',
-        vetAffiliation: 'Chittagong Vet & Animal Sciences University',
-        status: VerificationStatus.pending,
-        documentUrls: [
-          'https://images.unsplash.com/photo-1584467735871-8e85353a8413?auto=format&fit=crop&w=600&q=80',
-        ],
-        submittedAt: DateTime.now().subtract(const Duration(days: 1, hours: 3)),
-        capacity: 35,
-      ),
-      ShelterApplication(
-        id: 'SH-803',
-        shelterName: 'Sylhet Rescue & Rehabilitation Center',
-        registrationNumber: 'REG-SYL-2023-1102',
-        contactPerson: 'Ahmed Rezwan',
-        email: 'support@sylhetrescues.org',
-        phone: '+880 1715 901234',
-        city: 'Sylhet',
-        address: 'Zindabazar, Amberkhana Road, Sylhet',
-        nidNumber: '19875412984532109',
-        tradeLicenseNumber: 'TRAD/SCC/011024/2023',
-        vetAffiliation: 'Sylhet Agricultural University Clinics',
-        status: VerificationStatus.approved,
-        documentUrls: [
-          'https://images.unsplash.com/photo-1584467735871-8e85353a8413?auto=format&fit=crop&w=600&q=80',
-        ],
-        submittedAt: DateTime.now().subtract(const Duration(days: 4)),
-        reviewerNotes: 'Official NID and Trade License verified with DNCC and DCC records.',
-        capacity: 25,
-      ),
-    ];
-
-    _flaggedPets = [
-      FlaggedPetListing(
-        id: 'p-fl-1',
-        petName: 'Rocky (Golden Retriever)',
-        species: 'Dog',
-        breed: 'Golden Retriever',
-        postedBy: 'Suspicious Seller #401',
-        posterRole: 'Individual Rescuer',
-        city: 'Dhaka',
-        imageUrl: 'https://images.unsplash.com/photo-1558788353-f76d92427f16?auto=format&fit=crop&w=600&q=80',
-        reportsCount: 6,
-        reportReasons: [
-          'Asking adoption fee of ৳25,000 (Commercial Breeding Violation)',
-          'Duplicate photos found on external pet store website',
-        ],
-        isBanned: false,
-        isUrgent: false,
-        isFeatured: false,
-        listedAt: DateTime.now().subtract(const Duration(days: 1)),
-      ),
-      FlaggedPetListing(
-        id: 'p2',
-        petName: 'Mochi (Injured Street Cat)',
-        species: 'Cat',
-        breed: 'Calico',
-        postedBy: 'Care For Paws BD',
-        posterRole: 'Shelter',
-        city: 'Dhaka',
-        imageUrl: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=600&q=80',
-        reportsCount: 1,
-        reportReasons: ['Urgent medical surgery fund required'],
-        isBanned: false,
-        isUrgent: true,
-        isFeatured: false,
-        listedAt: DateTime.now().subtract(const Duration(days: 2)),
-      ),
-    ];
-
-    _users = [
-      AdminManagedUser(
-        id: 'u-101',
-        name: 'Adopter Test Account',
-        email: 'adopter.test@adoptmatch.com',
-        phone: '+880 1711 000101',
-        role: UserRole.adopter,
-        status: 'Active',
-        permissions: const [],
-        adoptionsCount: 1,
-        joinedAt: DateTime.now().subtract(const Duration(days: 120)),
-      ),
-      AdminManagedUser(
-        id: 'u-102',
-        name: 'Care For Paws Admin',
-        email: 'info@careforpaws.bd',
-        phone: '+880 1712 345678',
-        role: UserRole.shelter,
-        status: 'Active',
-        permissions: const ['APPROVE_PETS'],
-        adoptionsCount: 38,
-        joinedAt: DateTime.now().subtract(const Duration(days: 280)),
-      ),
-      AdminManagedUser(
-        id: 'u-103',
-        name: 'Sarah Rahman',
-        email: 'superadmin@adoptmatch.org',
-        phone: '+880 1819 000001',
-        role: UserRole.superAdmin,
-        status: 'Active',
-        permissions: const ['APPROVE_PETS', 'FLAG_CONTENT', 'REVIEW_APPLICATIONS', 'MANAGE_USERS', 'AUDIT_LOGS'],
-        adoptionsCount: 0,
-        joinedAt: DateTime.now().subtract(const Duration(days: 450)),
-      ),
-      AdminManagedUser(
-        id: 'u-104',
-        name: 'Suspicious Lister 99',
-        email: 'petshopdhaka@fake.com',
-        phone: '+880 1911 000099',
-        role: UserRole.adopter,
-        status: 'Banned',
-        permissions: const [],
-        adoptionsCount: 0,
-        joinedAt: DateTime.now().subtract(const Duration(days: 14)),
-      ),
-      AdminManagedUser(
-        id: 'u-105',
-        name: 'Tanvir Hossain (Volunteer Lead)',
-        email: 'tanvir.mod@adoptmatch.org',
-        phone: '+880 1713 999888',
-        role: UserRole.moderator,
-        status: 'Active',
-        permissions: const ['APPROVE_PETS', 'FLAG_CONTENT', 'REVIEW_APPLICATIONS'],
-        adoptionsCount: 4,
-        joinedAt: DateTime.now().subtract(const Duration(days: 45)),
-      ),
-    ];
-
-    _auditLogs = [
-      AdminAuditLog(
-        id: 'LOG-9001',
-        timestamp: DateTime.now().subtract(const Duration(minutes: 25)),
-        actorName: 'Sarah Rahman',
-        actorRole: 'SUPER_ADMIN',
-        action: 'APPROVED_SHELTER',
-        target: 'SH-803 (Sylhet Rescue)',
-        ipAddress: '103.114.98.24',
-        details: 'Verified Trade License with Sylhet City Corporation register.',
-      ),
-      AdminAuditLog(
-        id: 'LOG-9002',
-        timestamp: DateTime.now().subtract(const Duration(hours: 3)),
-        actorName: 'Sarah Rahman',
-        actorRole: 'SUPER_ADMIN',
-        action: 'USER_BANNED_TOKENS_REVOKED',
-        target: 'u-104 (petshopdhaka@fake.com)',
-        ipAddress: '103.114.98.11',
-        details: 'User violated zero-breeding rule by attempting commercial pet sale. JWT tokens revoked.',
-      ),
-      AdminAuditLog(
-        id: 'LOG-9003',
-        timestamp: DateTime.now().subtract(const Duration(hours: 8)),
-        actorName: 'System Security',
-        actorRole: 'SYSTEM',
-        action: 'FLAGGED_PET_LISTING',
-        target: 'P-FL-1 (Rocky)',
-        ipAddress: '127.0.0.1',
-        details: 'Automated ML filter detected commercial keywords in description.',
-      ),
-    ];
-
-    _disputes = [
-      AdoptionDisputeRecord(
-        id: 'DISP-501',
-        adopterName: 'Mahir Chowdhury',
-        shelterName: 'Care For Paws Dhaka',
-        petName: 'Barnaby (Senior Dog)',
-        contractStatus: 'Signed',
-        trialPeriod: 'Day 12 of 14',
-        disputeStatus: 'Mediation Required',
-        issueSummary: 'Adopter requesting veterinary cost adjustment during foster trial window.',
-        updatedAt: DateTime.now().subtract(const Duration(hours: 4)),
-      ),
-      AdoptionDisputeRecord(
-        id: 'DISP-502',
-        adopterName: 'Tanzina Sultana',
-        shelterName: 'Paw Haven Chittagong',
-        petName: 'Rescue Cat #502',
-        contractStatus: 'Signed',
-        trialPeriod: 'Completed',
-        disputeStatus: 'Resolved',
-        issueSummary: 'Digital e-contract finalized and vaccination passport transferred.',
-        updatedAt: DateTime.now().subtract(const Duration(days: 2)),
-      ),
-    ];
-  }
+  AdminKPI? _kpis;
 
   List<ShelterApplication> getShelters() => List.unmodifiable(_shelters);
-  List<FlaggedPetListing> getFlaggedPets() => List.unmodifiable(_flaggedPets);
+  List<Pet> getPets() => List.unmodifiable(_pets);
   List<AdminManagedUser> getUsers() => List.unmodifiable(_users);
   List<AdminAuditLog> getAuditLogs() => List.unmodifiable(_auditLogs);
-  List<AdoptionDisputeRecord> getDisputes() => List.unmodifiable(_disputes);
+  AdminKPI? getKPIs() => _kpis;
+  List<FlaggedPetListing> getFlaggedPets() => List.unmodifiable(_flaggedPets);
+  List<AdoptionDisputeRecord> getDisputes() => const []; // No dispute ledger is configured.
 
-  AdminKPI getKPIs() {
-    final pendingCount = _shelters.where((s) => s.status == VerificationStatus.pending).length;
-    final flaggedCount = _flaggedPets.where((p) => !p.isBanned).length;
-    return AdminKPI(
-      totalAdoptions: 1284,
-      pendingShelters: pendingCount,
-      activeRescues: 342,
-      totalDonationsBDT: 248500,
-      flaggedListings: flaggedCount,
-      activeDisputes: _disputes.where((d) => d.disputeStatus != 'Resolved').length,
-    );
+  Future<Map<String, String>> _headers() async {
+    final token = await _readToken();
+    if (token == null || token.isEmpty) throw Exception('An authenticated admin session is required.');
+    return {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': 'Bearer $token'};
   }
-
-  /* ========================================================================
-     SHELTER ACTIONS
-     ======================================================================== */
-
-  void approveShelter(String id, {String? notes}) {
-    final idx = _shelters.indexWhere((s) => s.id == id);
-    if (idx != -1) {
-      _shelters[idx] = _shelters[idx].copyWith(
-        status: VerificationStatus.approved,
-        reviewerNotes: notes ?? 'Approved by Administrator after NID & Trade License check.',
-      );
-      _auditLogs.insert(
-        0,
-        AdminAuditLog(
-          id: 'LOG-${DateTime.now().millisecondsSinceEpoch}',
-          timestamp: DateTime.now(),
-          actorName: 'Admin',
-          actorRole: 'ADMIN',
-          action: 'APPROVED_SHELTER',
-          target: id,
-          ipAddress: '103.114.98.01',
-          details: 'Shelter verified and permitted to publish pet rescues.',
-        ),
-      );
-      _sheltersController.add(List.unmodifiable(_shelters));
-      _auditLogsController.add(List.unmodifiable(_auditLogs));
+  Uri _uri(String path) => Uri.parse('${ApiClient.rootUrl}/api/v1/admin$path');
+  Map<String, dynamic> _decode(http.Response response) {
+    final body = jsonDecode(response.body);
+    if (response.statusCode < 200 || response.statusCode >= 300 || body['success'] != true) {
+      throw Exception((body['error'] ?? body['message'] ?? 'Admin request failed (${response.statusCode})').toString());
     }
+    return Map<String, dynamic>.from(body as Map);
+  }
+  Future<Map<String, dynamic>> _request(String method, String path, [Map<String, dynamic>? data]) async {
+    final request = http.Request(method, _uri(path))..headers.addAll(await _headers());
+    if (data != null) request.body = jsonEncode(data);
+    final streamed = await _client.send(request).timeout(const Duration(seconds: 15));
+    return _decode(await http.Response.fromStream(streamed));
+  }
+  Future<List<Map<String, dynamic>>?> _optionalList(String path) async {
+    final request = http.Request('GET', _uri(path))..headers.addAll(await _headers());
+    final response = await http.Response.fromStream(await _client.send(request).timeout(const Duration(seconds: 15)));
+    if (response.statusCode == 403) return null; // Moderators may lack this permission.
+    final data = _decode(response)['data'];
+    if (data is! List) throw Exception('Invalid $path response.');
+    return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
-  void rejectShelter(String id, {required String reason}) {
-    final idx = _shelters.indexWhere((s) => s.id == id);
-    if (idx != -1) {
-      _shelters[idx] = _shelters[idx].copyWith(
-        status: VerificationStatus.rejected,
-        reviewerNotes: reason,
-      );
-      _auditLogs.insert(
-        0,
-        AdminAuditLog(
-          id: 'LOG-${DateTime.now().millisecondsSinceEpoch}',
-          timestamp: DateTime.now(),
-          actorName: 'Admin',
-          actorRole: 'ADMIN',
-          action: 'REJECTED_SHELTER',
-          target: id,
-          ipAddress: '103.114.98.01',
-          details: 'Rejection Reason: $reason',
-        ),
-      );
-      _sheltersController.add(List.unmodifiable(_shelters));
-      _auditLogsController.add(List.unmodifiable(_auditLogs));
+  Future<void> refresh() async {
+    final results = await Future.wait([
+      _request('GET', '/stats'), _optionalList('/users'), _optionalList('/shelters'),
+      _optionalList('/pets'), _optionalList('/audit-logs'),
+    ]);
+    final stats = results[0] as Map<String, dynamic>;
+    final data = Map<String, dynamic>.from(stats['data'] as Map);
+    _kpis = AdminKPI(totalAdoptions: (data['totalAdoptions'] as num?)?.toInt(),
+      pendingShelters: (data['pendingShelters'] as num?)?.toInt() ?? 0,
+      activeRescues: (data['activeRescues'] as num?)?.toInt() ?? 0,
+      totalDonationsBDT: (data['totalDonationsBDT'] as num?)?.toInt(),
+      flaggedListings: (data['flaggedListings'] as num?)?.toInt() ?? 0,
+      activeDisputes: (data['activeDisputes'] as num?)?.toInt());
+    final users = results[1] as List<Map<String, dynamic>>?;
+    if (users != null) _users = users.map((u) => AdminManagedUser(id: u['id'].toString(),
+      name: (u['name'] ?? '').toString(), email: (u['email'] ?? '').toString(), phone: (u['phone'] ?? '').toString(),
+      role: UserRole.fromCode(u['role']?.toString() ?? 'USER'), status: (u['status'] ?? 'Active').toString(),
+      permissions: List<String>.from(u['permissions'] as List? ?? const []),
+      adoptionsCount: (u['adoptionsCount'] as num?)?.toInt() ?? 0,
+      joinedAt: DateTime.tryParse(u['joinedAt']?.toString() ?? '') ?? DateTime.now())).toList();
+    final shelters = results[2] as List<Map<String, dynamic>>?;
+    if (shelters != null) _shelters = shelters.map((s) => ShelterApplication(id: s['id'].toString(),
+      shelterName: (s['shelterName'] ?? '').toString(), registrationNumber: (s['registrationNumber'] ?? '').toString(),
+      contactPerson: (s['contactPerson'] ?? '').toString(), email: (s['email'] ?? '').toString(), phone: (s['phone'] ?? '').toString(),
+      city: (s['city'] ?? '').toString(), address: (s['address'] ?? '').toString(), nidNumber: (s['nidNumber'] ?? '').toString(),
+      tradeLicenseNumber: (s['tradeLicenseNumber'] ?? '').toString(), vetAffiliation: (s['vetAffiliation'] ?? '').toString(),
+      status: VerificationStatus.values.firstWhere((v) => v.name.toUpperCase() == s['status'], orElse: () => VerificationStatus.pending),
+      documentUrls: List<String>.from(s['documentUrls'] as List? ?? const []),
+      submittedAt: DateTime.tryParse(s['submittedAt']?.toString() ?? '') ?? DateTime.now(),
+      reviewerNotes: s['reviewerNotes']?.toString(), capacity: (s['capacity'] as num?)?.toInt() ?? 0)).toList();
+    final pets = results[3] as List<Map<String, dynamic>>?;
+    if (pets != null) {
+      _pets = pets.map(_petFromJson).toList();
+      _flaggedPets = pets.where((p) => (p['reportsCount'] as num?)?.toInt() != null && p['reportsCount'] > 0).map((p) =>
+        FlaggedPetListing(id: p['id'].toString(), petName: (p['name'] ?? '').toString(),
+          species: (p['species'] ?? '').toString(), breed: (p['breed'] ?? '').toString(),
+          postedBy: (p['submittedBy'] ?? '').toString(), posterRole: 'Listing owner',
+          city: (p['shelterAddress'] ?? '').toString(), imageUrl: (p['imageUrl'] ?? '').toString(),
+          reportsCount: (p['reportsCount'] as num).toInt(),
+          reportReasons: List<String>.from(p['reportReasons'] as List? ?? const []),
+          isBanned: p['isBanned'] == true, isUrgent: p['isUrgent'] == true, isFeatured: p['isFeatured'] == true,
+          listedAt: DateTime.tryParse(p['createdAt']?.toString() ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0))).toList();
     }
+    final logs = results[4] as List<Map<String, dynamic>>?;
+    if (logs != null) _auditLogs = logs.map((l) => AdminAuditLog(id: l['id'].toString(),
+      timestamp: DateTime.parse(l['timestamp'].toString()), actorName: (l['actorName'] ?? '').toString(),
+      actorRole: (l['actorRole'] ?? '').toString(), action: (l['action'] ?? '').toString(), target: (l['target'] ?? '').toString(),
+      ipAddress: (l['ipAddress'] ?? '').toString(), details: (l['details'] ?? '').toString())).toList();
+    _sheltersController.add(getShelters()); _usersController.add(getUsers());
+    _petsController.add(getPets()); _flaggedPetsController.add(getFlaggedPets()); _auditLogsController.add(getAuditLogs());
+    lastSyncError = null;
   }
 
-  /* ========================================================================
-     USER BANNING & TOKEN INVALIDATION
-     ======================================================================== */
+  Pet _petFromJson(Map<String, dynamic> p) => Pet(id: p['id'].toString(), name: (p['name'] ?? '').toString(),
+    species: (p['species'] ?? '').toString(), breed: (p['breed'] ?? '').toString(), ageDisplay: (p['ageDisplay'] ?? '').toString(),
+    ageMonths: (p['ageMonths'] as num?)?.toInt() ?? 0, gender: (p['gender'] ?? '').toString(),
+    weightKg: (p['weightKg'] as num?)?.toDouble() ?? 0, distanceKm: (p['distanceKm'] as num?)?.toDouble() ?? double.infinity,
+    matchScore: (p['matchScore'] as num?)?.toInt() ?? 0, imageUrl: (p['imageUrl'] ?? '').toString(),
+    galleryUrls: List<String>.from(p['galleryUrls'] as List? ?? const []), isUrgent: p['isUrgent'] == true,
+    isFeatured: p['isFeatured'] == true, isVaccinated: p['isVaccinated'] == true, isNeutered: p['isNeutered'] == true,
+    isHouseTrained: p['isHouseTrained'] == true, isKidSafe: p['isKidSafe'] == true, isApartmentFriendly: p['isApartmentFriendly'] == true,
+    shelterName: (p['shelterName'] ?? '').toString(), shelterPhone: (p['shelterPhone'] ?? '').toString(),
+    shelterAddress: (p['shelterAddress'] ?? '').toString(), story: (p['story'] ?? '').toString(),
+    medicalHistory: (p['medicalHistory'] ?? '').toString(), qrHash: (p['qrHash'] ?? '').toString(),
+    adoptionStatus: (p['adoptionStatus'] ?? 'available').toString());
 
-  void blockUser(String userId, {String? reason}) {
-    final idx = _users.indexWhere((u) => u.id == userId);
-    if (idx != -1) {
-      final user = _users[idx];
-      _users[idx] = user.copyWith(status: 'Banned');
-      _auditLogs.insert(
-        0,
-        AdminAuditLog(
-          id: 'LOG-${DateTime.now().millisecondsSinceEpoch}',
-          timestamp: DateTime.now(),
-          actorName: 'Admin',
-          actorRole: 'ADMIN',
-          action: 'USER_BANNED_TOKENS_REVOKED',
-          target: '${user.name} ($userId)',
-          ipAddress: '103.114.98.01',
-          details: 'User account banned and all active JWT sessions revoked. Reason: ${reason ?? "Administrative policy breach"}',
-        ),
-      );
-      _usersController.add(List.unmodifiable(_users));
-      _auditLogsController.add(List.unmodifiable(_auditLogs));
-    }
+  Future<void> _changed(Future<Map<String, dynamic>> action) async {
+    await action; // Success means the server acknowledged the write, not a local array mutation.
+    try { await refresh(); } catch (e) { lastSyncError = 'Saved on server; refresh failed: $e'; }
   }
+  Future<void> approveShelter(String id, {String? notes}) => _changed(_request('PATCH', '/shelters/$id/approve', {'notes': notes}));
+  Future<void> rejectShelter(String id, {required String reason}) => _changed(_request('PATCH', '/shelters/$id/reject', {'reason': reason}));
+  Future<void> blockUser(String id, {String? reason}) => _changed(_request('PATCH', '/users/$id/block', {'reason': reason}));
+  Future<void> unblockUser(String id) => _changed(_request('PATCH', '/users/$id/unblock', {}));
+  Future<void> updateUserStatus(String id, String status) =>
+      status.toUpperCase() == 'BANNED' ? blockUser(id) : unblockUser(id);
+  Future<void> updateUserRole(String id, UserRole role, {List<String>? permissions}) =>
+      _changed(_request('PATCH', '/users/$id/role', {'role': role.code, 'permissions': permissions ?? const []}));
+  Future<void> updateUserPermissions(String id, List<String> permissions) =>
+      _changed(_request('PATCH', '/users/$id/permissions', {'permissions': permissions}));
+  Future<void> banPetListing(String id) => _changed(_request('PATCH', '/pets/$id/ban', {}));
+  Future<void> togglePetBadge(String id, {bool? isUrgent, bool? isFeatured}) =>
+      _changed(_request('PATCH', '/pets/$id/badge', {if (isUrgent != null) 'isUrgent': isUrgent, if (isFeatured != null) 'isFeatured': isFeatured}));
+  Future<void> deletePetListing(String id, {String? petName}) => _changed(_request('DELETE', '/pets/$id'));
 
-  void unblockUser(String userId) {
-    final idx = _users.indexWhere((u) => u.id == userId);
-    if (idx != -1) {
-      final user = _users[idx];
-      _users[idx] = user.copyWith(status: 'Active');
-      _auditLogs.insert(
-        0,
-        AdminAuditLog(
-          id: 'LOG-${DateTime.now().millisecondsSinceEpoch}',
-          timestamp: DateTime.now(),
-          actorName: 'Admin',
-          actorRole: 'ADMIN',
-          action: 'USER_UNBLOCKED',
-          target: '${user.name} ($userId)',
-          ipAddress: '103.114.98.01',
-          details: 'Account unblocked. User restored to Active status.',
-        ),
-      );
-      _usersController.add(List.unmodifiable(_users));
-      _auditLogsController.add(List.unmodifiable(_auditLogs));
-    }
+  Map<String, dynamic> _petPayload(Pet pet) => {'name': pet.name, 'species': pet.species, 'breed': pet.breed,
+    'ageDisplay': pet.ageDisplay, 'ageMonths': pet.ageMonths, 'gender': pet.gender, 'weightKg': pet.weightKg,
+    'images': pet.galleryUrls, 'imageUrl': pet.imageUrl, 'story': pet.story, 'medicalHistory': pet.medicalHistory,
+    'shelterName': pet.shelterName, 'shelterAddress': pet.shelterAddress, 'isVaccinated': pet.isVaccinated,
+    'isNeutered': pet.isNeutered, 'isHouseTrained': pet.isHouseTrained, 'isKidSafe': pet.isKidSafe,
+    'isApartmentFriendly': pet.isApartmentFriendly, 'isUrgent': pet.isUrgent, 'isFeatured': pet.isFeatured};
+  Future<Pet> createPetListing(Pet pet) async {
+    final result = await _request('POST', '/pets', _petPayload(pet));
+    final saved = _petFromJson(Map<String, dynamic>.from(result['data'] as Map));
+    try { await refresh(); } catch (e) { lastSyncError = e.toString(); }
+    return saved;
   }
-
-  void updateUserStatus(String id, String status) {
-    if (status.toUpperCase() == 'BANNED') {
-      blockUser(id);
-    } else if (status.toUpperCase() == 'ACTIVE') {
-      unblockUser(id);
-    } else {
-      final idx = _users.indexWhere((u) => u.id == id);
-      if (idx != -1) {
-        _users[idx] = _users[idx].copyWith(status: status);
-        _auditLogs.insert(
-          0,
-          AdminAuditLog(
-            id: 'LOG-${DateTime.now().millisecondsSinceEpoch}',
-            timestamp: DateTime.now(),
-            actorName: 'Admin',
-            actorRole: 'ADMIN',
-            action: 'USER_STATUS_CHANGE',
-            target: '$id -> $status',
-            ipAddress: '103.114.98.01',
-            details: 'Updated account status to $status.',
-          ),
-        );
-        _usersController.add(List.unmodifiable(_users));
-        _auditLogsController.add(List.unmodifiable(_auditLogs));
-      }
-    }
-  }
-
-  /* ========================================================================
-     ROLE DELEGATION & PERMISSIONS
-     ======================================================================== */
-
-  void updateUserRole(String userId, UserRole newRole, {List<String>? permissions}) {
-    final idx = _users.indexWhere((u) => u.id == userId);
-    if (idx != -1) {
-      final user = _users[idx];
-      List<String> assignedPerms = permissions ?? user.permissions;
-      if (newRole == UserRole.moderator && (permissions == null || permissions.isEmpty)) {
-        assignedPerms = const ['APPROVE_PETS', 'FLAG_CONTENT', 'REVIEW_APPLICATIONS'];
-      }
-      _users[idx] = user.copyWith(role: newRole, permissions: assignedPerms);
-      _auditLogs.insert(
-        0,
-        AdminAuditLog(
-          id: 'LOG-${DateTime.now().millisecondsSinceEpoch}',
-          timestamp: DateTime.now(),
-          actorName: 'Admin',
-          actorRole: 'ADMIN',
-          action: 'DELEGATED_USER_ROLE',
-          target: '${user.name} -> ${newRole.code}',
-          ipAddress: '103.114.98.01',
-          details: 'Role updated to ${newRole.code}. Permissions: [${assignedPerms.join(", ")}]',
-        ),
-      );
-      _usersController.add(List.unmodifiable(_users));
-      _auditLogsController.add(List.unmodifiable(_auditLogs));
-    }
-  }
-
-  void updateUserPermissions(String userId, List<String> permissions) {
-    final idx = _users.indexWhere((u) => u.id == userId);
-    if (idx != -1) {
-      final user = _users[idx];
-      _users[idx] = user.copyWith(permissions: permissions);
-      _auditLogs.insert(
-        0,
-        AdminAuditLog(
-          id: 'LOG-${DateTime.now().millisecondsSinceEpoch}',
-          timestamp: DateTime.now(),
-          actorName: 'Admin',
-          actorRole: 'ADMIN',
-          action: 'UPDATED_USER_PERMISSIONS',
-          target: '${user.name} ($userId)',
-          ipAddress: '103.114.98.01',
-          details: 'Assigned permissions: [${permissions.join(", ")}]',
-        ),
-      );
-      _usersController.add(List.unmodifiable(_users));
-      _auditLogsController.add(List.unmodifiable(_auditLogs));
-    }
-  }
-
-  /* ========================================================================
-     PET LISTING CRUD & OVERRIDE
-     ======================================================================== */
-
-  void banPetListing(String id) {
-    final idx = _flaggedPets.indexWhere((p) => p.id == id);
-    if (idx != -1) {
-      _flaggedPets[idx] = _flaggedPets[idx].copyWith(isBanned: true);
-      _auditLogs.insert(
-        0,
-        AdminAuditLog(
-          id: 'LOG-${DateTime.now().millisecondsSinceEpoch}',
-          timestamp: DateTime.now(),
-          actorName: 'Admin',
-          actorRole: 'ADMIN',
-          action: 'BANNED_PET_LISTING',
-          target: id,
-          ipAddress: '103.114.98.01',
-          details: 'Listing removed from public discovery due to policy breach.',
-        ),
-      );
-      _flaggedPetsController.add(List.unmodifiable(_flaggedPets));
-      _auditLogsController.add(List.unmodifiable(_auditLogs));
-    }
-  }
-
-  void togglePetBadge(String id, {bool? isUrgent, bool? isFeatured}) {
-    final idx = _flaggedPets.indexWhere((p) => p.id == id);
-    if (idx != -1) {
-      _flaggedPets[idx] = _flaggedPets[idx].copyWith(
-        isUrgent: isUrgent ?? _flaggedPets[idx].isUrgent,
-        isFeatured: isFeatured ?? _flaggedPets[idx].isFeatured,
-      );
-      _flaggedPetsController.add(List.unmodifiable(_flaggedPets));
-    }
-  }
-
-  Future<void> createPetListing(Pet pet) async {
-    await PetRepository().addPet(pet);
-    _auditLogs.insert(
-      0,
-      AdminAuditLog(
-        id: 'LOG-${DateTime.now().millisecondsSinceEpoch}',
-        timestamp: DateTime.now(),
-        actorName: 'Admin',
-        actorRole: 'ADMIN',
-        action: 'ADMIN_CREATED_PET_LISTING',
-        target: '${pet.name} (${pet.id})',
-        ipAddress: '103.114.98.01',
-        details: 'Direct administrative pet listing created with ${pet.galleryUrls.length} carousel photos.',
-      ),
-    );
-    _auditLogsController.add(List.unmodifiable(_auditLogs));
-  }
-
-  Future<void> overridePetListing(Pet pet, {String? notes}) async {
-    await PetRepository().updatePet(pet);
-    _auditLogs.insert(
-      0,
-      AdminAuditLog(
-        id: 'LOG-${DateTime.now().millisecondsSinceEpoch}',
-        timestamp: DateTime.now(),
-        actorName: 'Admin',
-        actorRole: 'ADMIN',
-        action: 'ADMIN_OVERRIDE_PET_LISTING',
-        target: '${pet.name} (${pet.id})',
-        ipAddress: '103.114.98.01',
-        details: 'Admin modified listing details, multi-image carousel, and medical passport. Notes: ${notes ?? "Anytime override"}',
-      ),
-    );
-    _auditLogsController.add(List.unmodifiable(_auditLogs));
-  }
-
-  Future<void> deletePetListing(String petId, {String? petName}) async {
-    await PetRepository().deletePet(petId);
-    _auditLogs.insert(
-      0,
-      AdminAuditLog(
-        id: 'LOG-${DateTime.now().millisecondsSinceEpoch}',
-        timestamp: DateTime.now(),
-        actorName: 'Admin',
-        actorRole: 'ADMIN',
-        action: 'ADMIN_DELETED_PET_LISTING',
-        target: '${petName ?? petId} ($petId)',
-        ipAddress: '103.114.98.01',
-        details: 'Pet listing permanently deleted from platform by administrator.',
-      ),
-    );
-    _auditLogsController.add(List.unmodifiable(_auditLogs));
-  }
-
-  /// Records an explicit moderation or administrative event in the audit trail.
-  void recordAuditLog({
-    required String actorName,
-    required String action,
-    required String target,
-    required String details,
-    String actorRole = 'ADMIN',
-  }) {
-    _auditLogs.insert(
-      0,
-      AdminAuditLog(
-        id: 'LOG-${DateTime.now().millisecondsSinceEpoch}',
-        timestamp: DateTime.now(),
-        actorName: actorName,
-        actorRole: actorRole,
-        action: action,
-        target: target,
-        ipAddress: '103.114.98.01 (Admin SSL Session)',
-        details: details,
-      ),
-    );
-    _auditLogsController.add(List.unmodifiable(_auditLogs));
-  }
+  Future<void> overridePetListing(Pet pet, {String? notes}) =>
+      _changed(_request('PUT', '/pets/${pet.id}', {..._petPayload(pet), 'adminOverrideNotes': notes}));
 }

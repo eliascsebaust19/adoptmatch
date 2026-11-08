@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/application_model.dart';
@@ -20,10 +21,49 @@ class LocalStorageService {
 
   SharedPreferences? _prefs;
   bool _hasSeenOnboarding = false;
+  static const _privateIndexKey = 'adoptmatch_private_key_index';
+  Set<String> _privateKeys = {};
+
+  Future<String?> _readPrivate(String key) async {
+    try {
+      final value = await _secureStore.read(key: key);
+      if (value != null) { _privateKeys.add(key); return value; }
+    } catch (_) {}
+    final p = await prefs;
+    final legacy = p.getString(key);
+    if (legacy != null) { await _writePrivate(key, legacy); return legacy; }
+    return null;
+  }
+  Future<void> _writePrivate(String key, String value) async {
+    await _secureStore.write(key: key, value: value);
+    _privateKeys.add(key);
+    await _secureStore.write(key: _privateIndexKey, value: jsonEncode(_privateKeys.toList()));
+    final p = await prefs;
+    await p.remove(key);
+  }
+  Future<void> _deletePrivate(String key) async {
+    await _secureStore.delete(key: key);
+    _privateKeys.remove(key);
+    await _secureStore.write(key: _privateIndexKey, value: jsonEncode(_privateKeys.toList()));
+    final p = await prefs;
+    await p.remove(key);
+  }
+
+
+  /// Adoption dossiers contain NID numbers, addresses and signatures, so they
+  /// live in hardware-backed storage rather than ordinary preferences.
+  final FlutterSecureStorage _secureStore = const FlutterSecureStorage(
+    aOptions: AndroidOptions(resetOnError: true),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+  );
 
   bool get hasSeenOnboarding => _hasSeenOnboarding;
 
   Future<void> init() async {
+    try {
+      final index = await _secureStore.read(key: _privateIndexKey);
+      if (index != null) _privateKeys = Set<String>.from(jsonDecode(index) as List);
+    } catch (_) {}
     final p = await prefs;
     _hasSeenOnboarding = p.getBool(_keyHasSeenOnboarding) ?? false;
   }
@@ -35,13 +75,23 @@ class LocalStorageService {
 
   void resetForTesting() {
     _prefs = null;
+    _privateKeys.clear();
   }
 
   // --- Applications ---
   Future<List<AdoptionApplication>?> loadApplications() async {
     try {
-      final p = await prefs;
-      final raw = p.getString(_keyApplications);
+      var raw = await _secureStore.read(key: _keyApplications);
+      if (raw == null || raw.trim().isEmpty) {
+        // Migrate a dossier stored in plaintext by an earlier build.
+        final p = await prefs;
+        final legacy = p.getString(_keyApplications);
+        if (legacy != null && legacy.trim().isNotEmpty) {
+          await _secureStore.write(key: _keyApplications, value: legacy);
+          await p.remove(_keyApplications);
+          raw = legacy;
+        }
+      }
       if (raw == null || raw.trim().isEmpty) return null;
       final List<dynamic> list = jsonDecode(raw);
       final results = <AdoptionApplication>[];
@@ -61,16 +111,26 @@ class LocalStorageService {
   }
 
   Future<void> saveApplications(List<AdoptionApplication> applications) async {
-    final p = await prefs;
     final encoded = jsonEncode(applications.map((a) => a.toJson()).toList());
-    await p.setString(_keyApplications, encoded);
+    await _secureStore.write(key: _keyApplications, value: encoded);
+    final p = await prefs;
+    await p.remove(_keyApplications);
   }
 
   // --- Drafts ---
   Future<Map<String, dynamic>?> loadApplicationDraft(String petId) async {
     try {
-      final p = await prefs;
-      final raw = p.getString('$_keyDraftPrefix$petId');
+      final key = '$_keyDraftPrefix$petId';
+      var raw = await _secureStore.read(key: key);
+      if (raw == null) {
+        final p = await prefs;
+        final legacy = p.getString(key);
+        if (legacy != null) {
+          await _secureStore.write(key: key, value: legacy);
+          await p.remove(key);
+          raw = legacy;
+        }
+      }
       if (raw == null) return null;
       return jsonDecode(raw) as Map<String, dynamic>;
     } catch (_) {
@@ -82,59 +142,46 @@ class LocalStorageService {
     String petId,
     Map<String, dynamic> draftData,
   ) async {
+    final key = '$_keyDraftPrefix$petId';
+    await _secureStore.write(key: key, value: jsonEncode(draftData));
     final p = await prefs;
-    await p.setString('$_keyDraftPrefix$petId', jsonEncode(draftData));
+    await p.remove(key);
   }
 
   Future<void> clearApplicationDraft(String petId) async {
+    final key = '$_keyDraftPrefix$petId';
+    await _secureStore.delete(key: key);
     final p = await prefs;
-    await p.remove('$_keyDraftPrefix$petId');
+    await p.remove(key);
   }
 
-  // --- Conversations & Messages ---
+  // --- Conversations & Messages (encrypted at rest) ---
   Future<List<ChatConversation>?> loadConversations() async {
     try {
-      final p = await prefs;
-      final raw = p.getString(_keyConversations);
+      final raw = await _readPrivate(_keyConversations);
       if (raw == null) return null;
-      final List<dynamic> list = jsonDecode(raw);
-      return list
-          .map(
-            (item) => ChatConversation.fromJson(item as Map<String, dynamic>),
-          )
-          .toList();
-    } catch (_) {
-      return null;
-    }
+      return (jsonDecode(raw) as List).map((item) =>
+        ChatConversation.fromJson(Map<String, dynamic>.from(item as Map))).toList();
+    } catch (_) { return null; }
   }
-
-  Future<void> saveConversations(List<ChatConversation> conversations) async {
-    final p = await prefs;
-    final encoded = jsonEncode(conversations.map((c) => c.toJson()).toList());
-    await p.setString(_keyConversations, encoded);
-  }
-
+  Future<void> saveConversations(List<ChatConversation> conversations) =>
+    _writePrivate(_keyConversations, jsonEncode(conversations.map((c) => c.toJson()).toList()));
   Future<List<ChatMessage>?> loadMessages(String conversationId) async {
     try {
-      final p = await prefs;
-      final raw = p.getString('$_keyMessagesPrefix$conversationId');
+      final raw = await _readPrivate('$_keyMessagesPrefix$conversationId');
       if (raw == null) return null;
-      final List<dynamic> list = jsonDecode(raw);
-      return list
-          .map((item) => ChatMessage.fromJson(item as Map<String, dynamic>))
-          .toList();
-    } catch (_) {
-      return null;
-    }
+      return (jsonDecode(raw) as List).map((item) =>
+        ChatMessage.fromJson(Map<String, dynamic>.from(item as Map))).toList();
+    } catch (_) { return null; }
   }
+  Future<void> saveMessages(String conversationId, List<ChatMessage> messages) =>
+    _writePrivate('$_keyMessagesPrefix$conversationId', jsonEncode(messages.map((m) => m.toJson()).toList()));
+  Future<void> clearMessages(String conversationId) => _deletePrivate('$_keyMessagesPrefix$conversationId');
 
-  Future<void> saveMessages(
-    String conversationId,
-    List<ChatMessage> messages,
-  ) async {
-    final p = await prefs;
-    final encoded = jsonEncode(messages.map((m) => m.toJson()).toList());
-    await p.setString('$_keyMessagesPrefix$conversationId', encoded);
+  Future<void> clearAllChats() async {
+    final keys = _privateKeys.where((k) => k.startsWith(_keyMessagesPrefix)).toList();
+    for (final key in keys) { await _deletePrivate(key); }
+    await _deletePrivate(_keyConversations);
   }
 
   // --- Favorites ---
@@ -209,14 +256,13 @@ class LocalStorageService {
 
   /// Wipes all cached user applications, chats, messages, favorites, and quiz data on logout
   Future<void> clearAllUserData() async {
-    try {
-      final p = await prefs;
-      final allKeys = p.getKeys().toList();
-      for (final key in allKeys) {
-        if (key != _keyHasSeenOnboarding) {
-          await p.remove(key);
-        }
-      }
-    } catch (_) {}
+    final keys = {..._privateKeys, _keyApplications, _keyConversations};
+    final p = await prefs;
+    keys.addAll(p.getKeys().where((k) => k.startsWith(_keyDraftPrefix) || k.startsWith(_keyMessagesPrefix)));
+    for (final key in keys) { await _deletePrivate(key); }
+    for (final key in p.getKeys().toList()) {
+      if (key != _keyHasSeenOnboarding) await p.remove(key);
+    }
+    _privateKeys.clear();
   }
 }

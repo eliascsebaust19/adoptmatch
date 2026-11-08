@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\PhoneAuthController;
 use App\Http\Controllers\Api\PetController;
 use App\Http\Controllers\Api\AdoptionRequestController;
 use App\Http\Controllers\Api\MessageController;
@@ -23,14 +24,13 @@ Route::prefix('v1')->group(function () {
         Route::post('/google', [AuthController::class, 'googleLogin']);
         Route::post('/login', [AuthController::class, 'emailLogin']);
         Route::post('/register', [AuthController::class, 'register']);
+        Route::post('/phone/request', [PhoneAuthController::class, 'requestOtp'])->middleware('throttle:5,1');
+        Route::post('/phone/verify', [PhoneAuthController::class, 'verifyOtp'])->middleware('throttle:10,1');
     });
 
     // Public Pet Catalog & Details
     Route::get('/pets', [PetController::class, 'index']);
     Route::get('/pets/{id}', [PetController::class, 'show'])->whereNumber('id');
-
-    // Cloudinary / Media Upload Endpoint
-    Route::post('/upload/image', [UploadController::class, 'uploadImage']);
 
     // =====================================
     // 2. PROTECTED ROUTES (SANCTUM BEARER)
@@ -43,12 +43,20 @@ Route::prefix('v1')->group(function () {
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::post('/auth/fcm-token', [AuthController::class, 'updateFcmToken']);
 
-        // Tinder Pet Matching & Swiping
+        // Media uploads require the same Sanctum identity as every other write.
+        Route::post('/upload/image', [UploadController::class, 'uploadImage'])->middleware('throttle:20,1');
+
+        // Literal routes MUST precede /pets/{id}, otherwise "nearby" is treated as an id.
         Route::get('/pets/swipe-stack', [PetController::class, 'getSwipeStack']);
-        Route::post('/pets/{id}/like', [PetController::class, 'swipeLike']);
         Route::get('/pets/nearby', [PetController::class, 'getNearbyPets']);
+        Route::get('/favorites', [PetController::class, 'getFavorites']);
+        Route::get('/pets/{id}/favorite', [PetController::class, 'getFavorite'])->whereNumber('id');
+        Route::put('/pets/{id}/favorite', [PetController::class, 'addFavorite'])->whereNumber('id');
+        Route::delete('/pets/{id}/favorite', [PetController::class, 'removeFavorite'])->whereNumber('id');
+        Route::post('/pets/{id}/like', [PetController::class, 'swipeLike'])->whereNumber('id');
 
         // Pet Management (Owner/Shelter CRUD)
+        Route::get('/my-pets', [PetController::class, 'myPets']);
         Route::post('/pets', [PetController::class, 'store']);
         Route::put('/pets/{id}', [PetController::class, 'update']);
         Route::delete('/pets/{id}', [PetController::class, 'destroy']);

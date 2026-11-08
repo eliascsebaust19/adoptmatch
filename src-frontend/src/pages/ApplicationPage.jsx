@@ -13,22 +13,25 @@ export default function ApplicationPage() {
   const [step, setStep] = useState(1);
   const [submittedApp, setSubmittedApp] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
 
   const [formData, setFormData] = useState({
-    housing_details: 'Single family home with fenced backyard in Seattle suburb.',
-    experience_details: 'Owned Golden Retrievers for 10+ years. Familiar with routine training and vet care.',
-    reason_for_adoption: 'Looking for a gentle family companion for our 8-year-old child.',
-    care_plan: 'Daily 45-min morning and evening walks, weekend park visits, local vet care at Seattle Vet Clinic.',
-    agreement_consent: true
+    housing_details: '',
+    experience_details: '',
+    reason_for_adoption: '',
+    care_plan: '',
+    agreement_consent: false
   });
 
   useEffect(() => {
     const fetchPet = async () => {
+      if (!petId) return;
       try {
-        const res = await api.get(`/pets/${petId || 1}`);
+        const res = await api.get(`/pets/${petId}`);
         setPet(res.data);
       } catch (err) {
         console.error('Failed to fetch pet details:', err);
+        setSubmitError('Could not load this pet listing. Please return to the catalog and try again.');
       }
     };
     fetchPet();
@@ -38,19 +41,25 @@ export default function ApplicationPage() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const [submitError, setSubmitError] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitError(null);
+    const numericPetId = Number.parseInt(petId, 10);
+    if (!Number.isInteger(numericPetId)) {
+      setSubmitError('A valid pet listing is required before applying.');
+      return;
+    }
+    if (!formData.agreement_consent) {
+      setSubmitError('Please confirm the declaration before submitting.');
+      return;
+    }
     try {
       setLoading(true);
-      const res = await api.post('/applications', {
-        pet_id: parseInt(petId || 1),
-        ...formData
-      });
+      const res = await api.post('/applications', { pet_id: numericPetId, ...formData });
+      if (!res.data || res.data.id == null) throw new Error('The server did not return an application reference.');
       setSubmittedApp(res.data);
-      setStep(5); // Success Timeline view
+      setStep(5); // Success only after a server acknowledgement.
     } catch (err) {
       console.error('Submission error:', err);
       setSubmitError(err.response?.data?.error || err.message || 'Failed to submit application. Please check connection and try again.');
@@ -70,14 +79,14 @@ export default function ApplicationPage() {
           <span className="text-xs font-bold uppercase tracking-widest text-brand-coral">Application Successfully Received</span>
           <h1 className="font-headline font-extrabold text-4xl text-brand-dark">Adoption Application Submitted!</h1>
           <p className="text-gray-600 text-sm max-w-lg mx-auto">
-            Your adoption application for <strong className="text-brand-dark">{pet?.name || 'Barnaby'}</strong> has been submitted to Happy Tails Animal Shelter.
+            Your adoption application for <strong className="text-brand-dark">{pet?.name || 'this pet'}</strong> has been received by the server. Application reference: {submittedApp.reference_no ?? submittedApp.id}.
           </p>
         </div>
 
         {/* Visual Application Timeline */}
         <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-xl space-y-6 text-left">
           <h3 className="font-headline font-bold text-lg text-brand-dark border-b border-gray-100 pb-3 flex items-center gap-2">
-            <Clock className="w-5 h-5 text-brand-teal" /> Live Status Timeline
+            <Clock className="w-5 h-5 text-brand-teal" /> Submission Receipt
           </h3>
 
           <div className="space-y-6 relative before:absolute before:left-4 before:top-3 before:bottom-3 before:w-0.5 before:bg-gray-200">
@@ -93,10 +102,10 @@ export default function ApplicationPage() {
 
             {/* Stage 2: Under Review */}
             <div className="flex items-start gap-4 relative">
-              <div className="w-8 h-8 rounded-full bg-brand-coral text-white flex items-center justify-center font-bold text-xs shrink-0 animate-pulse">2</div>
+              <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center font-bold text-xs shrink-0">2</div>
               <div>
-                <h4 className="font-bold text-sm text-brand-coral">Under Review (Current Stage)</h4>
-                <p className="text-xs text-gray-500">Shelter staff are reviewing your housing & experience details.</p>
+                <h4 className="font-bold text-sm text-gray-400">Under Review</h4>
+                <p className="text-xs text-gray-400">Pending shelter review. Current server status: {submittedApp.status || 'submitted'}.</p>
               </div>
             </div>
 
@@ -139,8 +148,8 @@ export default function ApplicationPage() {
       {/* Header */}
       <div className="text-center space-y-2">
         <span className="text-xs font-bold uppercase tracking-widest text-brand-coral">Official Adoption Application</span>
-        <h1 className="font-headline font-extrabold text-3xl text-brand-dark">Apply to Adopt {pet?.name || 'Barnaby'}</h1>
-        <p className="text-xs text-gray-500">Step {step} of 4 • Submitted directly to {pet?.shelter_name || 'Happy Tails Shelter'}</p>
+        <h1 className="font-headline font-extrabold text-3xl text-brand-dark">Apply to Adopt {pet?.name || 'this pet'}</h1>
+        <p className="text-xs text-gray-500">Step {step} of 4 • Submitted to the listing owner through the API</p>
       </div>
 
       {/* Form Container */}

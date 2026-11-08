@@ -316,7 +316,7 @@ class _SwipeMatchScreenState extends State<SwipeMatchScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${pet.breed} • ${pet.gender} • ${pet.distanceKm} km away',
+                  '${pet.breed} • ${pet.gender} • ${pet.distanceLabel} away',
                   style: const TextStyle(
                     fontSize: 14,
                     color: Colors.white70,

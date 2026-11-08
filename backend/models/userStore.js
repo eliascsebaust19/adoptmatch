@@ -1,9 +1,9 @@
 /**
  * AdoptMatch - Enterprise User Data Store
- * In-memory unified user persistence with Google OAuth linking support.
+ * SQLite-backed unified user persistence with Google OAuth linking support.
  */
 
-let usersDb = [
+const demoUsers = [
   {
     id: 'u-101',
     name: 'Elias Ahmed',
@@ -102,149 +102,59 @@ let usersDb = [
   },
 ];
 
-const findByEmail = (email) => {
-  if (!email) return null;
-  const normalized = email.toLowerCase().trim();
-  return usersDb.find((u) => u.email.toLowerCase().trim() === normalized) || null;
-};
-
-const findByGoogleId = (googleId) => {
-  if (!googleId) return null;
-  return usersDb.find((u) => u.googleId === googleId) || null;
-};
-
-const findById = (id) => {
-  if (!id) return null;
-  return usersDb.find((u) => u.id === id) || null;
-};
-
+const store = require('./recordStore')('users', process.env.NODE_ENV === 'production' ? [] : demoUsers);
+const getAllUsers = () => store.all();
+const findByEmail = (email) => !email ? null : getAllUsers().find(u => u.email.toLowerCase().trim() === String(email).toLowerCase().trim()) || null;
+const findByGoogleId = (googleId) => !googleId ? null : getAllUsers().find(u => u.googleId === googleId) || null;
+const findById = (id) => id ? store.find(id) : null;
 const createUser = (userData) => {
-  const newUser = {
-    id: userData.id || `usr-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-    name: userData.name || 'Anonymous User',
-    email: userData.email.toLowerCase().trim(),
-    phone: userData.phone || '',
-    role: userData.role || 'USER',
-    status: userData.status || 'Active',
-    avatarUrl: userData.avatarUrl || '',
-    googleId: userData.googleId || null,
-    provider: userData.provider || 'local',
-    emailVerified: userData.emailVerified !== undefined ? userData.emailVerified : false,
-    permissions: userData.permissions || [],
-    adoptionsCount: 0,
-    joinedAt: new Date().toISOString(),
-    lastLoginAt: new Date().toISOString(),
-    preferredPetType: userData.preferredPetType || 'All Pets',
-    location: userData.location || 'Dhaka, Bangladesh',
-    bio: userData.bio || 'Animal advocate & pet rescuer',
-    isPremium: userData.isPremium || false,
-    premiumPlanId: userData.premiumPlanId || null,
-    subscriptionExpiresAt: userData.subscriptionExpiresAt || null,
-    subscriptionStartedAt: userData.subscriptionStartedAt || null,
-    subscriptionStatus: userData.subscriptionStatus || 'NONE',
-  };
-
-  usersDb.push(newUser);
-  return newUser;
-};
-
-const activateUserSubscription = (userId, planId, durationDays = 30, tranId = '') => {
-  let user = findById(userId);
-  if (!user) {
-    // Fallback: search by email if userId was an email
-    user = findByEmail(userId);
-  }
-  if (!user) return null;
-
-  const now = new Date();
-  let baseDate = now;
-
-  // If user already has an active subscription, extend from the current expiry date
-  if (user.isPremium && user.subscriptionExpiresAt) {
-    const existingExpiry = new Date(user.subscriptionExpiresAt);
-    if (existingExpiry > now) {
-      baseDate = existingExpiry;
-    }
-  }
-
-  const newExpiry = new Date(baseDate.getTime() + durationDays * 24 * 60 * 60 * 1000);
-
-  const updated = updateUser(user.id, {
-    isPremium: true,
-    premiumPlanId: planId,
-    subscriptionStartedAt: user.subscriptionStartedAt || now.toISOString(),
-    subscriptionExpiresAt: newExpiry.toISOString(),
-    subscriptionStatus: 'ACTIVE',
-    lastPaymentTranId: tranId,
+  if (findByEmail(userData.email)) throw new Error('An account with this email already exists.');
+  return store.insert({
+    id: userData.id || `u-${require('node:crypto').randomUUID()}`,
+    name: userData.name || 'Adopter', email: userData.email.toLowerCase().trim(),
+    phone: userData.phone || '', role: userData.role || 'USER', status: userData.status || 'Active',
+    avatarUrl: userData.avatarUrl || '', googleId: userData.googleId || null,
+    provider: userData.provider || 'local', emailVerified: userData.emailVerified === true,
+    permissions: userData.permissions || [], adoptionsCount: 0,
+    joinedAt: new Date().toISOString(), lastLoginAt: new Date().toISOString(),
+    preferredPetType: 'All Pets', location: 'Dhaka, Bangladesh', bio: '',
+    isPremium: false, premiumPlanId: null, subscriptionExpiresAt: null,
+    subscriptionStartedAt: null, subscriptionStatus: 'NONE',
   });
-
-  return updated;
 };
-
-const getUserSubscription = (userId) => {
-  let user = findById(userId) || findByEmail(userId);
-  if (!user) return null;
-
-  const now = new Date();
-  let isCurrentlyPremium = Boolean(user.isPremium);
-  let status = user.subscriptionStatus || 'NONE';
-
-  // Check automated expiry
-  if (user.subscriptionExpiresAt) {
+const updateUser = (id, updates) => store.update(id, updates);
+const activateUserSubscription = (userId, planId, durationDays, tranId) => {
+  const { db, transaction } = require('./database');
+  return transaction(() => {
+    const user = findById(userId);
+    if (!user) throw new Error('Cannot grant a subscription to a missing account.');
+    if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 3660) throw new Error('Invalid purchased duration.');
+    if (db.prepare('SELECT tran_id FROM subscription_grants WHERE tran_id = ?').get(tranId)) return user;
+    const now = new Date();
     const expiry = new Date(user.subscriptionExpiresAt);
-    if (expiry <= now) {
-      isCurrentlyPremium = false;
-      status = 'EXPIRED';
-      updateUser(user.id, {
-        isPremium: false,
-        subscriptionStatus: 'EXPIRED',
-      });
-    }
-  }
-
-  const remainingDays = user.subscriptionExpiresAt
-    ? Math.max(0, Math.ceil((new Date(user.subscriptionExpiresAt) - now) / (1000 * 60 * 60 * 24)))
-    : 0;
-
-  return {
-    userId: user.id,
-    userName: user.name,
-    userEmail: user.email,
-    isPremium: isCurrentlyPremium,
-    premiumPlanId: user.premiumPlanId || null,
-    subscriptionStatus: status,
-    subscriptionStartedAt: user.subscriptionStartedAt || null,
-    subscriptionExpiresAt: user.subscriptionExpiresAt || null,
-    remainingDays,
-  };
+    const base = user.isPremium && expiry > now ? expiry : now;
+    const updated = updateUser(user.id, {
+      isPremium: true, premiumPlanId: planId,
+      subscriptionStartedAt: user.subscriptionStartedAt || now.toISOString(),
+      subscriptionExpiresAt: new Date(base.getTime() + durationDays * 86400000).toISOString(),
+      subscriptionStatus: 'ACTIVE', lastPaymentTranId: tranId,
+    });
+    db.prepare('INSERT INTO subscription_grants(tran_id, user_id, granted_at) VALUES (?, ?, ?)')
+      .run(tranId, user.id, now.toISOString());
+    return updated;
+  });
 };
-
-const updateUser = (id, updates) => {
-  const index = usersDb.findIndex((u) => u.id === id);
-  if (index === -1) return null;
-
-  usersDb[index] = {
-    ...usersDb[index],
-    ...updates,
-    id: usersDb[index].id, // Prevent overriding primary ID
-  };
-
-  return usersDb[index];
+const getUserSubscription = (userId) => {
+  const user = findById(userId);
+  if (!user) return null;
+  const now = new Date();
+  const expiry = user.subscriptionExpiresAt ? new Date(user.subscriptionExpiresAt) : null;
+  const active = Boolean(user.isPremium && expiry && expiry > now);
+  const status = active ? 'ACTIVE' : expiry ? 'EXPIRED' : 'NONE';
+  if (user.subscriptionStatus !== status || user.isPremium !== active) updateUser(user.id, { subscriptionStatus: status, isPremium: active });
+  return { userId: user.id, userName: user.name, userEmail: user.email,
+    isPremium: active, premiumPlanId: user.premiumPlanId || null, subscriptionStatus: status,
+    subscriptionStartedAt: user.subscriptionStartedAt || null, subscriptionExpiresAt: user.subscriptionExpiresAt || null,
+    remainingDays: active ? Math.max(0, Math.ceil((expiry - now) / 86400000)) : 0 };
 };
-
-const getAllUsers = () => {
-  return [...usersDb];
-};
-
-module.exports = {
-  usersDb,
-  findByEmail,
-  findByGoogleId,
-  findById,
-  createUser,
-  updateUser,
-  getAllUsers,
-  activateUserSubscription,
-  getUserSubscription,
-};
-
+module.exports = { findByEmail, findByGoogleId, findById, createUser, updateUser, getAllUsers, activateUserSubscription, getUserSubscription };

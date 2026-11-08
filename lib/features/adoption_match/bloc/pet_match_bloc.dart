@@ -215,6 +215,8 @@ class PetMatchBloc extends Bloc<PetMatchEvent, PetMatchState> {
   Future<void> _onSwipeLeft(SwipePetLeft event, Emitter<PetMatchState> emit) async {
     if (state is PetMatchLoaded) {
       final currentState = state as PetMatchLoaded;
+      try { await repository.recordSwipe(event.petId, isLike: false); }
+      catch (e) { emit(PetMatchError('Could not record swipe: $e')); return; }
       final nextIndex = currentState.currentSwipeIndex + 1;
       emit(currentState.copyWith(currentSwipeIndex: nextIndex));
     }
@@ -224,7 +226,8 @@ class PetMatchBloc extends Bloc<PetMatchEvent, PetMatchState> {
     if (state is PetMatchLoaded) {
       final currentState = state as PetMatchLoaded;
       final pet = currentState.pets.firstWhere((p) => p.id == event.petId, orElse: () => currentState.pets.first);
-      await repository.toggleFavorite(event.petId);
+      try { await repository.recordSwipe(event.petId, isLike: true); }
+      catch (e) { emit(PetMatchError('Could not record swipe: $e')); return; }
       final nextIndex = currentState.currentSwipeIndex + 1;
       emit(currentState.copyWith(
         lastMatchedPet: pet,
@@ -237,6 +240,8 @@ class PetMatchBloc extends Bloc<PetMatchEvent, PetMatchState> {
     if (state is PetMatchLoaded) {
       final currentState = state as PetMatchLoaded;
       final pet = currentState.pets.firstWhere((p) => p.id == event.petId, orElse: () => currentState.pets.first);
+      try { await repository.recordSwipe(event.petId, isLike: true); }
+      catch (e) { emit(PetMatchError('Could not record swipe: $e')); return; }
       final nextIndex = currentState.currentSwipeIndex + 1;
       emit(currentState.copyWith(
         lastMatchedPet: pet,
@@ -248,7 +253,12 @@ class PetMatchBloc extends Bloc<PetMatchEvent, PetMatchState> {
   Future<void> _onToggleFavorite(TogglePetFavoriteEvent event, Emitter<PetMatchState> emit) async {
     if (state is PetMatchLoaded) {
       final currentState = state as PetMatchLoaded;
-      await repository.toggleFavorite(event.petId);
+      try {
+        await repository.toggleFavorite(event.petId);
+      } catch (e) {
+        emit(PetMatchError('Could not save this pet: $e'));
+        return;
+      }
       final updatedPets = currentState.pets.map((p) {
         if (p.id == event.petId) {
           return p.copyWith(isFavorite: !p.isFavorite);

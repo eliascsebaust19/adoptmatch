@@ -3,7 +3,7 @@
  * Dynamic persistence for BDT plans editable by Administrators.
  */
 
-let plansDb = [
+const defaultPlans = [
   {
     id: 'plan-monthly',
     name: '1 Month Supporter',
@@ -85,30 +85,27 @@ let plansDb = [
   }
 ];
 
-const getAllPlans = () => {
-  return plansDb.filter(p => p.isActive);
-};
-
-const getPlanById = (id) => {
-  return plansDb.find(p => p.id === id) || null;
-};
-
+const store = require('./recordStore')('plans', defaultPlans);
+const getAllPlans = () => store.all().filter(p => p.isActive);
+const getPlanById = (id) => store.find(id);
 const updatePlan = (id, updates) => {
-  const index = plansDb.findIndex(p => p.id === id);
-  if (index === -1) return null;
-
-  plansDb[index] = {
-    ...plansDb[index],
-    ...updates,
-    updatedAt: new Date().toISOString()
-  };
-
-  return plansDb[index];
+  const current = getPlanById(id);
+  if (!current) return null;
+  const allowed = new Set(['name','nameBn','price','durationDays','tag','isBestValue','isActive','features','featuresBn']);
+  if (!updates || typeof updates !== 'object' || Object.keys(updates).some(key => !allowed.has(key))) {
+    throw new Error('Plan update contains unsupported fields.');
+  }
+  const safe = Object.fromEntries(Object.entries(updates).filter(([key]) => allowed.has(key)));
+  const next = { ...current, ...safe, updatedAt: new Date().toISOString() };
+  const text = (value, max) => typeof value === 'string' && value.trim().length > 0 && value.length <= max;
+  const list = value => Array.isArray(value) && value.length <= 30 && value.every(item => typeof item === 'string' && item.length <= 300);
+  if (!Number.isFinite(next.price) || next.price <= 0 || next.price > 100000 ||
+      !Number.isInteger(next.durationDays) || next.durationDays < 1 || next.durationDays > 3660 ||
+      !text(next.name, 120) || !text(next.nameBn, 160) || !text(next.tag, 80) ||
+      typeof next.isBestValue !== 'boolean' || typeof next.isActive !== 'boolean' ||
+      !list(next.features) || !list(next.featuresBn)) {
+    throw new Error('Plan price, name, duration, flags or features are invalid.');
+  }
+  return store.update(id, next);
 };
-
-module.exports = {
-  getAllPlans,
-  getPlanById,
-  updatePlan
-};
-
+module.exports = { getAllPlans, getPlanById, updatePlan };

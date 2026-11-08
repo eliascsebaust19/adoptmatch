@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 
 class SignatureCanvas extends StatefulWidget {
   final ValueChanged<bool> onSignatureChanged;
+  final ValueChanged<String?>? onSignatureDataChanged;
 
-  const SignatureCanvas({super.key, required this.onSignatureChanged});
+  const SignatureCanvas({super.key, required this.onSignatureChanged, this.onSignatureDataChanged});
 
   @override
   State<SignatureCanvas> createState() => _SignatureCanvasState();
@@ -17,6 +19,18 @@ class _SignatureCanvasState extends State<SignatureCanvas> {
       _points.clear();
     });
     widget.onSignatureChanged(false);
+    widget.onSignatureDataChanged?.call(null);
+  }
+
+  void _emitSignature() {
+    final strokes = <List<List<double>>>[];
+    var current = <List<double>>[];
+    for (final point in _points) {
+      if (point == null) { if (current.isNotEmpty) strokes.add(current); current = []; }
+      else { current.add([point.dx, point.dy]); }
+    }
+    if (current.isNotEmpty) strokes.add(current);
+    widget.onSignatureDataChanged?.call(strokes.isEmpty ? null : jsonEncode({'strokes': strokes}));
   }
 
   @override
@@ -69,18 +83,18 @@ class _SignatureCanvasState extends State<SignatureCanvas> {
                     ),
                   ),
                 GestureDetector(
-                  onPanUpdate: (DragUpdateDetails details) {
-                    final renderBox = context.findRenderObject() as RenderBox?;
-                    if (renderBox != null) {
-                      final localPosition = renderBox.globalToLocal(details.globalPosition);
-                      setState(() {
-                        _points.add(localPosition);
-                      });
-                      widget.onSignatureChanged(true);
-                    }
+                  onPanStart: (details) {
+                    setState(() => _points.add(details.localPosition));
+                    widget.onSignatureChanged(true);
+                    _emitSignature();
                   },
-                  onPanEnd: (DragEndDetails details) {
-                    _points.add(null);
+                  onPanUpdate: (details) {
+                    setState(() => _points.add(details.localPosition));
+                    _emitSignature();
+                  },
+                  onPanEnd: (details) {
+                    setState(() => _points.add(null));
+                    _emitSignature();
                   },
                   child: CustomPaint(
                     painter: _SignaturePainter(points: _points),

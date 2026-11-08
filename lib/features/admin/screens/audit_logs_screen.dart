@@ -11,6 +11,29 @@ class AuditLogsScreen extends StatefulWidget {
 class _AuditLogsScreenState extends State<AuditLogsScreen> {
   final _adminRepo = AdminRepository();
   String _searchQuery = '';
+  String? _adminError;
+  @override
+  void initState() {
+    super.initState();
+    _loadAdminData();
+  }
+  Future<void> _loadAdminData() async {
+    try { await _adminRepo.refresh(); if (mounted) setState(() => _adminError = null); }
+    catch (e) { if (mounted) setState(() => _adminError = 'Could not load server data: $e'); }
+  }
+  Future<void> _runAdminAction(Future<void> action, String success) async {
+    try {
+      await action;
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(_adminRepo.lastSyncError ?? success)));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: const Color(0xFFE11D48), content: Text('Action not saved: $e')));
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -28,6 +51,12 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_adminError != null) Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(children: [Expanded(child: Text(_adminError!,
+              style: const TextStyle(color: Color(0xFFE11D48)))),
+              TextButton(onPressed: _loadAdminData, child: const Text('Retry'))]),
+          ),
           Wrap(
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,

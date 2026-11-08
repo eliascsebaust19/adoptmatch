@@ -2,10 +2,26 @@
  * AdoptMatch - Subscription & SSLCommerz/bKash Payment Verification Test
  */
 
+process.env.ENABLE_PAYMENT_SIMULATOR = 'true';
+process.env.NODE_ENV = 'test';
+process.env.BKASH_OFFICIAL_NUMBER = '01700000000'; // test-only destination, never a real payment account
+
 const assert = require('assert');
 const jwt = require('jsonwebtoken');
 const app = require('./server');
 const { JWT_SECRET } = require('./middleware/rbacMiddleware');
+
+const MEMBER_TOKEN = jwt.sign(
+  { id: 'u-101', email: 'elias3224@gmail.com', role: 'USER', name: 'Elias Ahmed' },
+  JWT_SECRET,
+  { expiresIn: '1h' }
+);
+
+const SHELTER_TOKEN = jwt.sign(
+  { id: 'u-102', email: 'info@careforpaws.bd', role: 'SHELTER', name: 'Care For Paws Staff' },
+  JWT_SECRET,
+  { expiresIn: '1h' }
+);
 
 const ADMIN_TOKEN = jwt.sign(
   { id: 'u-103', email: 'superadmin@adoptmatch.org', role: 'SUPER_ADMIN', name: 'Sarah Rahman' },
@@ -46,7 +62,7 @@ async function runTests() {
     console.log('\n[TEST 3] Initiating SSLCommerz Session for Plan 2 (৳200)...');
     const initRes = await fetch(`${baseUrl}/api/v1/payments/initiate-sslcommerz`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${MEMBER_TOKEN}` },
       body: JSON.stringify({
         planId: 'plan-quarterly',
         userId: 'u-101',
@@ -81,7 +97,9 @@ async function runTests() {
 
     // 5. Verify User Subscription Activated
     console.log('\n[TEST 5] Checking User Subscription Status (GET /api/v1/payments/my-subscription)...');
-    const subRes = await fetch(`${baseUrl}/api/v1/payments/my-subscription?userId=u-101`);
+    const subRes = await fetch(`${baseUrl}/api/v1/payments/my-subscription`, {
+      headers: { Authorization: `Bearer ${MEMBER_TOKEN}` },
+    });
     assert.strictEqual(subRes.status, 200);
     const subData = await subRes.json();
     assert.strictEqual(subData.subscription.isPremium, true);
@@ -93,7 +111,7 @@ async function runTests() {
     console.log('\n[TEST 6] Testing Manual bKash Submission (TrxID + Sender Number)...');
     const manualRes = await fetch(`${baseUrl}/api/v1/payments/manual-bkash`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SHELTER_TOKEN}` },
       body: JSON.stringify({
         planId: 'plan-annual',
         userId: 'u-102',
@@ -108,6 +126,12 @@ async function runTests() {
     assert.strictEqual(manualData.payment.status, 'PENDING_APPROVAL');
     assert.strictEqual(manualData.payment.amount, 499);
     console.log(`✓ Manual bKash submitted! Status: ${manualData.payment.status}, TrxID: ${manualData.payment.trxId}`);
+    const duplicateRes = await fetch(`${baseUrl}/api/v1/payments/manual-bkash`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${MEMBER_TOKEN}` },
+      body: JSON.stringify({ planId: 'plan-monthly', senderPhone: '01712345678', trxId: '9k8j7h6g5f' }),
+    });
+    assert.strictEqual(duplicateRes.status, 409, 'normalized TrxID must be unique across accounts');
+    console.log('✓ Duplicate manual TrxID rejected across accounts');
 
     // 7. Admin Approves Manual bKash Payment
     console.log('\n[TEST 7] Admin Approves Manual bKash Payment...');

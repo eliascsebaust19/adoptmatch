@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:go_router/go_router.dart';
 import '../bloc/auth_bloc.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/shared_widgets.dart';
@@ -30,9 +29,15 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   }
 
   void _verifyOtp() {
-    final otp = _pinControllers.map((c) => c.text).join();
-    context.read<AuthBloc>().add(VerifyPhoneOtpEvent(widget.phoneNumber, otp.isNotEmpty ? otp : '123456'));
-    context.go('/home');
+    final otp = _pinControllers.map((c) => c.text.trim()).join();
+    if (otp.length != 6 || int.tryParse(otp) == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter all 6 digits of the verification code.')),
+      );
+      return;
+    }
+    // Navigation is driven by the authenticated state, never by tapping verify.
+    context.read<AuthBloc>().add(VerifyPhoneOtpEvent(widget.phoneNumber, otp));
   }
 
   @override
@@ -40,7 +45,12 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     final authState = context.watch<AuthBloc>().state;
     final isLoading = authState is AuthLoading;
 
-    return Scaffold(
+    return BlocListener<AuthBloc, AuthState>(
+      listener: (context, state) {
+        if (state is AuthOtpSent) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Verification code sent.')));
+      },
+      child: Scaffold(
       backgroundColor: AppColors.surfaceScaffold,
       appBar: AppBar(
         title: const Text('Phone Verification'),
@@ -62,9 +72,16 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                'We sent a 6-digit one-time code to ${widget.phoneNumber}',
+                'Enter the 6-digit code for ${widget.phoneNumber}',
                 style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
               ),
+              if (authState is AuthFailure) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  authState.errorMessage,
+                  style: const TextStyle(fontSize: 13, color: AppColors.error),
+                ),
+              ],
               const SizedBox(height: AppSpacing.xxxl),
 
               // 6 PIN boxes in a clean card
@@ -133,19 +150,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                     'Didn\'t receive code? Resend SMS',
                     style: TextStyle(color: AppColors.secondary, fontWeight: FontWeight.w600, fontSize: 13),
                   ),
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        backgroundColor: AppColors.secondary,
-                        content: Text('Verification code resent via SMS! (Use 123456)'),
-                      ),
-                    );
-                  },
+                  onPressed: () => context.read<AuthBloc>().add(RequestPhoneOtpEvent(widget.phoneNumber)),
                 ),
               ),
             ],
           ),
         ),
+      ),
       ),
     );
   }

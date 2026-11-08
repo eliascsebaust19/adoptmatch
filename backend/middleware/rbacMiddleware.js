@@ -4,25 +4,31 @@
  */
 
 const jwt = require('jsonwebtoken');
+const userStore = require('../models/userStore');
+const { db } = require('../models/database');
+const crypto = require('node:crypto');
 
-if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
-  throw new Error('FATAL SECURITY ERROR: JWT_SECRET environment variable must be explicitly defined in production!');
+const isBanned = (status) => String(status || '').toUpperCase() === 'BANNED';
+
+if (process.env.NODE_ENV === 'production' && (process.env.JWT_SECRET || '').length < 32) {
+  throw new Error('FATAL SECURITY ERROR: JWT_SECRET must contain at least 32 characters in production!');
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || 'adoptmatch-dev-only-secret-2026';
 
-// Global In-Memory Token Revocation Registry
+// Durable token revocation registry
 // Maps userId -> timestamp (ms) after which previous tokens are deemed invalidated
-const userRevocations = new Map();
-const blacklistedTokens = new Set();
+const metaGet = key => db.prepare('SELECT value FROM metadata WHERE key = ?').get(key)?.value;
+const metaSet = (key, value) => db.prepare('INSERT INTO metadata(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, String(value));
 
 /**
  * Revokes all active JWT sessions and refresh tokens for a user immediately.
  * @param {string} userId
  */
 const revokeUserTokens = (userId) => {
-  const timestamp = Date.now();
-  userRevocations.set(userId, timestamp);
+  // Strictly increase the cutoff even when actions occur in the same millisecond.
+  const timestamp = Math.max(Date.now(), Number(metaGet(`revoked:${userId}`) || 0) + 1);
+  metaSet(`revoked:${userId}`, timestamp);
   return timestamp;
 };
 
@@ -31,7 +37,8 @@ const revokeUserTokens = (userId) => {
  * @param {string} userId
  */
 const clearUserRevocation = (userId) => {
-  userRevocations.delete(userId);
+  // Unbanning never resurrects previously revoked sessions; a fresh login is required.
+  metaSet(`revoked:${userId}`, Math.max(Date.now(), Number(metaGet(`revoked:${userId}`) || 0) + 1));
 };
 
 /**
@@ -40,9 +47,8 @@ const clearUserRevocation = (userId) => {
  * @param {number} tokenIatSeconds
  */
 const isUserRevoked = (userId, tokenIatSeconds) => {
-  if (!userRevocations.has(userId)) return false;
-  const revocationTime = userRevocations.get(userId);
-  return (tokenIatSeconds * 1000) < revocationTime;
+  const cutoff = Number(metaGet(`revoked:${userId}`) || 0);
+  return Boolean(cutoff && tokenIatSeconds * 1000 < cutoff);
 };
 
 /**
@@ -50,7 +56,11 @@ const isUserRevoked = (userId, tokenIatSeconds) => {
  * @param {string} token
  */
 const blacklistToken = (token) => {
-  blacklistedTokens.add(token);
+  try {
+    const decoded = jwt.decode(token);
+    const hash = crypto.createHash('sha256').update(token).digest('hex');
+    metaSet(`logout:${hash}`, decoded?.exp || Math.floor(Date.now() / 1000) + 86400);
+  } catch (_) {}
 };
 
 /**
@@ -71,7 +81,8 @@ const authenticateToken = (req, res, next) => {
   }
 
   // 1. Check if token itself was blacklisted
-  if (blacklistedTokens.has(token)) {
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  if (metaGet(`logout:${tokenHash}`)) {
     return res.status(401).json({
       success: false,
       error: 'Unauthorized',
@@ -81,7 +92,7 @@ const authenticateToken = (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     const userId = decoded.id || decoded.sub;
 
     // 2. Check if user's sessions were revoked (e.g. user banned by admin)
@@ -94,12 +105,28 @@ const authenticateToken = (req, res, next) => {
       });
     }
 
+    // 3. Re-read the authoritative account record so bans, role changes and
+    //    permission changes take effect on the very next request.
+    const account = userStore.findById(userId);
+    if (!account) return res.status(401).json({ success: false, code: 'ACCOUNT_NOT_FOUND',
+      error: 'The account for this session no longer exists.' });
+    if (account && isBanned(account.status)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden',
+        code: 'USER_BANNED',
+        message: 'Your account has been suspended by an administrator. Please contact support.',
+      });
+    }
+
     req.user = {
-      id: userId,
-      email: decoded.email,
-      role: (decoded.role || 'USER').toUpperCase().trim(),
-      name: decoded.name || decoded.user_metadata?.full_name || 'User',
-      permissions: Array.isArray(decoded.permissions) ? decoded.permissions : [],
+      id: account ? account.id : userId,
+      email: account ? account.email : decoded.email,
+      role: String((account ? account.role : decoded.role) || 'USER').toUpperCase().trim(),
+      name: (account ? account.name : decoded.name) || decoded.user_metadata?.full_name || 'User',
+      permissions: Array.isArray(account ? account.permissions : decoded.permissions)
+        ? (account ? account.permissions : decoded.permissions)
+        : [],
     };
     next();
   } catch (err) {

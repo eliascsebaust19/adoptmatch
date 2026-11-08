@@ -1,15 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../shared/widgets/app_network_image.dart';
 
 import '../../../core/models/application_model.dart';
 import '../../../core/models/pet_model.dart';
-import '../../../core/models/appointment_model.dart';
 import '../../../core/repositories/application_repository.dart';
-import '../../../core/repositories/pet_repository.dart';
-import '../../../core/repositories/appointment_repository.dart';
 import '../../../core/repositories/admin_repository.dart';
 import '../../auth/bloc/auth_bloc.dart';
 import '../widgets/admin_kpi_card.dart';
@@ -31,18 +29,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   late TabController _tabController;
 
   final _appRepo = ApplicationRepository();
-  final _petRepo = PetRepository();
-  final _aptRepo = AppointmentRepository();
   final _adminRepo = AdminRepository();
 
   StreamSubscription<List<AdoptionApplication>>? _appSub;
   StreamSubscription<List<Pet>>? _petSub;
-  StreamSubscription<List<AdoptionAppointment>>? _aptSub;
   StreamSubscription<dynamic>? _auditSub;
 
   List<AdoptionApplication> _applications = [];
   List<Pet> _pets = [];
-  List<AdoptionAppointment> _appointments = [];
   bool _isLoading = false;
 
   // Bilingual Mode Toggle (English / বাংলা)
@@ -56,7 +50,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   // Tab-specific filters
   ApplicationStatus? _appFilter;
   String _petFilter = 'all'; // 'all', 'available', 'adopted', 'urgent'
-  AppointmentStatus? _aptFilter;
 
   // Bulk Selection States
   final Set<String> _selectedAppIds = {};
@@ -77,11 +70,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     _appSub = _appRepo.applicationsStream.listen((apps) {
       if (mounted) setState(() => _applications = apps);
     });
-    _petSub = _petRepo.petsStream.listen((pets) {
+    _petSub = _adminRepo.petsStream.listen((pets) {
       if (mounted) setState(() => _pets = pets);
-    });
-    _aptSub = _aptRepo.appointmentsStream.listen((apts) {
-      if (mounted) setState(() => _appointments = apts);
     });
     _auditSub = _adminRepo.auditLogsStream.listen((_) {
       if (mounted) setState(() {});
@@ -93,7 +83,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     _searchController.dispose();
     _appSub?.cancel();
     _petSub?.cancel();
-    _aptSub?.cancel();
     _auditSub?.cancel();
     _tabController.dispose();
     super.dispose();
@@ -101,79 +90,43 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
   Future<void> _loadInitialData() async {
     try {
-      final apps = await _appRepo.getApplications();
-      final pets = await _petRepo.getAllPets();
-      final apts = await _aptRepo.getAppointments();
+      await _adminRepo.refresh();
+      final apps = await _appRepo.getApplications(received: true);
+      final pets = _adminRepo.getPets();
       if (mounted) {
         setState(() {
           _applications = apps;
           _pets = pets;
-          _appointments = apts;
           _isLoading = false;
         });
       }
     } catch (e) {
-      debugPrint('[AdminDashboard] Initial load warning: $e');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: const Color(0xFFE11D48), content: Text('Admin data unavailable: $e')));
     }
   }
 
   // ==========================================
   // ACTION LOGIC & AUDIT TRAIL HELPERS
   // ==========================================
-  void _batchApproveApplications() {
-    if (_selectedAppIds.isEmpty) return;
-    final count = _selectedAppIds.length;
-    final authState = context.read<AuthBloc>().state;
-    final adminName = authState is Authenticated ? authState.user.name : 'Admin';
+  Future<void> _batchApproveApplications() =>
+      _updateApplicationStatuses(_selectedAppIds.toList(), ApplicationStatus.approved, notes: 'Approved from admin dashboard');
+  Future<void> _batchRejectApplications() =>
+      _updateApplicationStatuses(_selectedAppIds.toList(), ApplicationStatus.rejected, notes: 'Rejected from admin dashboard');
 
-    for (final id in _selectedAppIds) {
-      _appRepo.updateApplicationStatus(id, ApplicationStatus.approved, notes: 'Batch approved by $adminName');
+  Future<void> _updateApplicationStatuses(List<String> ids, ApplicationStatus status, {String? notes}) async {
+    var saved = 0; Object? failure;
+    for (final id in ids) {
+      try { await _appRepo.updateApplicationStatus(id, status, notes: notes); saved++; }
+      catch (e) { failure = e; }
     }
-
-    _adminRepo.recordAuditLog(
-      actorName: adminName,
-      action: 'BATCH_APPROVE_APPLICATIONS',
-      target: '$count Applications',
-      details: 'Approved $count adoption requests via bulk batch action queue.',
-    );
-
+    await _loadInitialData();
+    if (!mounted) return;
     setState(() => _selectedAppIds.clear());
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(_isBangla ? '$countটি আবেদন সফলভাবে অনুমোদন করা হয়েছে!' : 'Successfully approved $count applications!'),
-        backgroundColor: const Color(0xFF0D9488),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  void _batchRejectApplications() {
-    if (_selectedAppIds.isEmpty) return;
-    final count = _selectedAppIds.length;
-    final authState = context.read<AuthBloc>().state;
-    final adminName = authState is Authenticated ? authState.user.name : 'Admin';
-
-    for (final id in _selectedAppIds) {
-      _appRepo.updateApplicationStatus(id, ApplicationStatus.rejected, notes: 'Batch declined by $adminName');
-    }
-
-    _adminRepo.recordAuditLog(
-      actorName: adminName,
-      action: 'BATCH_REJECT_APPLICATIONS',
-      target: '$count Applications',
-      details: 'Declined $count adoption requests via bulk batch action queue.',
-    );
-
-    setState(() => _selectedAppIds.clear());
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(_isBangla ? '$countটি আবেদন প্রত্যাখ্যান করা হয়েছে।' : 'Declined $count applications.'),
-        backgroundColor: const Color(0xFFE11D48),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      backgroundColor: failure == null ? const Color(0xFF0D9488) : const Color(0xFFE11D48),
+      content: Text(failure == null ? 'Saved $saved application status changes.' :
+        'Saved $saved of ${ids.length}; server error: $failure')));
   }
 
   void _showPushNotificationDispatcher() {
@@ -289,24 +242,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 final authState = context.read<AuthBloc>().state;
                 final adminName = authState is Authenticated ? authState.user.name : 'Admin';
 
-                _adminRepo.recordAuditLog(
-                  actorName: adminName,
-                  action: 'BROADCAST_PUSH_ALERT',
-                  target: targetAudience,
-                  details: 'Broadcast: "${titleController.text.trim()}". Body: "${messageController.text.trim()}"',
-                );
 
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      _isBangla
-                          ? 'পুশ অ্যালার্ট সফলভাবে ব্রডকাস্ট করা হয়েছে ($targetAudience)!'
-                          : 'Push alert broadcasted successfully to $targetAudience!',
-                    ),
-                    backgroundColor: const Color(0xFF0D9488),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
+
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  backgroundColor: Color(0xFFE11D48),
+                  content: Text('Push broadcasting is not configured. No alert was sent.')));
               },
             ),
           ],
@@ -343,8 +283,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           children: [
             Text(
               _isBangla
-                  ? 'আপনার প্রয়োজনীয় ফরম্যাটে ডাটা এক্সপোর্ট করুন:'
-                  : 'Select report format to download operational metrics & logs:',
+                  ? 'ক্লিপবোর্ডে CSV রিপোর্ট কপি করুন (ফাইল ডাউনলোড নয়):'
+                  : 'Copy a CSV report to the clipboard (no file download):',
               style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
             ),
             const SizedBox(height: 16),
@@ -371,12 +311,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 decoration: BoxDecoration(color: const Color(0xFFE11D48).withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
                 child: const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFFE11D48)),
               ),
-              title: const Text('Shelter Audit Summary (PDF)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-              subtitle: const Text('Official monthly verification & compliance certification', style: TextStyle(fontSize: 11)),
+              title: const Text('System Audit Trail (CSV)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+              subtitle: const Text('Server-recorded administrative actions', style: TextStyle(fontSize: 11)),
               trailing: const Icon(Icons.download_rounded, color: Color(0xFFE11D48)),
               onTap: () {
                 Navigator.pop(ctx);
-                _triggerExportFeedback('Shelter_Performance_Audit.pdf');
+                _triggerExportFeedback('System_Audit_Trail_Export.csv');
               },
             ),
             const Divider(),
@@ -407,59 +347,39 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     );
   }
 
-  void _triggerExportFeedback(String filename) {
-    final authState = context.read<AuthBloc>().state;
-    final adminName = authState is Authenticated ? authState.user.name : 'Admin';
+  String _csvCell(Object? value) {
+    final text = (value ?? '').toString();
+    return '"${text.replaceAll('"', '""')}"';
+  }
 
-    _adminRepo.recordAuditLog(
-      actorName: adminName,
-      action: 'EXPORT_ADMIN_REPORT',
-      target: filename,
-      details: 'Generated and downloaded encrypted operational export file.',
-    );
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                _isBangla ? '$filename সফলভাবে জেনারেট হয়েছে এবং ডাউনলোড রেডি!' : '$filename exported successfully & ready for download!',
-                style: const TextStyle(fontSize: 13),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFF0F172A),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  Future<void> _triggerExportFeedback(String filename) async {
+    if (filename.endsWith('.pdf')) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('PDF export is not configured. No file was generated.')));
+      return;
+    }
+    String csv;
+    if (filename.contains('Applications')) {
+      csv = 'id,pet,applicant,status\n' + _applications.map((a) =>
+        [a.id, a.petName, a.applicantName, a.status.name].map(_csvCell).join(',')).join('\n');
+    } else if (filename.contains('Pet')) {
+      csv = 'id,name,species,breed\n' + _pets.map((p) =>
+        [p.id, p.name, p.species, p.breed].map(_csvCell).join(',')).join('\n');
+    } else {
+      final logs = _adminRepo.getAuditLogs();
+      csv = 'timestamp,actor,action,target\n' + logs.map((l) =>
+        [l.timestamp.toIso8601String(), l.actorName, l.action, l.target].map(_csvCell).join(',')).join('\n');
+    }
+    await Clipboard.setData(ClipboardData(text: csv));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('CSV copied to clipboard. No file download was created.')));
   }
 
   void _handleEmergencyRescueDispatch() {
-    final authState = context.read<AuthBloc>().state;
-    final adminName = authState is Authenticated ? authState.user.name : 'Admin';
-
-    _adminRepo.recordAuditLog(
-      actorName: adminName,
-      action: 'DISPATCH_RESCUE_TEAM',
-      target: 'SOS-Mirpur10',
-      details: 'Emergency rescue unit dispatched for injured puppy report near Mirpur 10.',
-    );
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          _isBangla
-              ? '🚑 ইমার্জেন্সি রেসকিউ টিম ঘটনাস্থলে পাঠানো হয়েছে! কন্টাক্ট নোটিফিকেশন প্রেরিত।'
-              : '🚑 Emergency Rescue Unit dispatched to location! Contact notification sent.',
-        ),
-        backgroundColor: const Color(0xFFE11D48),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      backgroundColor: Color(0xFFE11D48),
+      content: Text('Emergency dispatch is not connected. Contact local rescue services directly.')));
   }
 
   // ==========================================
@@ -469,7 +389,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   Widget build(BuildContext context) {
     final activeRescuesCount = _pets.length;
     final pendingAppsCount = _applications.where((a) => a.status == ApplicationStatus.underReview || a.status == ApplicationStatus.submitted).length;
-    final homeVisitsCount = _appointments.where((apt) => apt.status == AppointmentStatus.confirmed || apt.status == AppointmentStatus.pending).length;
+    final homeVisitsCount = _applications.where((a) => a.status == ApplicationStatus.homeVisitScheduled || a.status == ApplicationStatus.fosterTrial).length;
     final trialFostersCount = _applications.where((a) => a.status == ApplicationStatus.fosterTrial).length;
     final adoptionsCompletedCount = _applications.where((a) => a.status == ApplicationStatus.approved).length;
 
@@ -544,7 +464,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                           icon: const Icon(Icons.pets_rounded, size: 18),
                         ),
                         Tab(
-                          text: _isBangla ? 'ভিজিট (${_appointments.length})' : 'Visits (${_appointments.length})',
+                          text: _isBangla ? 'ভিজিট ($homeVisitsCount)' : 'Visits ($homeVisitsCount)',
                           icon: const Icon(Icons.home_work_outlined, size: 18),
                         ),
                         Tab(
@@ -985,7 +905,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 label: Text(_isBangla ? 'কল দিন' : 'Call Reporter', style: const TextStyle(fontSize: 12)),
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Calling Tanvir Ahmed (+880 1711-234567)...'), duration: Duration(seconds: 2)),
+                    const SnackBar(content: Text('Caller relay is not configured. No call was placed.')),
                   );
                 },
               ),
@@ -1082,7 +1002,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             isSelected: _tabController.index == 2,
             onTap: () {
               setState(() {
-                _aptFilter = AppointmentStatus.confirmed;
                 _tabController.animateTo(2);
               });
             },
@@ -1384,12 +1303,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   ),
                   onPressed: () {
                     _appRepo.updateApplicationStatus(app.id, ApplicationStatus.fosterTrial, notes: 'Moved to 14-day trial foster');
-                    _adminRepo.recordAuditLog(
-                      actorName: 'Admin',
-                      action: 'UPDATE_APP_STATUS',
-                      target: app.id,
-                      details: 'Moved application for ${app.petName} to 14-day trial foster.',
-                    );
+
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Placed on 14-day trial foster!')));
                   },
                   child: const Text('Trial Foster', style: TextStyle(fontSize: 11)),
@@ -1404,12 +1318,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   ),
                   onPressed: () {
                     _appRepo.updateApplicationStatus(app.id, ApplicationStatus.approved, notes: 'Approved by admin dashboard');
-                    _adminRepo.recordAuditLog(
-                      actorName: 'Admin',
-                      action: 'APPROVE_APPLICATION',
-                      target: app.id,
-                      details: 'Application for ${app.petName} approved for adopter ${app.applicantName}.',
-                    );
+
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Application Approved!')));
                   },
                   child: const Text('Approve', style: TextStyle(fontSize: 11)),
@@ -1598,13 +1507,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                             ? '[ADOPTED] ${pet.story}'
                             : pet.story.replaceAll('[ADOPTED] ', '').replaceAll('[ADOPTED]', '');
                         final updated = pet.copyWith(story: newStory);
-                        _petRepo.updatePet(updated);
-                        _adminRepo.recordAuditLog(
-                          actorName: 'Admin',
-                          action: 'TOGGLE_PET_ADOPTED',
-                          target: pet.id,
-                          details: 'Changed pet ${pet.name} status to ${isNowAdopted ? "Adopted" : "Active"}.',
-                        );
+                        _adminRepo.overridePetListing(updated, notes: 'Adoption status changed from admin dashboard')
+                          .then((_) { if (mounted) setState(() {}); })
+                          .catchError((Object e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(backgroundColor: const Color(0xFFE11D48), content: Text('Status not saved: $e'))); });
+
                       },
                     ),
                   ],
@@ -1621,117 +1528,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   // TAB 2: VISITS & APPOINTMENTS
   // ==========================================
   Widget _buildVisitsAndAppointmentsTab() {
-    var filtered = _appointments.where((apt) {
-      if (_aptFilter != null && apt.status != _aptFilter) return false;
-      if (_searchQuery.isNotEmpty) {
-        final q = _searchQuery.toLowerCase();
-        return apt.applicantName.toLowerCase().contains(q) ||
-            apt.petName.toLowerCase().contains(q) ||
-            apt.shelterName.toLowerCase().contains(q);
-      }
-      return true;
-    }).toList();
-
-    return Column(
-      children: [
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Row(
-            children: [
-              _buildAptStatusChip(null, _isBangla ? 'সকল ভিজিট (${_appointments.length})' : 'All Visits (${_appointments.length})'),
-              const SizedBox(width: 8),
-              _buildAptStatusChip(AppointmentStatus.confirmed, _isBangla ? 'নিশ্চিত' : 'Confirmed'),
-              const SizedBox(width: 8),
-              _buildAptStatusChip(AppointmentStatus.pending, _isBangla ? 'বিবেচনাধীন' : 'Pending'),
-              const SizedBox(width: 8),
-              _buildAptStatusChip(AppointmentStatus.completed, _isBangla ? 'সম্পন্ন' : 'Completed'),
-            ],
-          ),
-        ),
-        Expanded(
-          child: filtered.isEmpty
-              ? _buildEmptyState(_isBangla ? 'কোনো ভিজিট শিডিউল নেই' : 'No visits scheduled in this view.')
-              : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
-                  itemCount: filtered.length,
-                  separatorBuilder: (context, index) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final apt = filtered[index];
-                    return _buildAppointmentCard(apt);
-                  },
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAptStatusChip(AppointmentStatus? status, String label) {
-    final isSelected = _aptFilter == status;
-    return ChoiceChip(
-      label: Text(label, style: const TextStyle(fontSize: 12)),
-      selected: isSelected,
-      selectedColor: const Color(0xFF0284C7),
-      labelStyle: TextStyle(color: isSelected ? Colors.white : const Color(0xFF475569), fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
-      backgroundColor: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isSelected ? const Color(0xFF0284C7) : const Color(0xFFE2E8F0))),
-      onSelected: (val) => setState(() => _aptFilter = val ? status : null),
-    );
-  }
-
-  Widget _buildAppointmentCard(AdoptionAppointment apt) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: const Color(0xFF0284C7).withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
-            child: const Icon(Icons.calendar_month_rounded, color: Color(0xFF0284C7), size: 24),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${apt.applicantName} • ${apt.type.displayName}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                ),
-                Text('Pet: ${apt.petName} • Coordinator: ${apt.shelterName}', style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-                const SizedBox(height: 4),
-                Text('Date: ${apt.date.toLocal().toString().substring(0, 10)} • Slot: ${apt.timeSlot}', style: const TextStyle(fontSize: 11, color: Color(0xFF0284C7))),
-              ],
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0284C7),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              minimumSize: const Size(60, 28),
-            ),
-            onPressed: () {
-              _aptRepo.updateAppointmentStatus(apt.id, AppointmentStatus.completed);
-              _adminRepo.recordAuditLog(
-                actorName: 'Admin',
-                action: 'COMPLETE_VISIT',
-                target: apt.id,
-                details: 'Completed visit for pet ${apt.petName} with applicant ${apt.applicantName}.',
-              );
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Visit marked as completed!')));
-            },
-            child: const Text('Complete', style: TextStyle(fontSize: 11)),
-          ),
-        ],
-      ),
-    );
+    final visits = _applications.where((a) =>
+      a.status == ApplicationStatus.homeVisitScheduled || a.status == ApplicationStatus.fosterTrial || a.homeVisitDate != null)
+      .where((a) => _searchQuery.isEmpty || a.applicantName.toLowerCase().contains(_searchQuery) || a.petName.toLowerCase().contains(_searchQuery)).toList();
+    if (visits.isEmpty) return _buildEmptyState('No server-recorded home visits or foster trials.');
+    return ListView.separated(padding: const EdgeInsets.all(16), itemCount: visits.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        final app = visits[index];
+        return Card(child: ListTile(
+          title: Text('${app.petName} • ${app.applicantName}', style: const TextStyle(fontWeight: FontWeight.bold)),
+          subtitle: Text('${app.status.displayName}${app.homeVisitDate == null ? '' : '\n${app.homeVisitDate!.toLocal()}'}'),
+          isThreeLine: true,
+          trailing: ElevatedButton(onPressed: () => _updateApplicationStatuses([app.id],
+            ApplicationStatus.underReview, notes: 'Visit/trial reviewed from admin dashboard'), child: const Text('Record Review')),
+        ));
+      });
   }
 
   // ==========================================
@@ -1758,11 +1570,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               children: [
                 const Text('Adoption Conversion Health', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                 const SizedBox(height: 12),
-                _buildProgressMetric('Vetting to Trial Foster Ratio', 0.82, '82%', const Color(0xFF0D9488)),
-                const SizedBox(height: 10),
-                _buildProgressMetric('Trial Foster to Permanent Adoption', 0.94, '94%', const Color(0xFF10B981)),
-                const SizedBox(height: 10),
-                _buildProgressMetric('Average Review Time', 0.65, '< 24 Hours', const Color(0xFF6366F1)),
+                Builder(builder: (context) {
+                  final total = _applications.length;
+                  final advanced = _applications.where((a) => a.status == ApplicationStatus.fosterTrial || a.status == ApplicationStatus.approved).length;
+                  final approved = _applications.where((a) => a.status == ApplicationStatus.approved).length;
+                  return Column(children: [
+                    _buildProgressMetric('Applications reaching trial/approval', total == 0 ? 0 : advanced / total,
+                      total == 0 ? 'No data' : '$advanced/$total', const Color(0xFF0D9488)),
+                    const SizedBox(height: 10),
+                    _buildProgressMetric('Applications approved', total == 0 ? 0 : approved / total,
+                      total == 0 ? 'No data' : '$approved/$total', const Color(0xFF10B981)),
+                    const SizedBox(height: 10),
+                    _buildProgressMetric('Average Review Time', 0, 'Not measured', const Color(0xFF6366F1)),
+                  ]);
+                }),
               ],
             ),
           ),

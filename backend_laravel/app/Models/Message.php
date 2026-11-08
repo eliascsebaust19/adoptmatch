@@ -14,6 +14,7 @@ class Message extends Model
         'receiver_id',
         'pet_id',
         'message_text',
+        'attachment_url',
         'is_read',
     ];
 

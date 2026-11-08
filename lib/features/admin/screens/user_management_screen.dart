@@ -13,6 +13,29 @@ class UserManagementScreen extends StatefulWidget {
 class _UserManagementScreenState extends State<UserManagementScreen> {
   final _adminRepo = AdminRepository();
   String _searchQuery = '';
+  String? _adminError;
+  @override
+  void initState() {
+    super.initState();
+    _loadAdminData();
+  }
+  Future<void> _loadAdminData() async {
+    try { await _adminRepo.refresh(); if (mounted) setState(() => _adminError = null); }
+    catch (e) { if (mounted) setState(() => _adminError = 'Could not load server data: $e'); }
+  }
+  Future<void> _runAdminAction(Future<void> action, String success) async {
+    try {
+      await action;
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(_adminRepo.lastSyncError ?? success)));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: const Color(0xFFE11D48), content: Text('Action not saved: $e')));
+    }
+  }
+
 
   static const List<Map<String, String>> _availablePermissions = [
     {
@@ -106,16 +129,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
               ),
               onPressed: () {
                 Navigator.pop(ctx);
-                _adminRepo.blockUser(user.id);
-                setState(() {});
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    backgroundColor: const Color(0xFFBE123C),
-                    content: Text(
-                      '${user.name} has been BANNED and active sessions revoked.',
-                    ),
-                  ),
-                );
+                _runAdminAction(_adminRepo.blockUser(user.id), '${user.name} banned; sessions revoked.');
               },
               child: const Text('Confirm Ban & Revoke'),
             ),
@@ -124,16 +138,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       );
     } else {
       // Unblock user
-      _adminRepo.unblockUser(user.id);
-      setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: const Color(0xFF059669),
-          content: Text(
-            '${user.name} has been UNBLOCKED. Active login restored.',
-          ),
-        ),
-      );
+      _runAdminAction(_adminRepo.unblockUser(user.id), '${user.name} unblocked. A fresh login is required.');
     }
   }
 
@@ -343,20 +348,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                 label: const Text('Save Privileges'),
                 onPressed: () {
                   Navigator.pop(ctx);
-                  _adminRepo.updateUserRole(
-                    user.id,
-                    selectedRole,
-                    permissions: selectedPerms,
-                  );
-                  setState(() {});
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      backgroundColor: const Color(0xFF4F46E5),
-                      content: Text(
-                        'Updated privileges for ${user.name}: Role = ${selectedRole.code} with ${selectedPerms.length} permissions.',
-                      ),
-                    ),
-                  );
+                  _runAdminAction(_adminRepo.updateUserRole(user.id, selectedRole,
+                    permissions: selectedPerms), 'Privileges updated for ${user.name}.');
                 },
               ),
             ],
@@ -381,6 +374,12 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_adminError != null) Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(children: [Expanded(child: Text(_adminError!,
+              style: const TextStyle(color: Color(0xFFE11D48)))),
+              TextButton(onPressed: _loadAdminData, child: const Text('Retry'))]),
+          ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [

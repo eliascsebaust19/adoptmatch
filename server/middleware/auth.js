@@ -1,6 +1,10 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'adoptmatch_secret_jwt_key_2026_secure';
+if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET must be set in production.');
+}
+
+const JWT_SECRET = process.env.JWT_SECRET || 'adoptmatch-dev-only-secret-2026';
 
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];

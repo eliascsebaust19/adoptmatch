@@ -25,6 +25,7 @@ class _MySubscriptionScreenState extends State<MySubscriptionScreen> {
   bool _isLoading = true;
   UserSubscription? _subscription;
   List<PaymentRecord> _history = [];
+  String? _loadError;
 
   @override
   void initState() {
@@ -34,14 +35,29 @@ class _MySubscriptionScreenState extends State<MySubscriptionScreen> {
 
   Future<void> _loadSubscriptionDetails() async {
     final authState = context.read<AuthBloc>().state;
-    final userId = authState is Authenticated ? authState.user.id : 'u-101';
+    if (authState is! Authenticated) {
+      if (mounted) {
+        setState(() {
+          _loadError = 'Sign in to view your subscription.';
+          _isLoading = false;
+        });
+      }
+      return;
+    }
 
-    final data = await _repo.fetchMySubscription(userId);
-
-    if (mounted) {
+    try {
+      final data = await _repo.fetchMySubscription(authState.user.id);
+      if (!mounted) return;
       setState(() {
         _subscription = data['subscription'] as UserSubscription?;
         _history = (data['history'] as List<PaymentRecord>?) ?? [];
+        _loadError = null;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadError = 'Could not load your subscription. Pull to retry.\n$e';
         _isLoading = false;
       });
     }
@@ -95,6 +111,37 @@ class _MySubscriptionScreenState extends State<MySubscriptionScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (_loadError != null)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: AppSpacing.lg),
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                        border: Border.all(color: const Color(0xFFFCA5A5)),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.error_outline, color: Color(0xFFB91C1C), size: 20),
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Text(
+                              _loadError!,
+                              style: const TextStyle(fontSize: 13, color: Color(0xFFB91C1C)),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              setState(() => _isLoading = true);
+                              _loadSubscriptionDetails();
+                            },
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    ),
                   // Expiry Reminder Banner if expiring soon
                   if (isExpiringSoon) ...[
                     Container(

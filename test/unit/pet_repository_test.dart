@@ -2,12 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:adoptmatch/core/repositories/pet_repository.dart';
 import '../fixtures/sample_pets.dart';
+import '../helpers/secure_storage_mock.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late PetRepository repository;
 
-  setUp(() {
+  setUp(() async {
+    await installSecureStorageMock();
     SharedPreferences.setMockInitialValues({});
     repository = PetRepository();
     repository.setPetsForTesting(sampleTestPets);

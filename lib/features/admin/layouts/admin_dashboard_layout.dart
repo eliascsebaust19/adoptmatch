@@ -16,6 +16,13 @@ class AdminDashboardLayout extends StatefulWidget {
 
 class _AdminDashboardLayoutState extends State<AdminDashboardLayout> {
   final _adminRepo = AdminRepository();
+  @override
+  void initState() {
+    super.initState();
+    _adminRepo.refresh().then((_) { if (mounted) setState(() {}); }).catchError((Object e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Admin data unavailable: $e')));
+    });
+  }
 
   int _getSelectedIndex(String path) {
     if (path.startsWith('/admin/shelters')) return 1;
@@ -94,8 +101,8 @@ class _AdminDashboardLayoutState extends State<AdminDashboardLayout> {
     final adminName = user?.name ?? 'Administrator';
 
     final kpis = _adminRepo.getKPIs();
-    final pendingShelterCount = kpis.pendingShelters;
-    final flaggedPetCount = kpis.flaggedListings;
+    final pendingShelterCount = kpis?.pendingShelters ?? 0;
+    final flaggedPetCount = kpis?.flaggedListings ?? 0;
 
     return LayoutBuilder(
       builder: (context, constraints) {

@@ -31,10 +31,7 @@ class GoogleAuthService {
     defaultValue: '94403915199-c47hcn9ols70b1gikoamlrgkbqqdmag6.apps.googleusercontent.com',
   );
 
-  static const String backendBaseUrl = String.fromEnvironment(
-    'BACKEND_URL',
-    defaultValue: 'https://adoptmatch-api.onrender.com',
-  );
+  static String get backendBaseUrl => ApiClient.rootUrl;
 
   static final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email', 'profile'],
@@ -84,12 +81,10 @@ class GoogleAuthService {
       }
 
       String? idToken;
-      String? accessToken;
 
       try {
         final authHeaders = await account.authentication;
         idToken = authHeaders.idToken;
-        accessToken = authHeaders.accessToken;
       } catch (tokenErr) {
         debugPrint('[GoogleAuthService] Token retrieval error: $tokenErr');
       }
@@ -104,6 +99,7 @@ class GoogleAuthService {
 
       UserProfile? userProfile;
       bool isNewUser = false;
+      String? backendError;
 
       // Sync with Laravel 11 Backend API
       try {
@@ -117,13 +113,6 @@ class GoogleAuthService {
               body: jsonEncode({
                 'id_token': idToken ?? '',
                 'idToken': idToken ?? '',
-                'accessToken': accessToken,
-                'profile': {
-                  'id': googleId,
-                  'email': userEmail,
-                  'name': userName,
-                  'photoUrl': userPhoto,
-                },
               }),
             )
             .timeout(const Duration(seconds: 35));
@@ -158,36 +147,34 @@ class GoogleAuthService {
               isVerified: true,
             );
           }
+        } else {
+          backendError =
+              'AdoptMatch server rejected the sign-in (HTTP ${res.statusCode}).';
         }
       } catch (backendErr) {
-        debugPrint('[GoogleAuthService] Backend sync notice: $backendErr');
+        backendError = 'Could not reach the AdoptMatch server: $backendErr';
+        debugPrint('[GoogleAuthService] Backend sync failed: $backendErr');
       }
 
-      userProfile ??= UserProfile(
-        id: googleId,
-        name: userName,
-        email: userEmail,
-        phone: '',
-        role: UserRole.adopter,
-        avatarUrl: userPhoto,
-        googlePhotoUrl: userPhoto,
-        location: 'Dhaka, Bangladesh',
-        bio: 'Animal advocate & pet rescuer',
-        preferredPetType: 'All Pets',
-        isVerified: true,
-      );
+      // Fail closed: without a server-issued session there is no signed-in user.
+      if (userProfile == null) {
+        return GoogleAuthResult(
+          success: false,
+          errorMessage: backendError ??
+              'Google verified your account, but the AdoptMatch server did not issue a session. Please try again.',
+        );
+      }
 
-      // Persist user profile in SecureStorage & SharedPreferences
+      final sessionToken = await SecureStorageService.instance.getAuthToken();
+      if (sessionToken == null || sessionToken.isEmpty) {
+        return const GoogleAuthResult(
+          success: false,
+          errorMessage:
+              'The server did not return a session token. Please sign in again.',
+        );
+      }
+
       await SecureStorageService.instance.saveUserProfile(userProfile);
-
-      // Guarantee a persistent token so session is valid even during backend cold starts
-      final currentToken = await SecureStorageService.instance.getAuthToken();
-      if (currentToken == null || currentToken.isEmpty) {
-        final fallbackToken =
-            'sanctum_session_${googleId}_${DateTime.now().millisecondsSinceEpoch}';
-        await SecureStorageService.instance.saveAuthToken(fallbackToken);
-        await ApiClient.saveToken(fallbackToken);
-      }
 
       return GoogleAuthResult(
         success: true,

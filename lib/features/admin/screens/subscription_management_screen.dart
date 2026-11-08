@@ -20,6 +20,7 @@ class _SubscriptionManagementScreenState
     with SingleTickerProviderStateMixin {
   final _repo = SubscriptionRepository();
   bool _isLoading = true;
+  String? _loadError;
 
   Map<String, dynamic> _stats = {
     'totalRevenue': 0.0,
@@ -49,18 +50,27 @@ class _SubscriptionManagementScreenState
   }
 
   Future<void> _loadAdminData() async {
-    final statsData = await _repo.fetchAdminSubscriptionsStats();
-    final payments = await _repo.fetchAdminPayments(
-      status: _selectedFilter,
-      search: _searchQuery,
-    );
-    final plans = await _repo.fetchPlans();
+    try {
+      final statsData = await _repo.fetchAdminSubscriptionsStats();
+      final payments = await _repo.fetchAdminPayments(
+        status: _selectedFilter,
+        search: _searchQuery,
+      );
+      final plans = await _repo.fetchPlans();
 
-    if (mounted) {
+      if (!mounted) return;
       setState(() {
         _stats = (statsData['stats'] as Map<String, dynamic>?) ?? _stats;
         _payments = payments;
         _plans = plans;
+        _loadError = null;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        // Never display placeholder revenue as if it were real.
+        _loadError = 'Could not load subscription data. Check your connection and permissions.\n$e';
         _isLoading = false;
       });
     }
@@ -78,6 +88,13 @@ class _SubscriptionManagementScreenState
         ),
       );
       _loadAdminData();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: AppColors.error,
+          content: Text('Could not approve this payment. No changes were made.'),
+        ),
+      );
     }
   }
 
@@ -131,8 +148,17 @@ class _SubscriptionManagementScreenState
     );
 
     if (confirm == true) {
-      await _repo.rejectManualPayment(tranId, reasonController.text);
+      final rejected = await _repo.rejectManualPayment(tranId, reasonController.text);
       if (!mounted) return;
+      if (!rejected) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: AppColors.error,
+            content: Text('Could not reject this payment. No changes were made.'),
+          ),
+        );
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: AppColors.error,
@@ -252,6 +278,37 @@ class _SubscriptionManagementScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (_loadError != null)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: AppSpacing.lg),
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                        border: Border.all(color: const Color(0xFFFCA5A5)),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.error_outline, color: Color(0xFFB91C1C), size: 20),
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Text(
+                              _loadError!,
+                              style: const TextStyle(fontSize: 13, color: Color(0xFFB91C1C)),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              setState(() => _isLoading = true);
+                              _loadAdminData();
+                            },
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    ),
                   // Header Bar
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,

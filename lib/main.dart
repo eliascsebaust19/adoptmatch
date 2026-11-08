@@ -7,6 +7,7 @@ import 'core/navigation/app_router.dart';
 import 'core/repositories/pet_repository.dart';
 import 'core/services/supabase_service.dart';
 import 'core/services/local_storage_service.dart';
+import 'core/storage/secure_storage_service.dart';
 import 'features/auth/bloc/auth_bloc.dart';
 import 'features/adoption_match/bloc/pet_match_bloc.dart';
 
@@ -14,6 +15,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SupabaseService.initialize();
   await LocalStorageService.instance.init();
+  // Drop plaintext session/profile copies written by older builds.
+  await SecureStorageService.instance.purgeLegacyPlaintextCopies();
   final petRepository = PetRepository();
 
   runApp(AdoptMatchApp(petRepository: petRepository));

@@ -21,6 +21,7 @@ class _ChatInboxScreenState extends State<ChatInboxScreen> {
   List<ChatConversation> _conversations = [];
   bool _isLoading = true;
   String _searchQuery = '';
+  String? _loadError;
   String _selectedFilter = 'All'; // 'All', 'Unread', 'Shelters'
 
   @override
@@ -43,12 +44,11 @@ class _ChatInboxScreenState extends State<ChatInboxScreen> {
   }
 
   Future<void> _loadConversations() async {
-    final convs = await _chatRepo.getConversations();
-    if (mounted) {
-      setState(() {
-        _conversations = convs;
-        _isLoading = false;
-      });
+    try {
+      final convs = await _chatRepo.getConversations();
+      if (mounted) setState(() { _conversations = convs; _isLoading = false; _loadError = null; });
+    } catch (e) {
+      if (mounted) setState(() { _loadError = '$e'; _isLoading = false; });
     }
   }
 
@@ -111,6 +111,9 @@ class _ChatInboxScreenState extends State<ChatInboxScreen> {
           ? const Center(child: CircularProgressIndicator(color: teal))
           : Column(
               children: [
+                if (_loadError != null) Padding(padding: const EdgeInsets.all(12),
+                  child: Row(children: [Expanded(child: Text(_loadError!)),
+                    TextButton(onPressed: _loadConversations, child: const Text('Retry'))])),
                 if (isGuest)
                   Container(
                     width: double.infinity,
@@ -157,7 +160,7 @@ class _ChatInboxScreenState extends State<ChatInboxScreen> {
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Privacy Shield Active: Personal phone numbers are masked. All chat history is encrypted and monitored for ethical adoption welfare.',
+                          'Messages are stored on the adoption server. Do not share NID numbers, payment credentials or other sensitive information in chat.',
                           style: TextStyle(color: Color(0xFF1E40AF), fontSize: 11, fontWeight: FontWeight.w600, height: 1.3),
                         ),
                       ),

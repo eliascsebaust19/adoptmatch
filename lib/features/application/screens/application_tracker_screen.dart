@@ -46,12 +46,14 @@ class _ApplicationTrackerScreenState extends State<ApplicationTrackerScreen> {
   }
 
   Future<void> _loadApplications() async {
-    final apps = await _appRepo.getApplications();
-    if (mounted) {
-      setState(() {
-        _applications = apps;
-        _isLoading = false;
-      });
+    try {
+      final apps = await _appRepo.getApplications();
+      if (mounted) setState(() { _applications = apps; _isLoading = false; });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not sync applications: $e')));
+      }
     }
   }
 
@@ -351,13 +353,13 @@ class _ApplicationStatusCard extends StatelessWidget {
                   style: TextStyle(color: teal, fontSize: 13),
                 ),
                 onPressed: () async {
-                  final pet = await PetRepository().getPetById(app.petId);
-                  if (pet != null) {
-                    final conv = await ChatRepository()
-                        .getOrCreateConversationForPet(pet);
+                  try {
+                    final pet = await PetRepository().getPetById(app.petId);
+                    if (pet == null) throw Exception('The listing is no longer available.');
+                    final conv = await ChatRepository().getOrCreateConversationForPet(pet);
                     if (context.mounted) context.push('/chat/${conv.id}');
-                  } else {
-                    if (context.mounted) context.push('/chat/c-001');
+                  } catch (e) {
+                    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
                   }
                 },
               ),

@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:adoptmatch/core/services/storage_service.dart';
+import 'package:adoptmatch/core/network/api_client.dart';
+import '../helpers/fake_dio_adapter.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -13,17 +15,25 @@ void main() {
       }
     });
 
-    test('uploadProfileImage returns resilient data URI when Supabase uninitialized in test', () async {
-      final dummyBytes = Uint8List.fromList([1, 2, 3, 4, 5]);
-      final result = await StorageService.uploadProfileImage(
-        bytes: dummyBytes,
-        fileName: 'my_avatar.png',
-        userId: 'u-test-99',
-      );
+    test('upload fails closed when no provider confirms the write', () async {
+      final api = ApiClient(baseUrl: 'https://api.example.test/api/v1')
+        ..dio.httpClientAdapter = FakeDioAdapter((_) async => (503, {'status': 'error'}));
+      StorageService.apiClientFactoryForTesting = () => api;
+      addTearDown(() => StorageService.apiClientFactoryForTesting = null);
+      await expectLater(StorageService.uploadProfileImage(
+        bytes: Uint8List.fromList([1, 2, 3]), fileName: 'avatar.png', userId: 'u-test'),
+        throwsException);
+    });
 
-      expect(result.isNotEmpty, true);
-      // In offline / unit test mode, resilient base64 URI is produced without crashing
-      expect(result.startsWith('data:image') || result.startsWith('https://'), true);
+    test('upload returns only a server-confirmed URL', () async {
+      final api = ApiClient(baseUrl: 'https://api.example.test/api/v1')
+        ..dio.httpClientAdapter = FakeDioAdapter((_) async => (201, {
+          'status': 'success', 'url': 'https://cdn.example.test/confirmed.png'}));
+      StorageService.apiClientFactoryForTesting = () => api;
+      addTearDown(() => StorageService.apiClientFactoryForTesting = null);
+      final url = await StorageService.uploadPetImage(
+        bytes: Uint8List.fromList([1, 2, 3]), fileName: 'pet.png');
+      expect(url, 'https://cdn.example.test/confirmed.png');
     });
 
     test('getDirectGooglePhotoUrl safely handles uninitialized or unauthenticated state', () {

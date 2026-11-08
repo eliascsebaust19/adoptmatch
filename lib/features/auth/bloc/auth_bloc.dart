@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
+import '../../../core/models/user_subscription_model.dart';
+import '../../../core/repositories/subscription_repository.dart';
 import '../../../core/services/google_auth_service.dart';
 import '../../../core/services/laravel_auth_service.dart';
 import '../../../core/services/supabase_service.dart';
@@ -167,7 +169,7 @@ class UserProfile extends Equatable {
       email: json['email']?.toString() ?? '',
       phone: json['phone']?.toString() ?? '',
       role: UserRole.fromCode(rawRole),
-      isVerified: json['isVerified'] == true || json['is_verified'] == true || json['email_verified_at'] != null,
+      isVerified: json['isVerified'] == true || json['is_verified'] == true || json['email_verified_at'] != null || json['phone_verified_at'] != null,
       avatarUrl: json['avatarUrl']?.toString() ?? json['avatar']?.toString() ?? '',
       permissions: (json['permissions'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
       location: json['location']?.toString() ?? json['location_city']?.toString() ?? 'Dhaka, Bangladesh',
@@ -331,9 +333,10 @@ class GuestLoginEvent extends AuthEvent {
 
 class UserConfirmedSessionEvent extends AuthEvent {
   final UserProfile user;
-  const UserConfirmedSessionEvent(this.user);
+  final String? accessToken;
+  const UserConfirmedSessionEvent(this.user, {this.accessToken});
   @override
-  List<Object?> get props => [user];
+  List<Object?> get props => [user, accessToken];
 }
 
 class SwitchRoleEvent extends AuthEvent {
@@ -443,12 +446,14 @@ class AuthFailure extends AuthState {
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   UserProfile? _currentUser;
   final AuthRepository _authRepository;
-  final _laravelAuthService = LaravelAuthService();
+  final LaravelAuthService _laravelAuthService;
   StreamSubscription<sb.AuthState>? _supabaseAuthSubscription;
 
-  AuthBloc({UserProfile? initialUser, AuthRepository? authRepository})
+  AuthBloc({UserProfile? initialUser, AuthRepository? authRepository,
+      LaravelAuthService? laravelAuthService})
       : _currentUser = initialUser,
         _authRepository = authRepository ?? AuthRepository(),
+        _laravelAuthService = laravelAuthService ?? LaravelAuthService(),
         super(initialUser != null ? Authenticated(initialUser) : AuthInitial()) {
     on<CheckSessionEvent>(_onCheckSession);
     on<SignUpWithEmailEvent>(_onSignUpWithEmail);
@@ -481,8 +486,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
                 user.userMetadata?['full_name'] as String? ??
                 user.email?.split('@').first ??
                 'User';
-            final rawRole = user.userMetadata?['role'] as String?;
+            final rawRole = user.appMetadata?['role'] as String?;
             final userRole = UserRole.fromCode(rawRole);
+            if (userRole.hasAdminAccess && user.emailConfirmedAt == null) return;
             add(
               UserConfirmedSessionEvent(
                 UserProfile(
@@ -493,6 +499,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
                   role: userRole,
                   isVerified: user.emailConfirmedAt != null,
                 ),
+                accessToken: session.accessToken,
               ),
             );
           }
@@ -553,20 +560,28 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
             password: event.password,
             fullName: event.fullName.trim(),
           );
-          if (response.user != null) {
-            final token = response.session?.accessToken ?? 'sb_token_${response.user!.id}';
-            await SecureStorageService.instance.saveAuthToken(token);
+          final session = response.session;
+          if (response.user != null && session != null) {
+            await SecureStorageService.instance.saveAuthToken(session.accessToken);
             final user = UserProfile(
               id: response.user!.id,
               name: event.fullName.trim(),
               email: emailLower,
               phone: '',
               role: UserRole.adopter,
-              isVerified: true,
+              isVerified: response.user!.emailConfirmedAt != null,
             );
             await SecureStorageService.instance.saveUserProfile(user);
             _currentUser = user;
             emit(Authenticated(user, isNewUser: true));
+            return;
+          }
+          if (response.user != null && session == null) {
+            // Account created but the email is not confirmed yet: no session exists.
+            emit(AuthSignUpConfirmationPending(
+              email: emailLower,
+              message: 'Account created. Confirm your email address, then sign in.',
+            ));
             return;
           }
         } catch (sbErr) {
@@ -574,21 +589,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         }
       }
 
-      // Offline resilient account creation when servers are unreachable
-      final token = 'session_${DateTime.now().millisecondsSinceEpoch}';
-      final user = UserProfile(
-        id: 'u-${emailLower.hashCode.abs()}',
-        name: event.fullName.trim(),
-        email: emailLower,
-        phone: '',
-        role: UserRole.adopter,
-        avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
-        isVerified: true,
-      );
-      await SecureStorageService.instance.saveAuthToken(token);
-      await SecureStorageService.instance.saveUserProfile(user);
-      _currentUser = user;
-      emit(Authenticated(user, isNewUser: true));
+      // Fail closed: an account only exists once a server has created it.
+      emit(const AuthFailure(
+        'Could not create your account. The authentication server is unreachable — please try again.',
+      ));
     } catch (e) {
       emit(AuthFailure(e.toString()));
     }
@@ -624,13 +628,17 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           );
           final user = response.user;
           if (user != null) {
-            final token = response.session?.accessToken ?? 'sb_token_${user.id}';
+            final token = response.session?.accessToken;
+            if (token == null || token.isEmpty || user.emailConfirmedAt == null) {
+              await SupabaseService.signOut();
+              throw sb.AuthException('A verified server session is required.');
+            }
             await SecureStorageService.instance.saveAuthToken(token);
             final fullName =
                 user.userMetadata?['full_name'] as String? ??
                 user.email?.split('@').first ??
                 'User';
-            final rawRole = user.userMetadata?['role'] as String?;
+            final rawRole = user.appMetadata?['role'] as String?;
             final userRole = UserRole.fromCode(rawRole);
             _currentUser = UserProfile(
               id: user.id,
@@ -694,9 +702,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           );
           final user = response.user;
           if (user != null) {
-            final rawRole = user.userMetadata?['role'] as String?;
+            final rawRole = user.appMetadata?['role'] as String?;
             final userRole = UserRole.fromCode(rawRole);
-            if (!userRole.hasAdminAccess) {
+            if (!userRole.hasAdminAccess || user.emailConfirmedAt == null) {
               await SupabaseService.signOut();
               emit(
                 const AuthFailure(
@@ -705,7 +713,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
               );
               return;
             }
-            final token = response.session?.accessToken ?? 'sb_admin_token';
+            final token = response.session?.accessToken;
+            if (token == null || token.isEmpty) {
+              await SupabaseService.signOut();
+              throw sb.AuthException('A verified server session is required.');
+            }
             await SecureStorageService.instance.saveAuthToken(token);
             final fullName =
                 user.userMetadata?['full_name'] as String? ?? 'Administrator';
@@ -737,31 +749,36 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
-  Future<void> _onRequestOtp(
-    RequestPhoneOtpEvent event,
-    Emitter<AuthState> emit,
-  ) async {
+  Future<void> _onRequestOtp(RequestPhoneOtpEvent event, Emitter<AuthState> emit) async {
     emit(AuthLoading());
-    final phone = event.phoneNumber.trim();
-    if (phone.length < 11) {
-      emit(const AuthFailure('Please provide a valid 11-digit mobile phone number.'));
-      return;
+    try {
+      final phone = LaravelAuthService.normalizePhone(event.phoneNumber);
+      await _laravelAuthService.requestPhoneOtp(phone);
+      emit(AuthOtpSent(phone));
+    } catch (e) {
+      emit(AuthFailure('OTP request failed: $e'));
     }
-    // Fail closed: Inform user that SMS gateway integration is disabled for this build
-    emit(const AuthFailure('Direct SMS OTP gateway is not configured on this server. Please authenticate with Google or verified Email.'));
   }
 
-  Future<void> _onVerifyOtp(
-    VerifyPhoneOtpEvent event,
-    Emitter<AuthState> emit,
-  ) async {
+  Future<void> _onVerifyOtp(VerifyPhoneOtpEvent event, Emitter<AuthState> emit) async {
     emit(AuthLoading());
     final otp = event.otp.trim();
-    if (otp.length != 6) {
+    if (otp.length != 6 || int.tryParse(otp) == null) {
       emit(const AuthFailure('Invalid OTP. Please enter the 6-digit verification code.'));
       return;
     }
-    emit(const AuthFailure('OTP verification server unavailable. Please authenticate with Google.'));
+    try {
+      final data = await _laravelAuthService.verifyPhoneOtp(event.phoneNumber, otp);
+      final token = data['access_token']?.toString();
+      if (token == null || token.isEmpty) throw Exception('The server did not issue a session token.');
+      final user = UserProfile.fromJson(Map<String, dynamic>.from(data['user'] as Map));
+      await SecureStorageService.instance.saveAuthToken(token);
+      await SecureStorageService.instance.saveUserProfile(user);
+      _currentUser = user;
+      emit(Authenticated(user));
+    } catch (e) {
+      emit(AuthFailure('OTP verification failed: $e'));
+    }
   }
 
   Future<void> _onSocialLogin(
@@ -802,18 +819,20 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     );
   }
 
-  void _onUserConfirmedSession(
+  Future<void> _onUserConfirmedSession(
     UserConfirmedSessionEvent event,
     Emitter<AuthState> emit,
-  ) {
+  ) async {
+    if (event.accessToken != null && event.accessToken!.isNotEmpty) {
+      await SecureStorageService.instance.saveAuthToken(event.accessToken!);
+    }
+    await SecureStorageService.instance.saveUserProfile(event.user);
     _currentUser = event.user;
     emit(Authenticated(_currentUser!));
   }
 
   void _onSwitchRole(SwitchRoleEvent event, Emitter<AuthState> emit) {
-    if (_currentUser == null) return;
-    _currentUser = _currentUser!.copyWith(role: event.role);
-    emit(Authenticated(_currentUser!));
+    emit(const AuthFailure('Role changes must be granted by the server. Local role elevation is disabled.'));
   }
 
   Future<void> _onLogout(LogoutEvent event, Emitter<AuthState> emit) async {
@@ -828,13 +847,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     UpdateUserProfileEvent event,
     Emitter<AuthState> emit,
   ) async {
-    final base = _currentUser ?? const UserProfile(
-      id: 'usr-updated',
-      name: 'User',
-      email: '',
-      phone: '',
-    );
-
+    if (_currentUser == null) {
+      emit(const AuthFailure('Sign in before updating your profile.'));
+      return;
+    }
+    final base = _currentUser!;
     final updated = base.copyWith(
       name: (event.name != null && event.name!.trim().isNotEmpty)
           ? event.name!.trim()
@@ -880,36 +897,44 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     ChangePasswordEvent event,
     Emitter<AuthState> emit,
   ) async {
-    try {
-      if (SupabaseService.isInitialized &&
-          SupabaseService.auth.currentUser != null) {
-        await SupabaseService.updatePassword(event.newPassword);
-      }
-    } catch (_) {}
+    emit(const AuthFailure('Password change is not configured for this account API. No password was changed.'));
   }
 
-  void _onActivateSubscription(
+  /// Refreshes the premium entitlement from the server. The requested plan and
+  /// duration are only a hint: the backend decides what was actually paid for.
+  Future<void> _onActivateSubscription(
     ActivateSubscriptionEvent event,
     Emitter<AuthState> emit,
-  ) {
+  ) async {
     if (_currentUser == null) return;
-    final now = DateTime.now();
-    DateTime baseDate = now;
-    if (_currentUser!.isPremium && _currentUser!.premiumExpiresAt != null) {
-      if (_currentUser!.premiumExpiresAt!.isAfter(now)) {
-        baseDate = _currentUser!.premiumExpiresAt!;
+    emit(AuthLoading());
+    try {
+      final result = await SubscriptionRepository()
+          .fetchMySubscription(_currentUser!.id);
+      final subscription = result['subscription'] as UserSubscription?;
+      if (subscription == null) {
+        emit(Authenticated(_currentUser!));
+        emit(const AuthFailure('Could not read your subscription status. Please try again.'));
+        return;
       }
-    }
-    final newExpiry = baseDate.add(Duration(days: event.durationDays));
 
-    _currentUser = _currentUser!.copyWith(
-      isPremium: true,
-      premiumPlanId: event.planId,
-      premiumExpiresAt: newExpiry,
-      subscriptionStatus: 'ACTIVE',
-    );
-    SecureStorageService.instance.saveUserProfile(_currentUser!);
-    emit(Authenticated(_currentUser!));
+      _currentUser = _currentUser!.copyWith(
+        isPremium: subscription.isPremium,
+        premiumPlanId: subscription.planId,
+        premiumExpiresAt: subscription.expiresAt,
+        subscriptionStatus: subscription.status,
+      );
+      await SecureStorageService.instance.saveUserProfile(_currentUser!);
+      emit(Authenticated(_currentUser!));
+      if (!subscription.isPremium) {
+        emit(const AuthFailure(
+          'No verified payment found yet. Premium activates once your transaction is confirmed.',
+        ));
+      }
+    } catch (e) {
+      emit(Authenticated(_currentUser!));
+      emit(AuthFailure('Could not verify your payment: $e'));
+    }
   }
 
   @override

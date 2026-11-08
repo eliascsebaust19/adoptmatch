@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../auth/bloc/auth_bloc.dart';
 
 /// Shows a secure dialog requesting the Shelter Coordinator password.
@@ -10,7 +9,8 @@ void showShelterAccessDialog(BuildContext context) {
   showDialog(
     context: context,
     barrierDismissible: false,
-    builder: (dialogCtx) => const _ShelterAccessDialog(),
+    builder: (dialogCtx) => BlocProvider.value(
+      value: context.read<AuthBloc>(), child: const _ShelterAccessDialog()),
   );
 }
 
@@ -23,7 +23,7 @@ class _ShelterAccessDialog extends StatefulWidget {
 
 class _ShelterAccessDialogState extends State<_ShelterAccessDialog> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController(text: 'shelter@adoptmatch.com');
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
@@ -36,56 +36,31 @@ class _ShelterAccessDialogState extends State<_ShelterAccessDialog> {
     super.dispose();
   }
 
-  void _verifyAndProceed() async {
+  void _verifyAndProceed() {
     setState(() => _errorMessage = null);
-
     if (!_formKey.currentState!.validate()) return;
-
-    final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
-
     setState(() => _isLoading = true);
-
-    // Recognized Shelter/Admin passwords: Shelter@123456, Admin@123456, SuperAdmin@123456
-    final isValidPass = (password == 'Shelter@123456' ||
-        password == 'Admin@123456' ||
-        password == 'SuperAdmin@123456');
-
-    if (!isValidPass) {
-      await Future.delayed(const Duration(milliseconds: 350));
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'ভুল পাসওয়ার্ড! সঠিক শেল্টার পাসওয়ার্ড দিন।\n(Incorrect password! Please provide correct shelter coordinator password)';
-      });
-      return;
-    }
-
-    // Authenticate / elevate role
-    final authBloc = context.read<AuthBloc>();
-    authBloc.add(LoginWithEmailEvent(email, password));
-
-    await Future.delayed(const Duration(milliseconds: 400));
-    if (!mounted) return;
-
-    setState(() => _isLoading = false);
-    Navigator.of(context).pop(); // Close dialog
-
-    // Navigate to Shelter Admin Dashboard
-    context.push('/shelter/admin');
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('শেল্টার অ্যাক্সেস সফল! (Shelter Access Granted)'),
-        backgroundColor: AppColors.secondary,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    context.read<AuthBloc>().add(AdminLoginWithEmailEvent(
+      _emailController.text.trim(), _passwordController.text.trim()));
   }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
+    return BlocListener<AuthBloc, AuthState>(
+      listener: (context, state) {
+        if (state is Authenticated && (state.user.role.isShelter || state.user.role.isAdmin)) {
+          final router = GoRouter.of(context);
+          Navigator.of(context).pop();
+          router.push('/shelter/admin');
+        } else if (state is Authenticated) {
+          setState(() { _isLoading = false; _errorMessage = 'This account is not authorized for the shelter desk.'; });
+        } else if (state is AuthFailure) {
+          setState(() { _isLoading = false; _errorMessage = state.errorMessage; });
+        } else if (state is AuthLoading) {
+          setState(() => _isLoading = true);
+        }
+      },
+      child: Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       elevation: 10,
       backgroundColor: Colors.white,
@@ -286,6 +261,7 @@ class _ShelterAccessDialogState extends State<_ShelterAccessDialog> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

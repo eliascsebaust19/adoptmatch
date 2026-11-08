@@ -7,30 +7,41 @@ import '../models/subscription_plan_model.dart';
 import '../models/payment_record_model.dart';
 import '../models/user_subscription_model.dart';
 import '../storage/secure_storage_service.dart';
+import '../network/api_client.dart';
 
 class SubscriptionRepository {
   static final SubscriptionRepository _instance =
       SubscriptionRepository._internal();
+
+  http.Client _client = http.Client();
+  void configureForTesting(http.Client client) { _client = client; _cachedPlans = const []; officialBkashNumber = null; }
   factory SubscriptionRepository() => _instance;
   SubscriptionRepository._internal();
 
   /// Configurable backend URL pointing to deployed production API by default
-  String get baseUrl => const String.fromEnvironment(
-    'BACKEND_URL',
-    defaultValue: 'https://adoptmatch-api.onrender.com',
-  );
+  String get baseUrl => ApiClient.rootUrl;
 
-  /// Official bKash support & manual payment number
-  String officialBkashNumber = '01711234567';
+  /// Reads the stored session token so every request is attributable to a user.
+  Future<Map<String, String>> _authHeaders({bool json = false}) async {
+    final token = await SecureStorageService.instance.getAuthToken();
+    return {
+      if (json) 'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+    };
+  }
 
-  /// Cached plans
-  List<SubscriptionPlan> _cachedPlans = SubscriptionPlan.defaultPlans;
+  /// Only a destination explicitly configured by the server may be displayed.
+  String? officialBkashNumber;
+
+  /// Last successfully loaded catalog; never used as a checkout price authority.
+  List<SubscriptionPlan> _cachedPlans = const [];
   List<SubscriptionPlan> get cachedPlans => _cachedPlans;
 
   /// Fetch all active subscription plans
   Future<List<SubscriptionPlan>> fetchPlans() async {
     try {
-      final response = await http
+      final response = await _client
           .get(Uri.parse('$baseUrl/api/v1/payments/plans'))
           .timeout(const Duration(seconds: 4));
 
@@ -47,51 +58,51 @@ class SubscriptionRepository {
           return _cachedPlans;
         }
       }
+      throw Exception('The server returned no active subscription plans.');
     } catch (e) {
-      debugPrint(
-        '[SubscriptionRepository] fetchPlans warning, using fallback: $e',
-      );
+      debugPrint('[SubscriptionRepository] fetchPlans error: $e');
+      rethrow;
     }
-    return _cachedPlans;
   }
 
   /// Fetch official bKash transfer number
   Future<String> fetchBkashNumber() async {
+    officialBkashNumber = null;
     try {
-      final response = await http
+      final response = await _client
           .get(Uri.parse('$baseUrl/api/v1/payments/bkash-number'))
           .timeout(const Duration(seconds: 4));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
-        if (data['bkashNumber'] != null) {
-          officialBkashNumber = data['bkashNumber'] as String;
-          return officialBkashNumber;
+        final number = data['bkashNumber'];
+        if (data['configured'] == true && number is String &&
+            RegExp(r'^01[3-9][0-9]{8}$').hasMatch(number)) {
+          officialBkashNumber = number;
+          return number;
         }
       }
-    } catch (_) {}
-    return officialBkashNumber;
+      throw Exception('Manual bKash payments are not configured. Do not send money.');
+    } catch (e) {
+      officialBkashNumber = null;
+      rethrow;
+    }
   }
 
   /// Initiate SSLCommerz Gateway Session (Server-side generated session URL)
   Future<Map<String, dynamic>> initiateSslCommerzPayment({
     required String planId,
-    required String userId,
-    required String userName,
-    required String userEmail,
     String? userPhone,
   }) async {
     try {
-      final response = await http
+      final response = await _client
           .post(
             Uri.parse('$baseUrl/api/v1/payments/initiate-sslcommerz'),
-            headers: {'Content-Type': 'application/json'},
+            headers: await _authHeaders(json: true),
+            // The server derives the account from the bearer token.
             body: jsonEncode({
               'planId': planId,
-              'userId': userId,
-              'userName': userName,
-              'userEmail': userEmail,
-              'userPhone': userPhone ?? '+880 1711 234567',
+              if (userPhone != null && userPhone.isNotEmpty) 'userPhone': userPhone,
             }),
           )
           .timeout(const Duration(seconds: 6));
@@ -114,22 +125,16 @@ class SubscriptionRepository {
   /// Submit Manual bKash Payment (Pending Admin Approval)
   Future<PaymentRecord> submitManualBkashPayment({
     required String planId,
-    required String userId,
-    required String userName,
-    required String userEmail,
     required String senderPhone,
     required String trxId,
   }) async {
     try {
-      final response = await http
+      final response = await _client
           .post(
             Uri.parse('$baseUrl/api/v1/payments/manual-bkash'),
-            headers: {'Content-Type': 'application/json'},
+            headers: await _authHeaders(json: true),
             body: jsonEncode({
               'planId': planId,
-              'userId': userId,
-              'userName': userName,
-              'userEmail': userEmail,
               'senderPhone': senderPhone,
               'trxId': trxId,
             }),
@@ -152,40 +157,35 @@ class SubscriptionRepository {
   }
 
   /// Fetch user's active subscription and payment history
+  /// Throws on failure so callers can show an error instead of assuming the
+  /// account has no subscription.
   Future<Map<String, dynamic>> fetchMySubscription(String userId) async {
-    try {
-      final response = await http
-          .get(
-            Uri.parse(
-              '$baseUrl/api/v1/payments/my-subscription?userId=$userId',
-            ),
-          )
-          .timeout(const Duration(seconds: 4));
+    final response = await _client
+        .get(
+          Uri.parse('$baseUrl/api/v1/payments/my-subscription'),
+          headers: await _authHeaders(),
+        )
+        .timeout(const Duration(seconds: 10));
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final subJson = data['subscription'] as Map<String, dynamic>?;
-        final historyRaw = data['history'] as List<dynamic>?;
-
-        final subscription = subJson != null
-            ? UserSubscription.fromJson(subJson)
-            : UserSubscription.free(userId: userId);
-
-        final history = historyRaw != null
-            ? historyRaw
-                  .map((e) => PaymentRecord.fromJson(e as Map<String, dynamic>))
-                  .toList()
-            : <PaymentRecord>[];
-
-        return {'subscription': subscription, 'history': history};
-      }
-    } catch (e) {
-      debugPrint('[SubscriptionRepository] fetchMySubscription fallback: $e');
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Could not load subscription (HTTP ${response.statusCode}).',
+      );
     }
 
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final subJson = data['subscription'] as Map<String, dynamic>?;
+    final historyRaw = data['history'] as List<dynamic>?;
+
     return {
-      'subscription': UserSubscription.free(userId: userId),
-      'history': <PaymentRecord>[],
+      'subscription': subJson != null
+          ? UserSubscription.fromJson(subJson)
+          : (throw Exception('The server returned no subscription record.')),
+      'history': historyRaw != null
+          ? historyRaw
+                .map((e) => PaymentRecord.fromJson(e as Map<String, dynamic>))
+                .toList()
+          : <PaymentRecord>[],
     };
   }
 
@@ -197,33 +197,23 @@ class SubscriptionRepository {
   Future<Map<String, dynamic>> fetchAdminSubscriptionsStats([
     String? token,
   ]) async {
-    try {
-      final response = await http
-          .get(
-            Uri.parse('$baseUrl/api/v1/admin/subscriptions'),
-            headers: {
-              'Content-Type': 'application/json',
-              if (token != null) 'Authorization': 'Bearer $token',
-            },
-          )
-          .timeout(const Duration(seconds: 5));
+    final headers = await _authHeaders(json: true);
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+    final response = await _client
+        .get(
+          Uri.parse('$baseUrl/api/v1/admin/subscriptions'),
+          headers: headers,
+        )
+        .timeout(const Duration(seconds: 10));
 
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body) as Map<String, dynamic>;
-      }
-    } catch (_) {}
-
-    return {
-      'success': true,
-      'stats': {
-        'totalRevenue': 1398.0,
-        'currency': 'BDT',
-        'successfulTransactionsCount': 4,
-        'pendingApprovalsCount': 1,
-        'activePremiumUsersCount': 2,
-      },
-      'plans': _cachedPlans,
-    };
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Could not load subscription statistics (HTTP ${response.statusCode}).',
+      );
+    }
+    return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
   /// Fetch all payments for Admin review (filter by status or search)
@@ -239,34 +229,32 @@ class SubscriptionRepository {
 
       final uri = Uri.parse('$baseUrl/api/v1/admin/payments')
           .replace(queryParameters: queryParams);
-      final response = await http
-          .get(
-            uri,
-            headers: {if (token != null) 'Authorization': 'Bearer $token'},
-          )
-          .timeout(const Duration(seconds: 5));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final rawList = data['data'] as List<dynamic>?;
-        if (rawList != null) {
-          return rawList
-              .map((e) => PaymentRecord.fromJson(e as Map<String, dynamic>))
-              .toList();
-        }
+      final headers = await _authHeaders();
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
       }
-    } catch (e) {
-      debugPrint('[SubscriptionRepository] fetchAdminPayments fallback: $e');
-    }
+      final response = await _client
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 10));
 
-    return [];
+      if (response.statusCode != 200) {
+        throw Exception('Could not load payments (HTTP ${response.statusCode}).');
+      }
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final rawList = data['data'] as List<dynamic>?;
+      if (rawList == null) throw Exception('The payment ledger response was invalid.');
+      return rawList.map((e) => PaymentRecord.fromJson(e as Map<String, dynamic>)).toList();
+    } catch (e) {
+      debugPrint('[SubscriptionRepository] fetchAdminPayments error: $e');
+      rethrow;
+    }
   }
 
   /// Admin approves a pending manual bKash payment
   Future<bool> approveManualPayment(String tranId, [String? token]) async {
     try {
       final effectiveToken = token ?? await SecureStorageService.instance.getAuthToken();
-      final response = await http
+      final response = await _client
           .post(
             Uri.parse('$baseUrl/api/v1/admin/payments/$tranId/approve'),
             headers: {
@@ -291,7 +279,7 @@ class SubscriptionRepository {
   ]) async {
     try {
       final effectiveToken = token ?? await SecureStorageService.instance.getAuthToken();
-      final response = await http
+      final response = await _client
           .post(
             Uri.parse('$baseUrl/api/v1/admin/payments/$tranId/reject'),
             headers: {
@@ -316,12 +304,12 @@ class SubscriptionRepository {
     String? token,
   ]) async {
     try {
-      final response = await http
+      final response = await _client
           .put(
             Uri.parse('$baseUrl/api/v1/admin/plans/$planId'),
             headers: {
-              'Content-Type': 'application/json',
-              if (token != null) 'Authorization': 'Bearer $token',
+              ...await _authHeaders(json: true),
+              if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
             },
             body: jsonEncode(updates),
           )

@@ -24,7 +24,8 @@ const {
   JWT_SECRET,
 } = require('../middleware/rbacMiddleware');
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '94403915199-50ug4q14m66gn3pjmhh441givdf0etie.apps.googleusercontent.com';
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ||
+  (process.env.NODE_ENV === 'production' ? '' : '94403915199-50ug4q14m66gn3pjmhh441givdf0etie.apps.googleusercontent.com');
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 /**
@@ -38,6 +39,10 @@ async function verifyGoogleToken(idToken) {
       audience: GOOGLE_CLIENT_ID,
     });
     const payload = ticket.getPayload();
+    const issuerOk = ['accounts.google.com', 'https://accounts.google.com'].includes(payload.iss);
+    if (!issuerOk || !payload.sub || !payload.exp || payload.exp * 1000 <= Date.now()) {
+      throw new Error('Google token issuer, subject or expiry is invalid.');
+    }
     if (!payload.email_verified) {
       throw new Error('Google account email is not verified.');
     }
@@ -58,6 +63,10 @@ async function verifyGoogleToken(idToken) {
             // Cryptographic audience and verification checks
             if (data.aud !== GOOGLE_CLIENT_ID) {
               return reject(new Error(`Invalid token audience: ${data.aud}. Expected ${GOOGLE_CLIENT_ID}`));
+            }
+            if (!['accounts.google.com', 'https://accounts.google.com'].includes(data.iss) ||
+                !data.sub || !data.exp || Number(data.exp) * 1000 <= Date.now()) {
+              return reject(new Error('Google token issuer, subject or expiry is invalid.'));
             }
             if (data.email_verified !== 'true' && data.email_verified !== true) {
               return reject(new Error('Google email is not verified.'));
@@ -105,7 +114,10 @@ function generateTokens(user) {
 router.post('/google', async (req, res) => {
   try {
     const idToken = req.body.idToken || req.body.id_token;
-
+    if (!GOOGLE_CLIENT_ID) {
+      return res.status(503).json({ success: false, code: 'GOOGLE_AUTH_NOT_CONFIGURED',
+        error: 'Google sign-in is not configured on this server.' });
+    }
     if (!idToken) {
       return res.status(400).json({
         success: false,
@@ -158,7 +170,12 @@ router.post('/google', async (req, res) => {
       const existingUserByEmail = findByEmail(email);
 
       if (existingUserByEmail) {
-        // Link accounts without duplicating the user!
+        if (['ADMIN', 'SUPER_ADMIN', 'MODERATOR'].includes(existingUserByEmail.role) ||
+            (existingUserByEmail.googleId && existingUserByEmail.googleId !== googleId)) {
+          return res.status(409).json({ success: false, code: 'ACCOUNT_LINKING_DENIED',
+            error: 'This account cannot be linked automatically. Contact support.' });
+        }
+        // Only ordinary, previously unlinked accounts may link by verified email.
         console.log(`[AUTH] Linking Google account (${googleId}) to existing user: ${existingUserByEmail.email}`);
         user = updateUser(existingUserByEmail.id, {
           googleId,
@@ -185,7 +202,7 @@ router.post('/google', async (req, res) => {
     }
 
     // Check if user has been banned
-    if (user.status === 'Banned') {
+    if (String(user.status || '').toUpperCase() === 'BANNED') {
       return res.status(403).json({
         success: false,
         error: 'Forbidden',
@@ -271,7 +288,7 @@ router.get('/me', authenticateToken, (req, res) => {
  * POST /api/v1/auth/logout
  * Invalidates the current user's session token
  */
-router.post('/logout', (req, res) => {
+router.post('/logout', authenticateToken, (req, res) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 

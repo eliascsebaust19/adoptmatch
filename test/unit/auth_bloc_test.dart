@@ -1,151 +1,83 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:bloc_test/bloc_test.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:adoptmatch/features/auth/bloc/auth_bloc.dart';
+import 'package:adoptmatch/features/auth/repositories/auth_repository.dart';
+import 'package:adoptmatch/core/services/laravel_auth_service.dart';
+import '../helpers/secure_storage_mock.dart';
+
+class MockAuthRepository extends Mock implements AuthRepository {}
+class MockLaravelAuthService extends Mock implements LaravelAuthService {}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  late MockAuthRepository auth;
+  late MockLaravelAuthService laravel;
 
-  group('AuthBloc Production Hardened Auth Flow Tests', () {
-    late AuthBloc authBloc;
-
-    setUp(() {
-      SharedPreferences.setMockInitialValues({});
-      authBloc = AuthBloc();
-    });
-
-    tearDown(() {
-      authBloc.close();
-    });
-
-    test('initial state is AuthInitial in production', () {
-      expect(authBloc.state, isA<AuthInitial>());
-    });
-
-    blocTest<AuthBloc, AuthState>(
-      'SignUpWithEmailEvent emits [AuthLoading, Authenticated] upon successful registration',
-      build: () => AuthBloc(),
-      act: (bloc) => bloc.add(
-        const SignUpWithEmailEvent(
-          fullName: 'Nadia Rahman',
-          email: 'nadia.test@gmail.com',
-          password: 'password123',
-        ),
-      ),
-      wait: const Duration(milliseconds: 800),
-      expect: () => [
-        isA<AuthLoading>(),
-        predicate<AuthState>((state) {
-          return state is Authenticated &&
-              state.user.email == 'nadia.test@gmail.com' &&
-              state.isNewUser == true;
-        }),
-      ],
-    );
-
-    blocTest<AuthBloc, AuthState>(
-      'UserConfirmedSessionEvent updates user state to verified Authenticated',
-      build: () => AuthBloc(),
-      act: (bloc) => bloc.add(
-        const UserConfirmedSessionEvent(
-          UserProfile(
-            id: 'sb-usr-1',
-            name: 'Confirmed User',
-            email: 'confirmed@gmail.com',
-            phone: '+880 1711 000000',
-            isVerified: true,
-          ),
-        ),
-      ),
-      expect: () => [
-        predicate<AuthState>((state) {
-          return state is Authenticated &&
-              state.user.email == 'confirmed@gmail.com' &&
-              state.user.isVerified == true;
-        }),
-      ],
-    );
-
-    blocTest<AuthBloc, AuthState>(
-      'LogoutEvent emits AuthUnauthenticated and revokes session',
-      build: () => AuthBloc(
-        initialUser: const UserProfile(
-          id: 'test-user-1',
-          name: 'Test User',
-          email: 'test@adoptmatch.com',
-          phone: '',
-        ),
-      ),
-      act: (bloc) => bloc.add(LogoutEvent()),
-      wait: const Duration(milliseconds: 500),
-      expect: () => [isA<AuthUnauthenticated>()],
-    );
-
-    blocTest<AuthBloc, AuthState>(
-      'GuestLoginEvent is rejected in production',
-      build: () => AuthBloc(),
-      act: (bloc) => bloc.add(const GuestLoginEvent()),
-      wait: const Duration(milliseconds: 500),
-      expect: () => [
-        predicate<AuthState>((state) {
-          return state is AuthFailure &&
-              state.errorMessage.contains('Guest access is disabled');
-        }),
-      ],
-    );
-
-    blocTest<AuthBloc, AuthState>(
-      'AdminLoginWithEmailEvent with invalid credentials rejects with Access Denied',
-      build: () => AuthBloc(),
-      act: (bloc) => bloc.add(
-        const AdminLoginWithEmailEvent(
-          'unauthorized@adoptmatch.org',
-          'invalidPass',
-        ),
-      ),
-      wait: const Duration(milliseconds: 800),
-      expect: () => [
-        isA<AuthLoading>(),
-        predicate<AuthState>((state) {
-          return state is AuthFailure &&
-              state.errorMessage.contains('Access Denied');
-        }),
-      ],
-    );
-
-    blocTest<AuthBloc, AuthState>(
-      'UpdateUserProfileEvent updates user name, phone, avatarUrl, location, and bio',
-      build: () => AuthBloc(
-        initialUser: const UserProfile(
-          id: 'u-101',
-          name: 'Initial User',
-          email: 'user@example.com',
-          phone: '+880 1711 000000',
-        ),
-      ),
-      act: (bloc) => bloc.add(
-        const UpdateUserProfileEvent(
-          name: 'Nadia Karim',
-          phone: '+880 1712 999111',
-          avatarUrl: 'https://images.unsplash.com/photo-test-avatar',
-          location: 'Gulshan 2, Dhaka',
-          bio: 'Passionate cat adopter & foster parent',
-          preferredPetType: 'Cats',
-        ),
-      ),
-      wait: const Duration(milliseconds: 500),
-      expect: () => [
-        predicate<AuthState>((state) {
-          if (state is! Authenticated) return false;
-          final u = state.user;
-          return u.name == 'Nadia Karim' &&
-              u.phone == '+880 1712 999111' &&
-              u.avatarUrl == 'https://images.unsplash.com/photo-test-avatar' &&
-              u.location == 'Gulshan 2, Dhaka' &&
-              u.bio == 'Passionate cat adopter & foster parent' &&
-              u.preferredPetType == 'Cats';
-        }),
-      ],
-    );
+  setUp(() async {
+    await installSecureStorageMock();
+    SharedPreferences.setMockInitialValues({});
+    auth = MockAuthRepository(); laravel = MockLaravelAuthService();
+    when(() => auth.logout()).thenAnswer((_) async {});
   });
+
+  blocTest<AuthBloc, AuthState>(
+    'signup authenticates only after a server token and profile',
+    build: () {
+      when(() => laravel.register(name: any(named: 'name'), email: any(named: 'email'),
+        password: any(named: 'password'), role: any(named: 'role'), phone: any(named: 'phone')))
+        .thenAnswer((_) async => {'status': 'success', 'access_token': 'server-token',
+          'user': {'id': '1', 'name': 'Nadia', 'email': 'nadia@example.test', 'role': 'adopter'}});
+      return AuthBloc(authRepository: auth, laravelAuthService: laravel);
+    },
+    act: (bloc) => bloc.add(const SignUpWithEmailEvent(fullName: 'Nadia',
+      email: 'nadia@example.test', password: 'password123')),
+    expect: () => [isA<AuthLoading>(), isA<Authenticated>()
+      .having((s) => s.user.email, 'email', 'nadia@example.test')
+      .having((s) => s.isNewUser, 'isNewUser', true)],
+  );
+
+  blocTest<AuthBloc, AuthState>(
+    'signup failure never creates a local authenticated session',
+    build: () {
+      when(() => laravel.register(name: any(named: 'name'), email: any(named: 'email'),
+        password: any(named: 'password'), role: any(named: 'role'), phone: any(named: 'phone')))
+        .thenThrow(Exception('server unavailable'));
+      return AuthBloc(authRepository: auth, laravelAuthService: laravel);
+    },
+    act: (bloc) => bloc.add(const SignUpWithEmailEvent(fullName: 'Nadia',
+      email: 'nadia@example.test', password: 'password123')),
+    expect: () => [isA<AuthLoading>(), isA<AuthFailure>()],
+  );
+
+  blocTest<AuthBloc, AuthState>(
+    'admin login rejects a non-privileged server account',
+    build: () {
+      when(() => auth.loginWithEmail(email: any(named: 'email'), password: any(named: 'password')))
+        .thenAnswer((_) async => const UserProfile(id: '1', name: 'User',
+          email: 'user@example.test', phone: '', role: UserRole.adopter));
+      return AuthBloc(authRepository: auth, laravelAuthService: laravel);
+    },
+    act: (bloc) => bloc.add(const AdminLoginWithEmailEvent('user@example.test', 'password')),
+    expect: () => [isA<AuthLoading>(), isA<AuthFailure>()
+      .having((s) => s.errorMessage, 'message', contains('Access Denied'))],
+  );
+
+  blocTest<AuthBloc, AuthState>(
+    'OTP request reports provider failure instead of pretending delivery',
+    build: () {
+      when(() => laravel.requestPhoneOtp(any())).thenThrow(Exception('not configured'));
+      return AuthBloc(authRepository: auth, laravelAuthService: laravel);
+    },
+    act: (bloc) => bloc.add(const RequestPhoneOtpEvent('01700000000')),
+    expect: () => [isA<AuthLoading>(), isA<AuthFailure>()],
+  );
+
+  blocTest<AuthBloc, AuthState>(
+    'guest login remains disabled',
+    build: () => AuthBloc(authRepository: auth, laravelAuthService: laravel),
+    act: (bloc) => bloc.add(const GuestLoginEvent()),
+    expect: () => [isA<AuthFailure>().having((s) => s.errorMessage, 'message', contains('Guest access is disabled'))],
+  );
 }

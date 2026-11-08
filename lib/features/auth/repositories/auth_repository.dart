@@ -3,6 +3,9 @@ import 'package:flutter/foundation.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/services/local_storage_service.dart';
 import '../../../core/storage/secure_storage_service.dart';
+import '../../../core/repositories/chat_repository.dart';
+import '../../../core/repositories/application_repository.dart';
+import '../../../core/repositories/pet_repository.dart';
 import '../bloc/auth_bloc.dart';
 
 class AuthRepository {
@@ -122,9 +125,9 @@ class AuthRepository {
         await _secureStorage.clearSession();
         return null;
       }
-      // If network is offline, fall back to cached secure profile
-      final cached = await _secureStorage.getUserProfile();
-      if (cached != null) return cached;
+      // Fail closed: a cached profile is not proof that a revoked/banned
+      // account still has a valid server session.
+      return null;
     } catch (e) {
       debugPrint('[AuthRepository] Error verifying session: $e');
     }
@@ -139,6 +142,9 @@ class AuthRepository {
     } catch (e) {
       debugPrint('[AuthRepository] Server logout notice (token may already be invalidated): $e');
     } finally {
+      await ChatRepository().clearCache();
+      await ApplicationRepository().clearCache();
+      await PetRepository().clearUserCache();
       await _secureStorage.clearSession();
       await _localStorage.clearAllUserData();
     }

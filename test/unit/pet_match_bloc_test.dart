@@ -53,6 +53,7 @@ void main() {
   setUp(() {
     petRepository = MockPetRepository();
     when(() => petRepository.hasCompletedQuiz).thenReturn(false);
+    when(() => petRepository.recordSwipe(any(), isLike: any(named: 'isLike'))).thenAnswer((_) async {});
   });
 
   group('PetMatchBloc Unit Tests', () {
@@ -87,9 +88,9 @@ void main() {
     );
 
     blocTest<PetMatchBloc, PetMatchState>(
-      'favorites pet and increments swipe index when SwipePetRight is added',
+      'records a like without changing saved favorites when SwipePetRight is added',
       build: () {
-        when(() => petRepository.toggleFavorite('p1')).thenAnswer((_) async {});
+        when(() => petRepository.recordSwipe('p1', isLike: true)).thenAnswer((_) async {});
         return PetMatchBloc(repository: petRepository);
       },
       seed: () => const PetMatchLoaded(pets: mockPets, currentSwipeIndex: 0),
@@ -100,7 +101,8 @@ void main() {
             .having((s) => s.lastMatchedPet?.id, 'lastMatchedPet.id', 'p1'),
       ],
       verify: (_) {
-        verify(() => petRepository.toggleFavorite('p1')).called(1);
+        verify(() => petRepository.recordSwipe('p1', isLike: true)).called(1);
+        verifyNever(() => petRepository.toggleFavorite(any()));
       },
     );
   });

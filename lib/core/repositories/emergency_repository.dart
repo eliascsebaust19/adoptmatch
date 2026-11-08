@@ -70,25 +70,6 @@ class EmergencyRepository {
     required String description,
     required String contactPhone,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 400));
-    final alert = EmergencyAlert(
-      id: 'sos-${DateTime.now().millisecondsSinceEpoch}',
-      petId: 'custom-${DateTime.now().millisecondsSinceEpoch}',
-      petName: petName,
-      petBreed: petBreed,
-      imageUrl: imageUrl,
-      lastSeenLocation: lastSeenLocation,
-      lat: lat,
-      lng: lng,
-      radiusKm: radiusKm,
-      rewardBdt: rewardBdt,
-      reportedTime: DateTime.now(),
-      description: description,
-      contactPhone: contactPhone,
-      isActive: true,
-    );
-    _alerts.insert(0, alert);
-    return alert;
+    throw Exception('SOS broadcasting is not configured. No alert was dispatched.');
   }
 }
-

@@ -3,7 +3,7 @@
  * Secure server-side ledger with idempotency checks and manual bKash approval workflows.
  */
 
-let paymentsDb = [
+const demoPayments = [
   {
     tranId: 'AM-SUB-INIT-101',
     userId: 'u-101',
@@ -64,148 +64,67 @@ let paymentsDb = [
   }
 ];
 
+const store = require('./recordStore')('payments', process.env.NODE_ENV === 'production' ? [] : demoPayments);
+const { db, transaction } = require('./database');
+// A rejected TrxID is still consumed: database uniqueness closes the race left by hasManualTrx().
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_manual_bkash_trx
+  ON records(json_extract(data, '$.trxId'))
+  WHERE namespace = 'payments'
+    AND json_extract(data, '$.paymentMethod') = 'bKash (Manual)'
+    AND json_extract(data, '$.trxId') IS NOT NULL`);
+const userStore = require('./userStore');
+const TERMINAL = new Set(['SUCCESS', 'FAILED', 'CANCELLED', 'REJECTED']);
 const createPayment = (data) => {
-  const existing = paymentsDb.find(p => p.tranId === data.tranId);
-  if (existing) return existing;
-
-  const payment = {
-    tranId: data.tranId,
-    userId: data.userId,
-    userName: data.userName || 'Adopter',
-    userEmail: data.userEmail || '',
-    planId: data.planId,
-    planName: data.planName || 'AdoptMatch Premium',
-    durationDays: Number(data.durationDays || 30),
-    amount: Number(data.amount),
-    currency: (data.currency || 'BDT').toUpperCase(),
-    status: data.status || 'PENDING',
-    paymentMethod: data.paymentMethod || 'SSLCommerz',
-    valId: data.valId || null,
-    bankTranId: data.bankTranId || null,
-    cardType: data.cardType || null,
-    senderPhone: data.senderPhone || null,
-    trxId: data.trxId || null,
-    createdAt: new Date().toISOString(),
-    verifiedAt: null,
-    adminNote: data.adminNote || null,
-    approvedBy: null,
-  };
-
-  paymentsDb.unshift(payment);
-  return payment;
-};
-
-const getPaymentByTranId = (tranId) => {
-  return paymentsDb.find(p => p.tranId === tranId) || null;
-};
-
-const getPaymentsByUserId = (userId) => {
-  return paymentsDb.filter(p => p.userId === userId);
-};
-
-const getAllPayments = (filter = {}) => {
-  let list = [...paymentsDb];
-
-  if (filter.status && filter.status !== 'ALL') {
-    list = list.filter(p => p.status === filter.status);
+  if (store.find(data.tranId)) throw new Error('Transaction id already exists.');
+  if (!Number.isFinite(Number(data.amount)) || Number(data.amount) <= 0 ||
+      !Number.isInteger(data.durationDays) || data.durationDays < 1 || (data.currency || 'BDT') !== 'BDT') {
+    throw new Error('A positive BDT amount and valid purchased duration are required.');
   }
-
-  if (filter.search) {
-    const q = filter.search.toLowerCase().trim();
-    list = list.filter(p =>
-      p.tranId.toLowerCase().includes(q) ||
-      (p.trxId && p.trxId.toLowerCase().includes(q)) ||
-      (p.userEmail && p.userEmail.toLowerCase().includes(q)) ||
-      (p.userName && p.userName.toLowerCase().includes(q)) ||
-      (p.senderPhone && p.senderPhone.toLowerCase().includes(q))
-    );
-  }
-
-  return list;
+  return store.insert({ ...data, amount: Number(data.amount), createdAt: new Date().toISOString(),
+    status: data.status || 'PENDING', verifiedAt: null, approvedBy: null }, { prepend: true });
 };
-
-const markPaymentSuccess = (tranId, details = {}) => {
+const getPaymentByTranId = (tranId) => store.find(tranId);
+const getPaymentsByUserId = (userId) => store.all().filter(p => p.userId === userId);
+const getAllPayments = (filter = {}) => store.all().filter(p => {
+  if (filter.status && filter.status !== 'ALL' && p.status !== filter.status) return false;
+  const q = String(filter.search || '').toLowerCase().trim();
+  return !q || [p.tranId, p.trxId, p.userEmail, p.userName, p.senderPhone].some(v => String(v || '').toLowerCase().includes(q));
+});
+const settle = (tranId, details, manual, adminEmail) => transaction(() => {
   const payment = getPaymentByTranId(tranId);
   if (!payment) return null;
-
-  // Idempotency: if already success, do not reactivate
-  const alreadySuccess = payment.status === 'SUCCESS';
-
-  payment.status = 'SUCCESS';
-  payment.valId = details.valId || payment.valId;
-  payment.bankTranId = details.bankTranId || payment.bankTranId;
-  payment.cardType = details.cardType || payment.cardType;
-  payment.verifiedAt = new Date().toISOString();
-
-  return { payment, alreadySuccess };
-};
-
-const markPaymentFailed = (tranId, reason = '') => {
+  if (payment.status === 'SUCCESS') return { payment, alreadySuccess: true };
+  if (TERMINAL.has(payment.status) || (manual && payment.status !== 'PENDING_APPROVAL') ||
+      (!manual && payment.status !== 'PENDING')) throw new Error('This transaction is not payable.');
+  if (manual && payment.paymentMethod !== 'bKash (Manual)') throw new Error('Only manual bKash requests may be approved here.');
+  const updated = store.update(tranId, { status: 'SUCCESS', ...details,
+    verifiedAt: new Date().toISOString(), ...(manual ? { approvedBy: adminEmail } : {}) });
+  userStore.activateUserSubscription(payment.userId, payment.planId, payment.durationDays, tranId);
+  return { payment: updated, alreadySuccess: false };
+});
+const markPaymentSuccess = (tranId, details = {}) => settle(tranId, details, false);
+const approveManualPayment = (tranId, adminEmail) => settle(tranId, {}, true, adminEmail);
+const fail = (tranId, status, reason, adminEmail) => transaction(() => {
   const payment = getPaymentByTranId(tranId);
   if (!payment) return null;
-  if (payment.status === 'SUCCESS') return payment; // Immutable terminal state
-
-  payment.status = 'FAILED';
-  payment.adminNote = reason;
-  return payment;
+  if (TERMINAL.has(payment.status)) return payment;
+  return store.update(tranId, { status, adminNote: reason || null, ...(adminEmail ? { approvedBy: adminEmail } : {}) });
+});
+const markPaymentFailed = (id, reason = '') => fail(id, 'FAILED', reason);
+const markPaymentCancelled = (id) => fail(id, 'CANCELLED');
+const rejectManualPayment = (id, reason, adminEmail) => {
+  const payment = getPaymentByTranId(id);
+  if (payment && payment.status !== 'PENDING_APPROVAL') return payment;
+  return fail(id, 'REJECTED', reason, adminEmail);
 };
-
-const markPaymentCancelled = (tranId) => {
-  const payment = getPaymentByTranId(tranId);
-  if (!payment) return null;
-  if (payment.status === 'SUCCESS') return payment; // Immutable terminal state
-
-  payment.status = 'CANCELLED';
-  return payment;
-};
-
-const approveManualPayment = (tranId, adminEmail = 'admin@adoptmatch.org') => {
-  const payment = getPaymentByTranId(tranId);
-  if (!payment) return null;
-
-  payment.status = 'SUCCESS';
-  payment.verifiedAt = new Date().toISOString();
-  payment.approvedBy = adminEmail;
-
-  return payment;
-};
-
-const rejectManualPayment = (tranId, reason = 'Invalid bKash TrxID', adminEmail = 'admin@adoptmatch.org') => {
-  const payment = getPaymentByTranId(tranId);
-  if (!payment) return null;
-
-  payment.status = 'FAILED';
-  payment.adminNote = reason;
-  payment.approvedBy = adminEmail;
-
-  return payment;
-};
-
+const hasManualTrx = (trxId) => store.all().some(p => p.paymentMethod === 'bKash (Manual)' &&
+  p.trxId === trxId && ['PENDING_APPROVAL', 'SUCCESS'].includes(p.status));
 const getPaymentStats = () => {
-  const successfulPayments = paymentsDb.filter(p => p.status === 'SUCCESS');
-  const totalRevenue = successfulPayments.reduce((sum, p) => sum + p.amount, 0);
-  const pendingApprovals = paymentsDb.filter(p => p.status === 'PENDING_APPROVAL').length;
-  const totalTransactions = paymentsDb.length;
-
-  return {
-    totalRevenue,
-    currency: 'BDT',
-    successfulTransactionsCount: successfulPayments.length,
-    pendingApprovalsCount: pendingApprovals,
-    totalTransactionsCount: totalTransactions
-  };
+  const payments = store.all(), successful = payments.filter(p => p.status === 'SUCCESS');
+  return { totalRevenue: successful.reduce((sum, p) => sum + p.amount, 0), currency: 'BDT',
+    successfulTransactionsCount: successful.length, pendingApprovalsCount: payments.filter(p => p.status === 'PENDING_APPROVAL').length,
+    totalTransactionsCount: payments.length };
 };
-
-module.exports = {
-  createPayment,
-  getPaymentByTranId,
-  getPaymentsByUserId,
-  getAllPayments,
-  markPaymentSuccess,
-  markPaymentFailed,
-  markPaymentCancelled,
-  approveManualPayment,
-  rejectManualPayment,
-  getPaymentStats,
-};
-
+module.exports = { createPayment, getPaymentByTranId, getPaymentsByUserId, getAllPayments,
+  markPaymentSuccess, markPaymentFailed, markPaymentCancelled, approveManualPayment,
+  rejectManualPayment, getPaymentStats, hasManualTrx };

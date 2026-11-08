@@ -13,6 +13,29 @@ class _ShelterApprovalScreenState extends State<ShelterApprovalScreen> {
   final _adminRepo = AdminRepository();
   String _selectedTab = 'ALL';
   String _searchQuery = '';
+  String? _adminError;
+  @override
+  void initState() {
+    super.initState();
+    _loadAdminData();
+  }
+  Future<void> _loadAdminData() async {
+    try { await _adminRepo.refresh(); if (mounted) setState(() => _adminError = null); }
+    catch (e) { if (mounted) setState(() => _adminError = 'Could not load server data: $e'); }
+  }
+  Future<void> _runAdminAction(Future<void> action, String success) async {
+    try {
+      await action;
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(_adminRepo.lastSyncError ?? success)));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: const Color(0xFFE11D48), content: Text('Action not saved: $e')));
+    }
+  }
+
 
   void _showDocumentViewerDialog(ShelterApplication shelter) {
     showDialog(
@@ -113,11 +136,7 @@ class _ShelterApprovalScreenState extends State<ShelterApprovalScreen> {
               ),
               onPressed: () {
                 Navigator.pop(ctx);
-                _adminRepo.approveShelter(shelter.id);
-                setState(() {});
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('${shelter.shelterName} has been approved!')),
-                );
+                _runAdminAction(_adminRepo.approveShelter(shelter.id), '${shelter.shelterName} approved.');
               },
               child: const Text('Approve Shelter'),
             ),
@@ -162,11 +181,7 @@ class _ShelterApprovalScreenState extends State<ShelterApprovalScreen> {
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE11D48), foregroundColor: Colors.white),
             onPressed: () {
               Navigator.pop(ctx);
-              _adminRepo.rejectShelter(shelter.id, reason: reasonCtrl.text.trim());
-              setState(() {});
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('${shelter.shelterName} rejected.')),
-              );
+              _runAdminAction(_adminRepo.rejectShelter(shelter.id, reason: reasonCtrl.text.trim()), '${shelter.shelterName} rejected.');
             },
             child: const Text('Confirm Rejection'),
           ),
@@ -218,6 +233,12 @@ class _ShelterApprovalScreenState extends State<ShelterApprovalScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_adminError != null) Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(children: [Expanded(child: Text(_adminError!,
+              style: const TextStyle(color: Color(0xFFE11D48)))),
+              TextButton(onPressed: _loadAdminData, child: const Text('Retry'))]),
+          ),
           // Header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -393,8 +414,7 @@ class _ShelterApprovalScreenState extends State<ShelterApprovalScreen> {
                                         icon: const Icon(Icons.check_circle_outline, size: 18, color: Color(0xFF059669)),
                                         tooltip: 'Approve',
                                         onPressed: () {
-                                          _adminRepo.approveShelter(shelter.id);
-                                          setState(() {});
+                                          _runAdminAction(_adminRepo.approveShelter(shelter.id), 'Shelter approved.');
                                         },
                                       ),
                                       IconButton(

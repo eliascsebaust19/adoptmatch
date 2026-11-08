@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,6 +13,13 @@ import 'package:adoptmatch/features/application/screens/adoption_application_scr
 import 'package:adoptmatch/shared/widgets/paw_logo.dart';
 import 'package:adoptmatch/shared/widgets/status_badge.dart';
 import 'package:adoptmatch/shared/widgets/custom_button.dart';
+import 'package:adoptmatch/core/repositories/admin_repository.dart';
+import 'package:adoptmatch/core/repositories/pet_repository.dart';
+import 'package:adoptmatch/core/services/laravel_pet_service.dart';
+import 'package:adoptmatch/core/network/api_client.dart';
+import 'helpers/secure_storage_mock.dart';
+import 'helpers/fake_dio_adapter.dart';
+import 'fixtures/sample_pets.dart';
 
 void main() {
   testWidgets('PawLogo widget renders successfully', (WidgetTester tester) async {
@@ -63,6 +73,16 @@ void main() {
   });
 
   testWidgets('AdminDashboardScreen renders without error with KPI cards and tabs', (WidgetTester tester) async {
+    await installSecureStorageMock();
+    AdminRepository().configureForTesting(MockClient((request) async {
+      if (request.url.path.endsWith('/admin/stats')) return http.Response(jsonEncode({
+        'success': true, 'data': {'pendingShelters': 0, 'activeRescues': 0, 'flaggedListings': 0}}), 200);
+      return http.Response(jsonEncode({'success': true, 'data': []}), 200);
+    }), () async => 'admin-token');
+    final api = ApiClient(baseUrl: 'https://api.example.test/api/v1')
+      ..dio.httpClientAdapter = FakeDioAdapter((_) async => (200, {'status': 'success', 'data': {'data': []}}));
+    ApplicationRepository().configureForTesting(LaravelPetService(apiClient: api),
+      client: MockClient((_) async => http.Response('{}', 500)), tokenReader: () async => 'token');
     final authBloc = AuthBloc(
       initialUser: const UserProfile(
         id: 'admin-test-01',
@@ -93,8 +113,13 @@ void main() {
   });
 
   testWidgets('AdoptionApplicationScreen renders and advances to step 2', (WidgetTester tester) async {
+    await installSecureStorageMock();
     LocalStorageService.instance.resetForTesting();
-    ApplicationRepository().resetForTesting();
+    PetRepository().setPetsForTesting(sampleTestPets);
+    final api = ApiClient(baseUrl: 'https://api.example.test/api/v1')
+      ..dio.httpClientAdapter = FakeDioAdapter((_) async => (200, {'status': 'success', 'data': {'data': []}}));
+    ApplicationRepository().configureForTesting(LaravelPetService(apiClient: api),
+      client: MockClient((_) async => http.Response('{}', 500)), tokenReader: () async => null);
     SharedPreferences.setMockInitialValues({});
     tester.view.physicalSize = const Size(400, 800);
     tester.view.devicePixelRatio = 1.0;

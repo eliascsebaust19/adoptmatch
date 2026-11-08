@@ -156,7 +156,7 @@ class PetCardGridItem extends StatelessWidget {
                       const SizedBox(width: 2),
                       Expanded(
                         child: Text(
-                          '${pet.distanceKm} km away',
+                          '${pet.distanceLabel} away',
                           style: const TextStyle(
                             fontSize: 11,
                             color: Color(0xFF94A3B8),

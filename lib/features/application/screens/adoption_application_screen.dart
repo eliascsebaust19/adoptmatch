@@ -107,6 +107,7 @@ class _AdoptionApplicationScreenState extends State<AdoptionApplicationScreen> {
       }
     } catch (e, stack) {
       debugPrint('ERROR in _loadInitialData: $e\n$stack');
+      if (mounted) setState(() => _isLoadingPet = false);
     }
   }
 
@@ -188,8 +189,8 @@ class _AdoptionApplicationScreenState extends State<AdoptionApplicationScreen> {
       }
       _declarationAgreed =
           draft['declarationAgreed'] as bool? ?? _declarationAgreed;
-      _hasSignature = draft['hasSignature'] as bool? ?? _hasSignature;
       _signatureData = draft['signatureData'] as String? ?? _signatureData;
+      _hasSignature = _signatureData != null && _signatureData!.isNotEmpty;
     });
   }
 
@@ -274,6 +275,14 @@ class _AdoptionApplicationScreenState extends State<AdoptionApplicationScreen> {
         _showError('Please provide a valid contact mobile number.');
         return false;
       }
+      if (_emailController.text.trim().isEmpty || !_emailController.text.contains('@')) {
+        _showError('Please provide a valid email address.'); return false;
+      }
+      if (_nidController.text.trim().isEmpty ||
+          _emergencyNameController.text.trim().isEmpty ||
+          _emergencyPhoneController.text.trim().length < 10) {
+        _showError('NID/passport and a complete emergency contact are required.'); return false;
+      }
       if (_addressController.text.trim().isEmpty) {
         _showError('Please provide your current residential address.');
         return false;
@@ -318,7 +327,7 @@ class _AdoptionApplicationScreenState extends State<AdoptionApplicationScreen> {
         _showError('Please check and confirm the legal adoption declaration.');
         return false;
       }
-      if (!_hasSignature) {
+      if (!_hasSignature || _signatureData == null || _signatureData!.isEmpty) {
         _showError(
           'Please sign on the digital signature pad before submitting.',
         );
@@ -348,38 +357,52 @@ class _AdoptionApplicationScreenState extends State<AdoptionApplicationScreen> {
     final petBreed = pet?.breed ?? 'Rescue';
     final petImg = pet?.imageUrl ?? '';
 
-    final newApp = await _appRepo.submitApplication(
-      petId: widget.petId,
-      petName: petName,
-      petBreed: petBreed,
-      petImageUrl: petImg,
-      applicantName: _nameController.text.trim(),
-      applicantPhone: _phoneController.text.trim(),
-      applicantEmail: _emailController.text.trim(),
-      nidNumber: _nidController.text.trim(),
-      emergencyContactName: _emergencyNameController.text.trim(),
-      emergencyContactPhone: _emergencyPhoneController.text.trim(),
-      address: _addressController.text.trim(),
-      housingType: _housingType,
-      ownershipStatus: _ownershipStatus,
-      landlordAllowsPets: _landlordAllowsPets,
-      landlordContact: _landlordContactController.text.trim(),
-      yardType: _yardType,
-      petLivingSpace: _petLivingSpace,
-      totalAdults: _totalAdults,
-      hasKids: _hasKids,
-      childrenAges: _childrenAgesController.text.trim(),
-      hasAllergies: _hasAllergies,
-      hasOtherPets: _hasOtherPets,
-      otherPetsDetails: _otherPetsDetailsController.text.trim(),
-      dailyHoursAlone: _dailyHoursAlone,
-      primaryCaregiver: _primaryCaregiverController.text.trim(),
-      petExperience: _petExperience,
-      emergencyVetFund: _emergencyVetFund,
-      monthlyBudget: _monthlyBudget,
-      whyAdopt: _whyAdoptController.text.trim(),
-      signatureData: _signatureData ?? 'DIGITAL_SIGNATURE_VERIFIED',
-    );
+    final AdoptionApplication newApp;
+    try {
+      newApp = await _appRepo.submitApplication(
+        petId: widget.petId,
+        petName: petName,
+        petBreed: petBreed,
+        petImageUrl: petImg,
+        applicantName: _nameController.text.trim(),
+        applicantPhone: _phoneController.text.trim(),
+        applicantEmail: _emailController.text.trim(),
+        nidNumber: _nidController.text.trim(),
+        emergencyContactName: _emergencyNameController.text.trim(),
+        emergencyContactPhone: _emergencyPhoneController.text.trim(),
+        address: _addressController.text.trim(),
+        housingType: _housingType,
+        ownershipStatus: _ownershipStatus,
+        landlordAllowsPets: _landlordAllowsPets,
+        landlordContact: _landlordContactController.text.trim(),
+        yardType: _yardType,
+        petLivingSpace: _petLivingSpace,
+        totalAdults: _totalAdults,
+        hasKids: _hasKids,
+        childrenAges: _childrenAgesController.text.trim(),
+        hasAllergies: _hasAllergies,
+        hasOtherPets: _hasOtherPets,
+        otherPetsDetails: _otherPetsDetailsController.text.trim(),
+        dailyHoursAlone: _dailyHoursAlone,
+        primaryCaregiver: _primaryCaregiverController.text.trim(),
+        petExperience: _petExperience,
+        emergencyVetFund: _emergencyVetFund,
+        monthlyBudget: _monthlyBudget,
+        whyAdopt: _whyAdoptController.text.trim(),
+        signatureData: _signatureData,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Application not submitted: $e'),
+          backgroundColor: const Color(0xFFE11D48),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
     setState(() => _isSubmitting = false);
 
@@ -1721,13 +1744,8 @@ class _AdoptionApplicationScreenState extends State<AdoptionApplicationScreen> {
         ),
         const SizedBox(height: 12),
         SignatureCanvas(
-          onSignatureChanged: (hasSig) {
-            setState(() {
-              _hasSignature = hasSig;
-              _signatureData =
-                  'DIGITAL_SIGNATURE_${DateTime.now().millisecondsSinceEpoch}';
-            });
-          },
+          onSignatureChanged: (hasSig) => setState(() => _hasSignature = hasSig),
+          onSignatureDataChanged: (data) => setState(() => _signatureData = data),
         ),
         const SizedBox(height: 16),
         Container(

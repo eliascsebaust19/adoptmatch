@@ -7,8 +7,8 @@ export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState('sarah.adopter@gmail.com');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -28,11 +28,6 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const quickSwitch = (roleEmail) => {
-    setEmail(roleEmail);
-    setPassword('password123');
   };
 
   return (
@@ -84,39 +79,6 @@ export default function LoginPage() {
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
-
-        {/* Demo Quick Accounts Picker */}
-        <div className="pt-4 border-t border-gray-100 space-y-2">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400 block text-center">
-            Demo Account Quick Switcher:
-          </span>
-          <div className="grid grid-cols-2 gap-2 text-[11px] font-bold">
-            <button
-              onClick={() => quickSwitch('sarah.adopter@gmail.com')}
-              className="p-2 rounded-xl bg-brand-coral/10 text-brand-coral border border-brand-coral/20 hover:bg-brand-coral hover:text-white"
-            >
-              Adopter (Sarah)
-            </button>
-            <button
-              onClick={() => quickSwitch('staff@pawshelter.org')}
-              className="p-2 rounded-xl bg-brand-teal/10 text-brand-teal border border-brand-teal/20 hover:bg-brand-teal hover:text-white"
-            >
-              Shelter Staff
-            </button>
-            <button
-              onClick={() => quickSwitch('admin@adoptmatch.com')}
-              className="p-2 rounded-xl bg-gray-100 text-gray-800 border border-gray-200 hover:bg-gray-800 hover:text-white"
-            >
-              System Admin
-            </button>
-            <button
-              onClick={() => quickSwitch('elena.foster@gmail.com')}
-              className="p-2 rounded-xl bg-emerald-100 text-emerald-800 border border-emerald-200 hover:bg-emerald-800 hover:text-white"
-            >
-              Foster (Elena)
-            </button>
-          </div>
-        </div>
 
       </div>
     </div>

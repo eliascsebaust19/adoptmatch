@@ -13,7 +13,13 @@ class Favorite extends Model
         'user_id',
         'pet_id',
         'swipe_direction',
+        'is_favorite',
     ];
+
+    protected function casts(): array
+    {
+        return ['is_favorite' => 'boolean'];
+    }
 
     public function user()
     {

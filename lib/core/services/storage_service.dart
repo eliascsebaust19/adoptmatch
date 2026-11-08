@@ -1,7 +1,5 @@
-import 'dart:convert';
 import 'package:dio/dio.dart' as dio;
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../network/api_client.dart';
@@ -10,13 +8,8 @@ import 'supabase_service.dart';
 class StorageService {
   static final ImagePicker _picker = ImagePicker();
 
-  /// Vercel Blob Read/Write Token (Injected via --dart-define or environment)
-  static const String vercelBlobToken = String.fromEnvironment(
-    'BLOB_READ_WRITE_TOKEN',
-    defaultValue: '',
-  );
-
-  static const String vercelBlobStoreId = '3kHT7mDTcvdaG9fF';
+  @visibleForTesting
+  static ApiClient Function()? apiClientFactoryForTesting;
 
   /// Curated Google-authenticated profile avatar presets
   static const List<String> googleAvatarPresets = [
@@ -59,55 +52,8 @@ class StorageService {
     }
   }
 
-  /// Uploads image bytes directly to Vercel Blob Store (Global High-Speed Edge Storage)
-  static Future<String?> uploadToVercelBlob({
-    required Uint8List bytes,
-    required String fileName,
-    String contentType = 'image/jpeg',
-  }) async {
-    if (vercelBlobToken.isEmpty) {
-      debugPrint('[StorageService] Vercel Blob client token not configured; delegating to server.');
-      return null;
-    }
-    try {
-      final sanitized = fileName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
-      final pathname = 'uploads/${DateTime.now().millisecondsSinceEpoch}_$sanitized';
-      final uri = Uri.parse('https://vercel.com/api/blob/?pathname=${Uri.encodeComponent(pathname)}');
-
-      final response = await http.put(
-        uri,
-        headers: {
-          'x-api-version': '13',
-          'x-vercel-blob-store-id': vercelBlobStoreId,
-          'authorization': 'Bearer $vercelBlobToken',
-          'x-vercel-blob-access': 'private',
-          'x-allow-overwrite': '1',
-          'content-type': contentType,
-        },
-        body: bytes,
-      ).timeout(const Duration(seconds: 15));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final blobUrl = data['url'] as String?;
-        if (blobUrl != null && blobUrl.isNotEmpty) {
-          debugPrint('[StorageService] Uploaded successfully to Vercel Blob: $blobUrl');
-          return blobUrl;
-        }
-      } else {
-        debugPrint('[StorageService] Vercel Blob upload HTTP ${response.statusCode}: ${response.body}');
-      }
-    } catch (e) {
-      debugPrint('[StorageService] Vercel Blob upload notice: $e');
-    }
-    return null;
-  }
-
-  /// Uploads user profile photo:
-  /// 1. Vercel Blob (Fast Edge Storage)
-  /// 2. Supabase Storage (Bucket: 'avatars')
-  /// 3. Laravel 11 Backend / Cloudinary CDN
-  /// 4. Resilient Base64 Fallback
+  /// Uploads a user profile photo through Supabase or the authenticated backend.
+  /// Throws when no provider accepts the bytes; never returns a fabricated URL.
   static Future<String> uploadProfileImage({
     required Uint8List bytes,
     required String fileName,
@@ -116,17 +62,7 @@ class StorageService {
     final sanitizedFileName = fileName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
     final uniquePath = 'profiles/${userId ?? "usr"}_${DateTime.now().millisecondsSinceEpoch}_$sanitizedFileName';
 
-    // 1. Primary: Upload to high-speed Vercel Blob Storage
-    final vercelUrl = await uploadToVercelBlob(
-      bytes: bytes,
-      fileName: uniquePath,
-      contentType: 'image/jpeg',
-    );
-    if (vercelUrl != null && vercelUrl.isNotEmpty) {
-      return vercelUrl;
-    }
-
-    // 2. Secondary: Upload via Supabase Storage if initialized
+    // 1. Primary: Upload via Supabase Storage if initialized
     if (SupabaseService.isInitialized) {
       try {
         final storage = SupabaseService.client.storage.from('avatars');
@@ -160,31 +96,18 @@ class StorageService {
       }
     } catch (_) {}
 
-    // 4. Resilient Base64 Data URI Fallback
-    final base64String = base64Encode(bytes);
-    return 'data:image/jpeg;base64,$base64String';
+    throw Exception('Photo upload failed: no storage provider accepted the file.');
   }
 
-  /// Uploads pet photo directly to Vercel Blob Store (Global High-Speed Edge Storage)
+  /// Uploads a pet photo through the authenticated backend.
   static Future<String> uploadPetImage({
     required Uint8List bytes,
     required String fileName,
     String? petId,
   }) async {
     final sanitizedFileName = fileName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
-    final uniquePath = 'pets/${petId ?? "pet"}_${DateTime.now().millisecondsSinceEpoch}_$sanitizedFileName';
 
-    // 1. Primary: Upload directly to high-speed Vercel Blob Edge CDN
-    final vercelUrl = await uploadToVercelBlob(
-      bytes: bytes,
-      fileName: uniquePath,
-      contentType: 'image/jpeg',
-    );
-    if (vercelUrl != null && vercelUrl.isNotEmpty) {
-      return vercelUrl;
-    }
-
-    // 2. Secondary: Cloudinary / Backend upload
+    // 1. Primary: authenticated backend upload
     try {
       final backendUrl = await uploadToCloudinaryOrBackend(
         bytes: bytes,
@@ -195,9 +118,7 @@ class StorageService {
       }
     } catch (_) {}
 
-    // 3. Fallback: Base64 Data URI
-    final base64String = base64Encode(bytes);
-    return 'data:image/jpeg;base64,$base64String';
+    throw Exception('Photo upload failed: no storage provider accepted the file.');
   }
 
   /// Upload image bytes directly to Laravel Backend & Cloudinary Multi-Image CDN
@@ -206,13 +127,14 @@ class StorageService {
     required String fileName,
   }) async {
     try {
-      final client = ApiClient();
+      final client = (apiClientFactoryForTesting ?? () => ApiClient())();
       final formData = dio.FormData.fromMap({
         'image': dio.MultipartFile.fromBytes(bytes, filename: fileName),
       });
 
       final response = await client.dio.post('/upload/image', data: formData);
-      if (response.statusCode == 200 && response.data['url'] != null) {
+      if ((response.statusCode == 200 || response.statusCode == 201) &&
+          response.data['status'] == 'success' && response.data['url'] != null) {
         return response.data['url'] as String;
       }
     } catch (e) {

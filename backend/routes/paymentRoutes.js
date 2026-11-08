@@ -8,13 +8,26 @@ const router = express.Router();
 const planStore = require('../models/planStore');
 const paymentStore = require('../models/paymentStore');
 const userStore = require('../models/userStore');
+const { authenticateToken } = require('../middleware/rbacMiddleware');
+
+// Simulation is opt-in and can never run against live credentials or in production.
+const SIMULATION_ENABLED =
+  process.env.ENABLE_PAYMENT_SIMULATOR === 'true' &&
+  process.env.NODE_ENV !== 'production' &&
+  process.env.SSLCOMMERZ_IS_LIVE !== 'true';
+
+const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+const isStaff = (req) => ['ADMIN', 'SUPER_ADMIN'].includes(req.user?.role);
 
 // Environment & Credentials Configuration
-const STORE_ID = process.env.SSLCOMMERZ_STORE_ID || 'adoptmatch_sandbox';
-const STORE_PASSWD = process.env.SSLCOMMERZ_STORE_PASSWORD || 'adoptmatch_sandbox@ssl';
+const STORE_ID = process.env.SSLCOMMERZ_STORE_ID || (process.env.NODE_ENV === 'production' ? '' : 'adoptmatch_sandbox');
+const STORE_PASSWD = process.env.SSLCOMMERZ_STORE_PASSWORD || (process.env.NODE_ENV === 'production' ? '' : 'adoptmatch_sandbox@ssl');
 const IS_LIVE = process.env.SSLCOMMERZ_IS_LIVE === 'true';
-const BKASH_NUMBER = process.env.BKASH_OFFICIAL_NUMBER || '01711234567';
-const BASE_URL = process.env.BACKEND_BASE_URL || 'http://localhost:5000';
+const BKASH_NUMBER = /^01[3-9][0-9]{8}$/.test(process.env.BKASH_OFFICIAL_NUMBER || '')
+  ? process.env.BKASH_OFFICIAL_NUMBER : null;
+const BASE_URL = process.env.BACKEND_BASE_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5000');
+const GATEWAY_CONFIGURED = Boolean(STORE_ID && STORE_PASSWD && /^https:\/\//.test(BASE_URL));
 const APP_DEEP_LINK = process.env.APP_DEEP_LINK_SCHEME || 'adoptmatch://payment-callback';
 
 // SSLCommerz Host Endpoints
@@ -44,8 +57,13 @@ router.get('/plans', (req, res) => {
  * Returns official bKash number and manual transfer guide
  */
 router.get('/bkash-number', (req, res) => {
+  if (!BKASH_NUMBER) {
+    return res.status(503).json({ success: false, configured: false,
+      error: 'Manual payments are unavailable: no official bKash destination is configured.' });
+  }
   res.json({
     success: true,
+    configured: true,
     bkashNumber: BKASH_NUMBER,
     accountType: 'Personal / Merchant',
     currency: 'BDT',
@@ -72,19 +90,28 @@ router.get('/bkash-number', (req, res) => {
  * POST /api/v1/payments/initiate-sslcommerz
  * Initiates an SSLCommerz payment session with server-side credentials
  */
-router.post('/initiate-sslcommerz', async (req, res) => {
+router.post('/initiate-sslcommerz', authenticateToken, async (req, res) => {
   try {
-    const { planId, userId, userName, userEmail, userPhone } = req.body;
+    if (!GATEWAY_CONFIGURED && !SIMULATION_ENABLED) return res.status(503).json({
+      success: false, error: 'Payment gateway credentials and an HTTPS callback URL must be configured.' });
+    const { planId, userPhone } = req.body;
+    const account = userStore.findById(req.user.id);
+    if (!account) {
+      return res.status(404).json({ success: false, error: 'Authenticated account not found' });
+    }
+    const userId = account.id;
+    const userName = account.name;
+    const userEmail = account.email;
 
     const plan = planStore.getPlanById(planId);
     if (!plan) {
       return res.status(400).json({ success: false, error: 'Invalid planId selected' });
     }
 
-    const effectiveUserId = userId || 'u-101';
-    const effectiveUserName = userName || 'AdoptMatch Supporter';
-    const effectiveEmail = userEmail || 'supporter@adoptmatch.org';
-    const effectivePhone = userPhone || '+880 1711 234567';
+    const effectiveUserId = userId;
+    const effectiveUserName = userName;
+    const effectiveEmail = userEmail;
+    const effectivePhone = userPhone || account.phone || '';
 
     const tranId = `AM-SUB-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
@@ -99,6 +126,7 @@ router.post('/initiate-sslcommerz', async (req, res) => {
       durationDays: plan.durationDays || 30,
       amount: plan.price,
       currency: 'BDT',
+      storeId: STORE_ID,
       status: 'PENDING',
       paymentMethod: 'SSLCommerz (bKash/Card/Nagad)',
     });
@@ -157,10 +185,11 @@ router.post('/initiate-sslcommerz', async (req, res) => {
     // In sandbox or test environments if live SSLCommerz session cannot be opened,
     // provide an interactive Sandbox Payment Simulator URL so testers can simulate bKash/Card payment
     if (!gatewayUrl) {
-      if (IS_LIVE || process.env.NODE_ENV === 'production') {
+      if (!SIMULATION_ENABLED) {
+        paymentStore.markPaymentFailed(tranId, 'Gateway session could not be created');
         return res.status(502).json({
           success: false,
-          error: 'Gateway unreachable. Cannot initiate live payment session.',
+          error: 'Gateway unreachable. Cannot initiate payment session.',
         });
       }
       gatewayUrl = `${BASE_URL}/api/v1/payments/sandbox-simulator?tran_id=${tranId}&amount=${plan.price}&plan_id=${plan.id}&user_id=${effectiveUserId}`;
@@ -185,6 +214,9 @@ router.post('/initiate-sslcommerz', async (req, res) => {
  * Sandbox Payment Simulator (For developer testing without active merchant keys)
  */
 router.get('/sandbox-simulator', (req, res) => {
+  if (!SIMULATION_ENABLED) {
+    return res.status(404).send('Payment simulator is disabled.');
+  }
   const { tran_id, amount, plan_id, user_id } = req.query;
   const plan = planStore.getPlanById(plan_id) || { name: 'Premium Plan' };
 
@@ -214,26 +246,26 @@ router.get('/sandbox-simulator', (req, res) => {
           <p>Select your payment method below to simulate transaction:</p>
           
           <div class="receipt">
-            <div class="receipt-row"><span>Package:</span> <b>${plan.name}</b></div>
-            <div class="receipt-row"><span>Amount:</span> <b>৳${amount} BDT</b></div>
-            <div class="receipt-row"><span>Tran ID:</span> <code>${tran_id}</code></div>
+            <div class="receipt-row"><span>Package:</span> <b>${esc(plan.name)}</b></div>
+            <div class="receipt-row"><span>Amount:</span> <b>৳${esc(amount)} BDT</b></div>
+            <div class="receipt-row"><span>Tran ID:</span> <code>${esc(tran_id)}</code></div>
           </div>
 
           <form action="/api/v1/payments/sslcommerz-success" method="POST">
-            <input type="hidden" name="tran_id" value="${tran_id}" />
+            <input type="hidden" name="tran_id" value="${esc(tran_id)}" />
             <input type="hidden" name="val_id" value="SIMULATED-VAL-${Date.now()}" />
-            <input type="hidden" name="amount" value="${amount}" />
+            <input type="hidden" name="amount" value="${esc(amount)}" />
             <input type="hidden" name="currency" value="BDT" />
-            <input type="hidden" name="bank_tran_id" value="BKASH-SIM-${Math.floor(Math.random()*1000000)}" />
+            <input type="hidden" name="bank_tran_id" value="BKASH-SIM-${esc(Math.floor(Math.random()*1000000))}" />
             <input type="hidden" name="card_type" value="BKASH-bKash" />
             <input type="hidden" name="status" value="VALID" />
-            <input type="hidden" name="value_a" value="${user_id}" />
-            <input type="hidden" name="value_b" value="${plan_id}" />
-            <button type="submit" class="btn-bkash">Pay ৳${amount} with bKash (Sandbox)</button>
+            <input type="hidden" name="value_a" value="${esc(user_id)}" />
+            <input type="hidden" name="value_b" value="${esc(plan_id)}" />
+            <button type="submit" class="btn-bkash">Pay ৳${esc(amount)} with bKash (Sandbox)</button>
           </form>
 
           <form action="/api/v1/payments/sslcommerz-cancel" method="POST">
-            <input type="hidden" name="tran_id" value="${tran_id}" />
+            <input type="hidden" name="tran_id" value="${esc(tran_id)}" />
             <button type="submit" class="btn-fail">Cancel Transaction</button>
           </form>
         </div>
@@ -245,33 +277,51 @@ router.get('/sandbox-simulator', (req, res) => {
 /**
  * Server-Side Validation Helper (Validates transaction directly with SSLCommerz)
  */
-async function verifyWithSslCommerzServer(valId) {
-  if (!valId) {
-    return { isValid: false, error: 'val_id is required' };
+async function verifyWithSslCommerzServer(valId, payment) {
+  if (!valId || !payment) {
+    return { isValid: false, error: 'val_id and a local payment record are required' };
   }
 
-  // Strictly block simulated validation IDs in live or production environments
-  if (valId.startsWith('SIMULATED-VAL-')) {
-    if (IS_LIVE || process.env.NODE_ENV === 'production') {
-      return { isValid: false, error: 'Simulated payment verification is strictly disallowed in live or production environments.' };
+  if (String(valId).startsWith('SIMULATED-VAL-')) {
+    if (!SIMULATION_ENABLED) {
+      return { isValid: false, error: 'Simulated payment verification is disabled.' };
     }
     return { isValid: true, status: 'VALID', isSimulated: true };
   }
 
   try {
-    const url = `${SSL_VALIDATION_URL}?val_id=${valId}&store_id=${STORE_ID}&store_passwd=${STORE_PASSWD}&v=1&format=json`;
+    const url = `${SSL_VALIDATION_URL}?val_id=${encodeURIComponent(valId)}&store_id=${encodeURIComponent(STORE_ID)}&store_passwd=${encodeURIComponent(STORE_PASSWD)}&v=1&format=json`;
     const res = await fetch(url);
     const data = await res.json();
 
-    const isValid = data && (data.status === 'VALID' || data.status === 'VALIDATED');
+    if (!data || !['VALID', 'VALIDATED'].includes(data.status)) {
+      return { isValid: false, error: `Gateway reported status "${data ? data.status : 'unknown'}"` };
+    }
+
+    // The gateway response must describe this exact transaction. Missing fields
+    // are treated as a mismatch so a partial response cannot activate a payment.
+    if (!data.tran_id || data.tran_id !== payment.tranId) {
+      return { isValid: false, error: 'Gateway transaction ID does not match the local payment' };
+    }
+    if (!data.store_id || String(data.store_id) !== String(payment.storeId || STORE_ID)) {
+      return { isValid: false, error: 'Gateway store ID does not match the configured store' };
+    }
+    if (data.amount === undefined || data.amount === null ||
+        !Number.isFinite(Number(data.amount)) || Math.abs(Number(data.amount) - Number(payment.amount)) > 0.001) {
+      return { isValid: false, error: 'Gateway amount does not match the local payment' };
+    }
+    if (!data.currency || String(data.currency).toUpperCase() !== String(payment.currency).toUpperCase()) {
+      return { isValid: false, error: 'Gateway currency does not match the local payment' };
+    }
+
     return {
-      isValid,
-      status: data ? data.status : 'INVALID',
-      amount: data ? data.amount : null,
-      currency: data ? data.currency : null,
-      bankTranId: data ? data.bank_tran_id : null,
-      cardType: data ? data.card_type : null,
-      tranId: data ? data.tran_id : null,
+      isValid: true,
+      status: data.status,
+      amount: data.amount,
+      currency: data.currency,
+      bankTranId: data.bank_tran_id || null,
+      cardType: data.card_type || null,
+      tranId: data.tran_id,
     };
   } catch (err) {
     console.error('[SSL VALIDATION REQUEST ERROR]', err);
@@ -293,21 +343,10 @@ router.post('/sslcommerz-success', async (req, res) => {
     }
 
     // 1. Strict Server-Side SSLCommerz Validation
-    const validation = await verifyWithSslCommerzServer(val_id);
+    const validation = await verifyWithSslCommerzServer(val_id, payment);
     if (!validation.isValid) {
-      paymentStore.markPaymentFailed(tran_id, 'Server-to-server validation failed with SSLCommerz');
-      return res.redirect(`${APP_DEEP_LINK}?status=failed&tran_id=${tran_id}`);
-    }
-
-    // Verify transaction amount and currency against recorded payment if gateway returned them
-    if (validation.amount && Math.abs(Number(validation.amount) - Number(payment.amount)) > 0.01) {
-      paymentStore.markPaymentFailed(tran_id, `Amount mismatch: Gateway reported ${validation.amount}, expected ${payment.amount}`);
-      return res.redirect(`${APP_DEEP_LINK}?status=failed&tran_id=${tran_id}`);
-    }
-
-    if (validation.currency && validation.currency.toUpperCase() !== payment.currency.toUpperCase()) {
-      paymentStore.markPaymentFailed(tran_id, `Currency mismatch: Gateway reported ${validation.currency}, expected ${payment.currency}`);
-      return res.redirect(`${APP_DEEP_LINK}?status=failed&tran_id=${tran_id}`);
+      // An unverified callback must not terminally fail a potentially valid payment.
+      return res.redirect(`${APP_DEEP_LINK}?status=failed&tran_id=${encodeURIComponent(tran_id)}`);
     }
 
     // 2. Idempotent Activation
@@ -317,14 +356,11 @@ router.post('/sslcommerz-success', async (req, res) => {
       cardType: card_type || validation.cardType || 'bKash',
     });
 
-    if (!alreadySuccess) {
-      const duration = payment.durationDays || 30;
-      userStore.activateUserSubscription(payment.userId, payment.planId, duration, tran_id);
-      console.log(`[SUBSCRIPTION ACTIVATED] User: ${payment.userId} Plan: ${payment.planId} Tran: ${tran_id}`);
-    }
+    // Settlement and the unique entitlement grant share one database transaction.
+    if (!alreadySuccess) console.log(`[SUBSCRIPTION ACTIVATED] Tran: ${tran_id}`);
 
     // Return HTML success response with auto deep-link redirect
-    const deepLinkUrl = `${APP_DEEP_LINK}?status=success&tran_id=${tran_id}&plan_id=${payment.planId}&amount=${payment.amount}`;
+    const deepLinkUrl = `${APP_DEEP_LINK}?status=success&tran_id=${encodeURIComponent(tran_id)}&plan_id=${encodeURIComponent(payment.planId)}&amount=${encodeURIComponent(payment.amount)}`;
 
     res.send(`
       <!DOCTYPE html>
@@ -345,7 +381,7 @@ router.post('/sslcommerz-success', async (req, res) => {
           <script>
             // Attempt automatic deep link navigation back into Flutter app
             setTimeout(() => {
-              window.location.href = "${deepLinkUrl}";
+              window.location.href = ${JSON.stringify(deepLinkUrl)};
             }, 600);
           </script>
         </head>
@@ -355,8 +391,8 @@ router.post('/sslcommerz-success', async (req, res) => {
             <h2>Payment Successful!</h2>
             <div class="badge">AdoptMatch Premium Active 🐾</div>
             <p>Your subscription payment of <b>৳${payment.amount} BDT</b> has been verified and your premium benefits are now active!</p>
-            <p><small style="color: #64748B">Transaction ID: ${tran_id}</small></p>
-            <a href="${deepLinkUrl}" class="btn">Return to AdoptMatch App</a>
+            <p><small style="color: #64748B">Transaction ID: ${esc(tran_id)}</small></p>
+            <a href="${esc(deepLinkUrl)}" class="btn">Return to AdoptMatch App</a>
           </div>
         </body>
       </html>
@@ -372,7 +408,8 @@ router.post('/sslcommerz-success', async (req, res) => {
  */
 router.post('/sslcommerz-fail', (req, res) => {
   const { tran_id, error } = req.body;
-  paymentStore.markPaymentFailed(tran_id, error || 'Payment failed on SSLCommerz gateway');
+  // Client/gateway return callbacks are hints, not authenticated settlement commands.
+  // Only validated IPN/validation responses may change the ledger.
   const deepLink = `${APP_DEEP_LINK}?status=failed&tran_id=${tran_id || ''}`;
   res.redirect(deepLink);
 });
@@ -382,7 +419,7 @@ router.post('/sslcommerz-fail', (req, res) => {
  */
 router.post('/sslcommerz-cancel', (req, res) => {
   const { tran_id } = req.body;
-  paymentStore.markPaymentCancelled(tran_id);
+  // Keep the ledger pending until a verified gateway result or expiry job settles it.
   const deepLink = `${APP_DEEP_LINK}?status=cancelled&tran_id=${tran_id || ''}`;
   res.redirect(deepLink);
 });
@@ -400,14 +437,14 @@ router.post('/sslcommerz-ipn', async (req, res) => {
   const payment = paymentStore.getPaymentByTranId(tran_id);
   if (!payment) return res.status(404).send('Transaction not found');
 
-  // Verify directly with SSLCommerz server instead of trusting submitted status
-  const validation = await verifyWithSslCommerzServer(val_id);
+  // Verify directly with SSLCommerz instead of trusting the submitted status.
+  // Transaction ID, store, amount and currency are all checked inside the helper.
+  const validation = await verifyWithSslCommerzServer(val_id, payment);
   if (!validation.isValid) {
-    return res.status(400).json({ success: false, error: 'IPN validation with SSLCommerz failed' });
-  }
-
-  if (validation.amount && Math.abs(Number(validation.amount) - Number(payment.amount)) > 0.01) {
-    return res.status(400).json({ success: false, error: 'Amount mismatch detected in IPN' });
+    return res.status(400).json({
+      success: false,
+      error: `IPN validation with SSLCommerz failed: ${validation.error}`,
+    });
   }
 
   const { alreadySuccess } = paymentStore.markPaymentSuccess(tran_id, {
@@ -416,10 +453,7 @@ router.post('/sslcommerz-ipn', async (req, res) => {
     cardType: validation.cardType,
   });
 
-  if (!alreadySuccess) {
-    const duration = payment.durationDays || 30;
-    userStore.activateUserSubscription(payment.userId, payment.planId, duration, tran_id);
-  }
+  // Payment + entitlement were committed atomically by the store.
 
   res.json({ success: true, message: 'IPN verified and processed successfully' });
 });
@@ -428,37 +462,58 @@ router.post('/sslcommerz-ipn', async (req, res) => {
  * POST /api/v1/payments/manual-bkash
  * Submits a manual bKash payment for Administrator verification
  */
-router.post('/manual-bkash', (req, res) => {
-  const { planId, userId, userName, userEmail, senderPhone, trxId } = req.body;
+router.post('/manual-bkash', authenticateToken, (req, res) => {
+  if (!BKASH_NUMBER) return res.status(503).json({ success: false,
+    error: 'Manual payments are disabled until an official destination is configured.' });
+  const { planId, senderPhone, trxId } = req.body;
+  const account = userStore.findById(req.user.id);
+  if (!account) {
+    return res.status(404).json({ success: false, error: 'Authenticated account not found' });
+  }
 
-  if (!senderPhone || !trxId) {
+  if (typeof senderPhone !== 'string' || typeof trxId !== 'string' ||
+      !/^01[3-9][0-9]{8}$/.test(senderPhone.trim()) ||
+      !/^[A-Z0-9]{6,30}$/i.test(trxId.trim())) {
     return res.status(400).json({
       success: false,
-      error: 'Both bKash Sender Phone Number and Transaction ID (TrxID) are required.',
+      error: 'Enter a valid 11-digit bKash sender number and a 6–30 character alphanumeric TrxID.',
     });
   }
 
   const plan = planStore.getPlanById(planId);
-  if (!plan) {
+  if (!plan || !plan.isActive) {
     return res.status(400).json({ success: false, error: 'Invalid planId' });
   }
+  const normalizedTrx = trxId.trim().toUpperCase();
+  if (paymentStore.hasManualTrx(normalizedTrx)) return res.status(409).json({
+    success: false, error: 'This bKash TrxID has already been submitted.' });
 
   const tranId = `AM-BKASH-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
-  const payment = paymentStore.createPayment({
+  let payment;
+  try {
+    payment = paymentStore.createPayment({
     tranId,
-    userId: userId || 'u-101',
-    userName: userName || 'Adopter',
-    userEmail: userEmail || '',
+    userId: account.id,
+    userName: account.name,
+    userEmail: account.email,
     planId: plan.id,
     planName: plan.name,
+    durationDays: plan.durationDays || 30,
     amount: plan.price,
     currency: 'BDT',
     status: 'PENDING_APPROVAL',
     paymentMethod: 'bKash (Manual)',
     senderPhone: senderPhone.trim(),
-    trxId: trxId.trim().toUpperCase(),
-  });
+    destinationNumber: BKASH_NUMBER,
+    trxId: normalizedTrx,
+    });
+  } catch (error) {
+    if (/UNIQUE constraint failed/i.test(String(error.message))) {
+      return res.status(409).json({ success: false, error: 'This bKash TrxID has already been submitted.' });
+    }
+    throw error;
+  }
 
   res.json({
     success: true,
@@ -471,8 +526,15 @@ router.post('/manual-bkash', (req, res) => {
  * GET /api/v1/payments/my-subscription
  * Returns the authenticated user's active subscription, expiry details & payment history
  */
-router.get('/my-subscription', (req, res) => {
-  const userId = req.query.userId || req.headers['x-user-id'] || 'u-101';
+router.get('/my-subscription', authenticateToken, (req, res) => {
+  const requestedUserId = req.query.userId;
+  if (requestedUserId && requestedUserId !== req.user.id && !isStaff(req)) {
+    return res.status(403).json({
+      success: false,
+      error: 'You may only read your own subscription. Staff access is required for other accounts.',
+    });
+  }
+  const userId = isStaff(req) && requestedUserId ? requestedUserId : req.user.id;
 
   const subscription = userStore.getUserSubscription(userId);
   const history = paymentStore.getPaymentsByUserId(userId);
@@ -494,12 +556,16 @@ router.get('/my-subscription', (req, res) => {
  * GET /api/v1/payments/verify/:tranId
  * Poll or check transaction status by tranId
  */
-router.get('/verify/:tranId', (req, res) => {
+router.get('/verify/:tranId', authenticateToken, (req, res) => {
   const { tranId } = req.params;
   const payment = paymentStore.getPaymentByTranId(tranId);
 
   if (!payment) {
     return res.status(404).json({ success: false, error: 'Payment record not found' });
+  }
+
+  if (payment.userId !== req.user.id && !isStaff(req)) {
+    return res.status(403).json({ success: false, error: 'This transaction belongs to another account.' });
   }
 
   res.json({

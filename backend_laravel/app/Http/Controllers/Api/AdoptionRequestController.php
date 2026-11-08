@@ -7,6 +7,8 @@ use App\Models\AdoptionRequest;
 use App\Models\Pet;
 use App\Services\FcmService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class AdoptionRequestController extends Controller
 {
@@ -16,22 +18,31 @@ class AdoptionRequestController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'pet_id' => 'required|exists:pets,id',
+            'pet_id' => ['required', 'integer', Rule::exists('pets', 'id')->where('adoption_status', 'available')],
             'applicant_data' => 'required|array',
             'applicant_data.applicantName' => 'required|string',
             'applicant_data.applicantPhone' => 'required|string',
             'applicant_data.address' => 'required|string',
             'applicant_data.housingType' => 'required|string',
-            'signature_data' => 'nullable|string',
+            'signature_data' => 'required|string|max:250000',
+            'applicant_data.applicantEmail' => 'required|email',
+            'applicant_data.nidNumber' => 'required|string|max:50',
+            'applicant_data.emergencyContactName' => 'required|string|max:150',
+            'applicant_data.emergencyContactPhone' => 'required|string|max:30',
+            'applicant_data.landlordAllowsPets' => 'required|boolean',
+            'applicant_data.whyAdopt' => 'required|string|max:5000',
         ]);
 
         $pet = Pet::with('owner')->findOrFail($request->pet_id);
         $user = $request->user();
+        if ((int) $pet->owner_id === (int) $user->id) {
+            return response()->json(['status' => 'error', 'message' => 'You cannot adopt your own listing.'], 422);
+        }
 
         // Prevent duplicate pending applications for the same pet
         $existing = AdoptionRequest::where('pet_id', $pet->id)
             ->where('requester_id', $user->id)
-            ->whereNotIn('status', ['rejected'])
+            ->whereNotIn('status', ['rejected', 'withdrawn'])
             ->first();
 
         if ($existing) {
@@ -42,7 +53,7 @@ class AdoptionRequestController extends Controller
             ], 409);
         }
 
-        $referenceNo = 'AM-APP-' . rand(10000, 99999);
+        $referenceNo = 'AM-APP-' . strtoupper((string) Str::ulid());
 
         $application = AdoptionRequest::create([
             'reference_no' => $referenceNo,
@@ -53,7 +64,7 @@ class AdoptionRequestController extends Controller
             'applicant_data' => $request->applicant_data,
             'reviewer_notes' => 'Application received. Pending initial background verification.',
             'is_signed' => true,
-            'signature_data' => $request->signature_data ?? 'DIGITAL_SIGNATURE_VERIFIED',
+            'signature_data' => $request->signature_data,
         ]);
 
         // Push notification to pet owner / shelter

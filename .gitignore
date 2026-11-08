@@ -69,3 +69,7 @@ review app/
 
 *.apk
 
+
+# Node dependencies (backend/node_modules was committed historically; new installs stay out of Git)
+node_modules/
+dist/

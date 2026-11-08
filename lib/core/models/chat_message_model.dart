@@ -5,6 +5,7 @@ enum MessageDeliveryStatus {
   sent,
   delivered,
   read,
+  failed,
 }
 
 class ChatMessage extends Equatable {
@@ -115,6 +116,9 @@ class ChatConversation extends Equatable {
   final bool isPhoneMasked;
   final bool isOnline;
 
+  /// Server-side id of the shelter/listing owner, when the listing is remote.
+  final String? shelterUserId;
+
   const ChatConversation({
     required this.id,
     required this.petId,
@@ -122,12 +126,13 @@ class ChatConversation extends Equatable {
     required this.petBreed,
     required this.petImageUrl,
     required this.shelterName,
-    this.shelterPhoneMasked = '+880 17•• •••567',
+    this.shelterPhoneMasked = '',
     required this.lastMessage,
     required this.lastMessageTime,
     this.unreadCount = 0,
     this.isPhoneMasked = true,
-    this.isOnline = true,
+    this.isOnline = false,
+    this.shelterUserId,
   });
 
   ChatConversation copyWith({
@@ -143,6 +148,7 @@ class ChatConversation extends Equatable {
     int? unreadCount,
     bool? isPhoneMasked,
     bool? isOnline,
+    String? shelterUserId,
   }) {
     return ChatConversation(
       id: id ?? this.id,
@@ -157,6 +163,7 @@ class ChatConversation extends Equatable {
       unreadCount: unreadCount ?? this.unreadCount,
       isPhoneMasked: isPhoneMasked ?? this.isPhoneMasked,
       isOnline: isOnline ?? this.isOnline,
+      shelterUserId: shelterUserId ?? this.shelterUserId,
     );
   }
 
@@ -174,6 +181,7 @@ class ChatConversation extends Equatable {
       'unreadCount': unreadCount,
       'isPhoneMasked': isPhoneMasked,
       'isOnline': isOnline,
+      'shelterUserId': shelterUserId,
     };
   }
 
@@ -185,12 +193,13 @@ class ChatConversation extends Equatable {
       petBreed: json['petBreed'] as String,
       petImageUrl: json['petImageUrl'] as String,
       shelterName: json['shelterName'] as String,
-      shelterPhoneMasked: json['shelterPhoneMasked'] as String? ?? '+880 17•• •••567',
+      shelterPhoneMasked: json['shelterPhoneMasked'] as String? ?? '',
       lastMessage: json['lastMessage'] as String,
       lastMessageTime: DateTime.parse(json['lastMessageTime'] as String),
       unreadCount: json['unreadCount'] as int? ?? 0,
       isPhoneMasked: json['isPhoneMasked'] as bool? ?? true,
-      isOnline: json['isOnline'] as bool? ?? true,
+      isOnline: json['isOnline'] as bool? ?? false,
+      shelterUserId: json['shelterUserId'] as String?,
     );
   }
 
@@ -208,5 +217,6 @@ class ChatConversation extends Equatable {
         unreadCount,
         isPhoneMasked,
         isOnline,
+        shelterUserId,
       ];
 }
