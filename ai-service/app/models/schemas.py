@@ -3,7 +3,7 @@ from typing import List, Optional
 
 class AdopterAssessmentSchema(BaseModel):
     user_id: Optional[int] = None
-    daily_free_time_hours: int = Field(default=4, description="Daily free time in hours")
+    daily_free_time_hours: int = Field(default=4, ge=0, le=24, description="Daily free time in hours (0-24)")
     working_schedule: str = Field(default="HYBRID", description="REMOTE, HYBRID, OFFICE, FLEXIBLE")
     activity_level: str = Field(default="MODERATE", description="SEDENTARY, MODERATE, ACTIVE, VERY_ACTIVE")
     travel_frequency: str = Field(default="SELDOM", description="NEVER, SELDOM, MONTHLY, FREQUENT")

@@ -11,6 +11,12 @@ async function register(req, res) {
       return res.status(400).json({ error: 'Name, email, and password are required' });
     }
 
+    const normalizedRole = role.toUpperCase().trim();
+    const allowedRegistrationRoles = ['ADOPTER', 'FOSTER'];
+    if (!allowedRegistrationRoles.includes(normalizedRole)) {
+      return res.status(403).json({ error: 'Forbidden: Cannot self-assign privileged or unrecognized roles.' });
+    }
+
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(password, salt);
 
@@ -24,7 +30,7 @@ async function register(req, res) {
         name,
         email,
         password_hash,
-        role,
+        role: normalizedRole,
         phone: phone || '',
         avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'
       };
@@ -41,19 +47,19 @@ async function register(req, res) {
 
     const [result] = await pool.query(
       'INSERT INTO users (name, email, password_hash, role, phone) VALUES (?, ?, ?, ?, ?)',
-      [name, email, password_hash, role, phone || '']
+      [name, email, password_hash, normalizedRole, phone || '']
     );
 
     const userId = result.insertId;
 
-    if (role === 'ADOPTER') {
+    if (normalizedRole === 'ADOPTER') {
       await pool.query('INSERT INTO adopters (user_id) VALUES (?)', [userId]);
-    } else if (role === 'FOSTER') {
+    } else if (normalizedRole === 'FOSTER') {
       await pool.query('INSERT INTO foster_profiles (user_id) VALUES (?)', [userId]);
     }
 
-    const token = jwt.sign({ id: userId, name, email, role }, JWT_SECRET, { expiresIn: '7d' });
-    res.status(201).json({ token, user: { id: userId, name, email, role } });
+    const token = jwt.sign({ id: userId, name, email, role: normalizedRole }, JWT_SECRET, { expiresIn: '7d' });
+    res.status(201).json({ token, user: { id: userId, name, email, role: normalizedRole } });
   } catch (err) {
     console.error('Registration error:', err);
     res.status(500).json({ error: 'Failed to register user' });
@@ -73,8 +79,7 @@ async function login(req, res) {
       if (!user) {
         return res.status(401).json({ error: 'Invalid email or password' });
       }
-      // For demo ease, accept password123 or valid hash
-      const isValid = password === 'password123' || await bcrypt.compare(password, user.password_hash);
+      const isValid = await bcrypt.compare(password, user.password_hash);
       if (!isValid) {
         return res.status(401).json({ error: 'Invalid email or password' });
       }
@@ -89,7 +94,7 @@ async function login(req, res) {
     }
 
     const user = rows[0];
-    const isValid = await bcrypt.compare(password, user.password_hash) || password === 'password123';
+    const isValid = await bcrypt.compare(password, user.password_hash);
     if (!isValid) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }

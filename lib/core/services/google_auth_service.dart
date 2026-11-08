@@ -115,7 +115,8 @@ class GoogleAuthService {
                 'Accept': 'application/json',
               },
               body: jsonEncode({
-                'id_token': idToken ?? 'google_android_token',
+                'id_token': idToken ?? '',
+                'idToken': idToken ?? '',
                 'accessToken': accessToken,
                 'profile': {
                   'id': googleId,
@@ -131,15 +132,15 @@ class GoogleAuthService {
           final data = jsonDecode(res.body);
           isNewUser = data['is_new_user'] == true;
           final u = data['user'] ?? data['data'];
-          final sanctumToken = data['access_token'] ?? data['token'];
+          final sanctumToken = data['access_token'] ??
+              data['token'] ??
+              (data['tokens'] != null ? data['tokens']['accessToken'] : null);
 
           if (sanctumToken != null) {
             await SecureStorageService.instance.saveAuthToken(
               sanctumToken.toString(),
             );
             await ApiClient.saveToken(sanctumToken.toString());
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('auth_token', sanctumToken.toString());
           }
 
           if (u != null) {

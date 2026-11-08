@@ -38,8 +38,11 @@ export default function ApplicationPage() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  const [submitError, setSubmitError] = useState(null);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSubmitError(null);
     try {
       setLoading(true);
       const res = await api.post('/applications', {
@@ -50,9 +53,7 @@ export default function ApplicationPage() {
       setStep(5); // Success Timeline view
     } catch (err) {
       console.error('Submission error:', err);
-      // Demo fallback success
-      setSubmittedApp({ id: 101, status: 'Submitted', created_at: new Date().toISOString() });
-      setStep(5);
+      setSubmitError(err.response?.data?.error || err.message || 'Failed to submit application. Please check connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -220,6 +221,12 @@ export default function ApplicationPage() {
                   I certify that all information provided is accurate and truthful. I agree to allow the shelter staff to contact provided vet references and schedule a home visit if necessary.
                 </span>
               </label>
+            </div>
+          )}
+
+          {submitError && (
+            <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-medium">
+              {submitError}
             </div>
           )}
 

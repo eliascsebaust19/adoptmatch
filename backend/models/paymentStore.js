@@ -75,8 +75,9 @@ const createPayment = (data) => {
     userEmail: data.userEmail || '',
     planId: data.planId,
     planName: data.planName || 'AdoptMatch Premium',
+    durationDays: Number(data.durationDays || 30),
     amount: Number(data.amount),
-    currency: data.currency || 'BDT',
+    currency: (data.currency || 'BDT').toUpperCase(),
     status: data.status || 'PENDING',
     paymentMethod: data.paymentMethod || 'SSLCommerz',
     valId: data.valId || null,
@@ -142,6 +143,7 @@ const markPaymentSuccess = (tranId, details = {}) => {
 const markPaymentFailed = (tranId, reason = '') => {
   const payment = getPaymentByTranId(tranId);
   if (!payment) return null;
+  if (payment.status === 'SUCCESS') return payment; // Immutable terminal state
 
   payment.status = 'FAILED';
   payment.adminNote = reason;
@@ -151,6 +153,7 @@ const markPaymentFailed = (tranId, reason = '') => {
 const markPaymentCancelled = (tranId) => {
   const payment = getPaymentByTranId(tranId);
   if (!payment) return null;
+  if (payment.status === 'SUCCESS') return payment; // Immutable terminal state
 
   payment.status = 'CANCELLED';
   return payment;

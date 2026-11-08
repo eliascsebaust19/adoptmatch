@@ -66,22 +66,35 @@ class TransparentMatchingEngine:
 
         score += lifestyle_pts
 
-        # 3. Energy Compatibility (15 pts)
-        energy_pts = 0
-        activity = assessment.activity_level.upper()
-        p_energy = pet.energy_level.upper()
+        # 3. Energy Compatibility (15 pts) - Ordered level distance
+        activity_scale = {
+            "SEDENTARY": 1,
+            "MODERATE": 2,
+            "ACTIVE": 3,
+            "VERY_ACTIVE": 4,
+        }
+        energy_scale = {
+            "LOW": 1,
+            "MODERATE": 2,
+            "HIGH": 3,
+            "VERY HIGH": 4,
+            "VERY_HIGH": 4,
+        }
+        act_val = activity_scale.get(activity, 2)
+        eng_val = energy_scale.get(p_energy, 2)
+        diff = abs(act_val - eng_val)
 
-        if (activity in ["ACTIVE", "VERY_ACTIVE"] and p_energy in ["HIGH", "VERY HIGH"]) or \
-           (activity == "MODERATE" and p_energy in ["MODERATE", "LOW"]) or \
-           (activity == "SEDENTARY" and p_energy == "LOW"):
-            energy_pts += 15
+        if diff == 0:
+            energy_pts = 15
             reasons.append(f"Your {activity.lower()} lifestyle perfectly matches {pet.name}'s {pet.energy_level.lower()} energy level")
-        elif abs(len(activity) - len(p_energy)) <= 3:
-            energy_pts += 10
+        elif diff == 1:
+            energy_pts = 10
         else:
-            energy_pts += 5
-            if p_energy in ["HIGH", "VERY HIGH"] and activity == "SEDENTARY":
-                considerations.append(f"High energy level requires regular active exercise")
+            energy_pts = 5
+            if eng_val > act_val:
+                considerations.append("High energy level requires regular active exercise")
+            else:
+                considerations.append("Pet energy level differs noticeably from your typical routine")
 
         score += energy_pts
 

@@ -72,16 +72,16 @@ class PetController extends Controller
      */
     public function getNearbyPets(Request $request)
     {
-        $request->validate([
-            'latitude' => 'required|numeric',
-            'longitude' => 'required|numeric',
-            'radius_km' => 'nullable|numeric|max:150',
-            'species' => 'nullable|string',
-        ]);
+        $lat = (float) ($request->latitude ?? $request->lat);
+        $lng = (float) ($request->longitude ?? $request->lng);
+        $radius = (float) ($request->radius_km ?? $request->radius ?? 30);
 
-        $lat = (float) $request->latitude;
-        $lng = (float) $request->longitude;
-        $radius = (float) ($request->radius_km ?? 30);
+        if (empty($lat) || empty($lng)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Latitude and longitude coordinates are required.',
+            ], 422);
+        }
 
         $haversine = "(6371 * acos(least(1.0, cos(radians(?)) 
                       * cos(radians(location_lat)) 

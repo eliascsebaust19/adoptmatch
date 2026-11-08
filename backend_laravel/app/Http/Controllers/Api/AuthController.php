@@ -29,50 +29,34 @@ class AuthController extends Controller
             $payload = null;
             $clientId = config('services.google.client_id');
 
-            // 1. Verify with Google API Client if client_id is configured
-            if (!empty($clientId) && !empty($idToken)) {
+            // Cryptographic verification with Google API Client
+            if (!empty($idToken)) {
                 try {
-                    $client = new GoogleClient(['client_id' => $clientId]);
+                    $clientConfig = [];
+                    if (!empty($clientId)) {
+                        $clientConfig['client_id'] = $clientId;
+                    }
+                    $client = new GoogleClient($clientConfig);
                     $payload = $client->verifyIdToken($idToken);
                 } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::warning('Google verifyIdToken failed: ' . $e->getMessage());
                     $payload = null;
                 }
             }
 
-            // 2. Fallback: Parse Google JWT Token Claims if client_id isn't configured yet
-            if (!$payload && !empty($idToken) && str_contains($idToken, '.')) {
-                $parts = explode('.', $idToken);
-                if (count($parts) >= 2) {
-                    $decoded = json_decode(base64_decode(strtr($parts[1], '-_', '+/')), true);
-                    if ($decoded && !empty($decoded['email'])) {
-                        $payload = [
-                            'sub' => $decoded['sub'] ?? ('g_' . md5($decoded['email'])),
-                            'email' => $decoded['email'],
-                            'name' => $decoded['name'] ?? ($decoded['given_name'] ?? 'Google User'),
-                            'picture' => $decoded['picture'] ?? null,
-                        ];
-                    }
-                }
-            }
-
-            // 3. Fallback: Accept client profile object (from GoogleAuthService)
-            if (!$payload && $request->has('profile')) {
-                $prof = $request->input('profile');
-                if (!empty($prof['email'])) {
-                    $payload = [
-                        'sub' => $prof['id'] ?? ('g_' . md5($prof['email'])),
-                        'email' => $prof['email'],
-                        'name' => $prof['name'] ?? 'Google User',
-                        'picture' => $prof['photoUrl'] ?? null,
-                    ];
-                }
-            }
-
-            if (!$payload) {
+            if (!$payload || empty($payload['email'])) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Invalid or expired Google Token.',
+                    'message' => 'Cryptographically valid Google ID token required. Verification failed.',
                 ], 401);
+            }
+
+            // Reject unverified emails
+            if (isset($payload['email_verified']) && !$payload['email_verified']) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Google account email is not verified.',
+                ], 403);
             }
 
             $googleId = $payload['sub'] ?? ('g_' . md5($payload['email']));

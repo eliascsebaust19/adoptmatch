@@ -10,10 +10,10 @@ import 'supabase_service.dart';
 class StorageService {
   static final ImagePicker _picker = ImagePicker();
 
-  /// Vercel Blob Read/Write Token
+  /// Vercel Blob Read/Write Token (Injected via --dart-define or environment)
   static const String vercelBlobToken = String.fromEnvironment(
     'BLOB_READ_WRITE_TOKEN',
-    defaultValue: 'vercel_blob_rw_3kHT7mDTcvdaG9fF_Q2HYrNy68uqXIFyT9NpMdXM22v6cvQ',
+    defaultValue: '',
   );
 
   static const String vercelBlobStoreId = '3kHT7mDTcvdaG9fF';
@@ -65,6 +65,10 @@ class StorageService {
     required String fileName,
     String contentType = 'image/jpeg',
   }) async {
+    if (vercelBlobToken.isEmpty) {
+      debugPrint('[StorageService] Vercel Blob client token not configured; delegating to server.');
+      return null;
+    }
     try {
       final sanitized = fileName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
       final pathname = 'uploads/${DateTime.now().millisecondsSinceEpoch}_$sanitized';

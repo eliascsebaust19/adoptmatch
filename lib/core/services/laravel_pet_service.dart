@@ -39,6 +39,22 @@ class LaravelPetService {
     }
   }
 
+  /// Fetch detailed information for a single pet by ID
+  Future<Pet?> getPetDetails(String id) async {
+    try {
+      final response = await _apiClient.dio.get('/pets/$id');
+      if (response.statusCode == 200 &&
+          (response.data['status'] == 'success' || response.data['success'] == true)) {
+        final data = response.data['data'] as Map<String, dynamic>;
+        return _petFromJson(data);
+      }
+      return null;
+    } catch (e) {
+      debugPrint('[LaravelPetService] getPetDetails error: $e');
+      return null;
+    }
+  }
+
   /// Tinder-style swipe stack: fetches candidate pets excluding already swiped ones
   Future<List<Pet>> getSwipeStack() async {
     try {
@@ -77,6 +93,9 @@ class LaravelPetService {
   }) async {
     try {
       final response = await _apiClient.dio.get('/pets/nearby', queryParameters: {
+        'latitude': lat,
+        'longitude': lng,
+        'radius_km': radiusKm,
         'lat': lat,
         'lng': lng,
         'radius': radiusKm,
@@ -84,7 +103,8 @@ class LaravelPetService {
 
       if (response.statusCode == 200 &&
           (response.data['status'] == 'success' || response.data['success'] == true)) {
-        final List data = response.data['data'] as List;
+        final rawData = response.data['data'];
+        final List data = rawData is Map ? (rawData['data'] as List? ?? []) : (rawData as List? ?? []);
         return data.map((json) => _petFromJson(json as Map<String, dynamic>)).toList();
       }
       return [];
@@ -101,7 +121,8 @@ class LaravelPetService {
   }) async {
     try {
       final response = await _apiClient.dio.post('/adoption-requests', data: {
-        'pet_id': petId,
+        'pet_id': int.tryParse(petId) ?? petId,
+        'applicant_data': answersJson,
         'answers_json': answersJson,
       });
 
@@ -122,11 +143,14 @@ class LaravelPetService {
       final response = await _apiClient.dio.get('/adoption-requests');
       if (response.statusCode == 200 &&
           (response.data['status'] == 'success' || response.data['success'] == true)) {
-        final List data = response.data['data'] as List;
+        final rawData = response.data['data'];
+        final List data = rawData is Map ? (rawData['data'] as List? ?? []) : (rawData as List? ?? []);
         return data.map((json) {
           final answers = json['answers_json'] is Map<String, dynamic>
               ? json['answers_json'] as Map<String, dynamic>
-              : <String, dynamic>{};
+              : (json['applicant_data'] is Map<String, dynamic>
+                  ? json['applicant_data'] as Map<String, dynamic>
+                  : <String, dynamic>{});
           return AdoptionApplication.fromJson({
             'id': json['id']?.toString() ?? '',
             'petId': json['pet_id']?.toString() ?? '',

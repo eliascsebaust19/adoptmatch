@@ -13,15 +13,11 @@ class SubscriptionRepository {
   factory SubscriptionRepository() => _instance;
   SubscriptionRepository._internal();
 
-  /// Configurable backend URL. On Android emulators '10.0.2.2' is used; for desktop/web 'localhost'.
-  String get baseUrl {
-    if (kIsWeb) return 'http://localhost:5000';
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      // Android emulator maps 10.0.2.2 to host machine localhost
-      return 'http://10.0.2.2:5000';
-    }
-    return 'http://localhost:5000';
-  }
+  /// Configurable backend URL pointing to deployed production API by default
+  String get baseUrl => const String.fromEnvironment(
+    'BACKEND_URL',
+    defaultValue: 'https://adoptmatch-api.onrender.com',
+  );
 
   /// Official bKash support & manual payment number
   String officialBkashNumber = '01711234567';
@@ -106,22 +102,10 @@ class SubscriptionRepository {
         throw Exception(err['error'] ?? 'Failed to initiate payment session');
       }
     } catch (e) {
-      // In offline / isolated testing, provide a mock simulation response
-      debugPrint(
-        '[SubscriptionRepository] Offline fallback for SSLCommerz: $e',
-      );
-      final plan = _cachedPlans.firstWhere(
-        (p) => p.id == planId,
-        orElse: () => _cachedPlans[1],
-      );
-      final tranId = 'AM-SUB-${DateTime.now().millisecondsSinceEpoch}-MOCK';
+      debugPrint('[SubscriptionRepository] SSLCommerz initiation error: $e');
       return {
-        'success': true,
-        'tranId': tranId,
-        'amount': plan.price,
-        'gatewayUrl':
-            '$baseUrl/api/v1/payments/sandbox-simulator?tran_id=$tranId&amount=${plan.price}&plan_id=${plan.id}&user_id=$userId',
-        'isMock': true,
+        'success': false,
+        'error': e.toString(),
       };
     }
   }
@@ -161,27 +145,8 @@ class SubscriptionRepository {
         );
       }
     } catch (e) {
-      debugPrint(
-        '[SubscriptionRepository] Offline fallback for manual bKash: $e',
-      );
-      final plan = _cachedPlans.firstWhere(
-        (p) => p.id == planId,
-        orElse: () => _cachedPlans[1],
-      );
-      return PaymentRecord(
-        tranId: 'AM-BKASH-${DateTime.now().millisecondsSinceEpoch}',
-        userId: userId,
-        userName: userName,
-        userEmail: userEmail,
-        planId: planId,
-        planName: plan.name,
-        amount: plan.price,
-        status: 'PENDING_APPROVAL',
-        paymentMethod: 'bKash (Manual)',
-        senderPhone: senderPhone,
-        trxId: trxId.toUpperCase(),
-        createdAt: DateTime.now(),
-      );
+      debugPrint('[SubscriptionRepository] submitManualBkashPayment error: $e');
+      rethrow;
     }
   }
 
@@ -299,12 +264,13 @@ class SubscriptionRepository {
   /// Admin approves a pending manual bKash payment
   Future<bool> approveManualPayment(String tranId, [String? token]) async {
     try {
+      final effectiveToken = token ?? await SecureStorageService.instance.getAuthToken();
       final response = await http
           .post(
             Uri.parse('$baseUrl/api/v1/admin/payments/$tranId/approve'),
             headers: {
               'Content-Type': 'application/json',
-              if (token != null) 'Authorization': 'Bearer $token',
+              if (effectiveToken != null) 'Authorization': 'Bearer $effectiveToken',
             },
           )
           .timeout(const Duration(seconds: 5));
@@ -312,7 +278,7 @@ class SubscriptionRepository {
       return response.statusCode == 200;
     } catch (e) {
       debugPrint('[SubscriptionRepository] approveManualPayment error: $e');
-      return true; // Simulate success in offline mock
+      return false;
     }
   }
 
@@ -323,12 +289,13 @@ class SubscriptionRepository {
     String? token,
   ]) async {
     try {
+      final effectiveToken = token ?? await SecureStorageService.instance.getAuthToken();
       final response = await http
           .post(
             Uri.parse('$baseUrl/api/v1/admin/payments/$tranId/reject'),
             headers: {
               'Content-Type': 'application/json',
-              if (token != null) 'Authorization': 'Bearer $token',
+              if (effectiveToken != null) 'Authorization': 'Bearer $effectiveToken',
             },
             body: jsonEncode({'reason': reason}),
           )
@@ -337,7 +304,7 @@ class SubscriptionRepository {
       return response.statusCode == 200;
     } catch (e) {
       debugPrint('[SubscriptionRepository] rejectManualPayment error: $e');
-      return true;
+      return false;
     }
   }
 

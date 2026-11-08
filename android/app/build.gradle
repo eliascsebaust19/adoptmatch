@@ -45,7 +45,10 @@ android {
 
     buildTypes {
         release {
-            signingConfig keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
+            if (!keystorePropertiesFile.exists()) {
+                throw new GradleException("Release build requires a valid key.properties configuration for release signing.")
+            }
+            signingConfig signingConfigs.release
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }

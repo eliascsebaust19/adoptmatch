@@ -23,7 +23,7 @@ class SecureStorageService {
     ),
   );
 
-  /// Saves the Sanctum Bearer token securely with SharedPreferences fallback for Web/Offline
+  /// Saves the Sanctum Bearer token securely in encrypted hardware storage
   Future<void> saveAuthToken(String token) async {
     _memoryFallback[_keyAuthToken] = token;
     try {
@@ -31,10 +31,13 @@ class SecureStorageService {
     } catch (e) {
       debugPrint('[SecureStorageService] Hardware storage notice: $e');
     }
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keyAuthToken, token);
-    } catch (_) {}
+    // Only use SharedPreferences fallback when running on Web where KeyStore is unavailable
+    if (kIsWeb) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_keyAuthToken, token);
+      } catch (_) {}
+    }
   }
 
   /// Retrieves the saved Sanctum Bearer token with multi-tier fallback
@@ -47,11 +50,13 @@ class SecureStorageService {
     final mem = _memoryFallback[_keyAuthToken];
     if (mem != null && mem.isNotEmpty) return mem;
 
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final pToken = prefs.getString(_keyAuthToken);
-      if (pToken != null && pToken.isNotEmpty) return pToken;
-    } catch (_) {}
+    if (kIsWeb) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final pToken = prefs.getString(_keyAuthToken);
+        if (pToken != null && pToken.isNotEmpty) return pToken;
+      } catch (_) {}
+    }
 
     return null;
   }

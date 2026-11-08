@@ -37,7 +37,11 @@ async function verifyGoogleToken(idToken) {
       idToken,
       audience: GOOGLE_CLIENT_ID,
     });
-    return ticket.getPayload();
+    const payload = ticket.getPayload();
+    if (!payload.email_verified) {
+      throw new Error('Google account email is not verified.');
+    }
+    return payload;
   } catch (libErr) {
     // Fallback: Verify directly against Google's public tokeninfo endpoint
     return new Promise((resolve, reject) => {
@@ -50,6 +54,16 @@ async function verifyGoogleToken(idToken) {
             const data = JSON.parse(raw);
             if (data.error_description || data.error) {
               return reject(new Error(data.error_description || data.error));
+            }
+            // Cryptographic audience and verification checks
+            if (data.aud !== GOOGLE_CLIENT_ID) {
+              return reject(new Error(`Invalid token audience: ${data.aud}. Expected ${GOOGLE_CLIENT_ID}`));
+            }
+            if (data.email_verified !== 'true' && data.email_verified !== true) {
+              return reject(new Error('Google email is not verified.'));
+            }
+            if (!data.email) {
+              return reject(new Error('Google token does not contain a valid email.'));
             }
             resolve(data);
           } catch (e) {
@@ -90,51 +104,28 @@ function generateTokens(user) {
  */
 router.post('/google', async (req, res) => {
   try {
-    const { idToken, profile } = req.body;
+    const idToken = req.body.idToken || req.body.id_token;
 
-    if (!idToken && !profile) {
+    if (!idToken) {
       return res.status(400).json({
         success: false,
         error: 'Bad Request',
         code: 'MISSING_GOOGLE_CREDENTIALS',
-        message: 'Either idToken or profile data is required for Google authentication.',
+        message: 'A cryptographically valid Google idToken is required for authentication.',
       });
     }
 
     let googlePayload = null;
-
-    if (idToken) {
-      try {
-        googlePayload = await verifyGoogleToken(idToken);
-      } catch (err) {
-        console.warn('[AUTH] Google idToken verification failed:', err.message);
-
-        // If client provided profile as fallback in dev mode
-        if (profile && (process.env.NODE_ENV !== 'production' || !idToken.startsWith('mock-'))) {
-          googlePayload = {
-            sub: profile.id || `google-${Date.now()}`,
-            email: profile.email,
-            name: profile.name,
-            picture: profile.photoUrl || profile.picture,
-            email_verified: true,
-          };
-        } else {
-          return res.status(401).json({
-            success: false,
-            error: 'Unauthorized',
-            code: 'INVALID_GOOGLE_TOKEN',
-            message: `Google ID token could not be verified: ${err.message}`,
-          });
-        }
-      }
-    } else if (profile) {
-      googlePayload = {
-        sub: profile.id || `google-${Date.now()}`,
-        email: profile.email,
-        name: profile.name,
-        picture: profile.photoUrl || profile.picture,
-        email_verified: true,
-      };
+    try {
+      googlePayload = await verifyGoogleToken(idToken);
+    } catch (err) {
+      console.warn('[AUTH] Google idToken verification failed:', err.message);
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized',
+        code: 'INVALID_GOOGLE_TOKEN',
+        message: `Google ID token could not be verified: ${err.message}`,
+      });
     }
 
     if (!googlePayload || !googlePayload.email) {

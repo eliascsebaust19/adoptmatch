@@ -23,8 +23,8 @@ class UploadController extends Controller
         $folder = $request->folder ?? 'adoptmatch/pets';
 
         // 1. Primary: Vercel Blob High-Speed Global CDN upload
-        $vercelToken = env('BLOB_READ_WRITE_TOKEN', 'vercel_blob_rw_3kHT7mDTcvdaG9fF_Q2HYrNy68uqXIFyT9NpMdXM22v6cvQ');
-        $storeId = env('VERCEL_BLOB_STORE_ID', '3kHT7mDTcvdaG9fF');
+        $vercelToken = env('BLOB_READ_WRITE_TOKEN');
+        $storeId = env('VERCEL_BLOB_STORE_ID');
 
         if (!empty($vercelToken)) {
             try {

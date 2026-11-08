@@ -33,21 +33,37 @@ app.get('/health', (req, res) => {
 });
 
 /**
- * Convenience Auth Token Generator (For API testing & verification)
+ * Test Auth Token Generator (Disabled in production; restricted to non-admin roles in development)
  * POST /api/v1/auth/token
- * Body: { "email": "admin@adoptmatch.org", "role": "ADMIN", "name": "Admin Tester" }
  */
 app.post('/api/v1/auth/token', (req, res) => {
-  const { email = 'admin@adoptmatch.org', role = 'ADMIN', name = 'Sarah Rahman' } = req.body;
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({
+      success: false,
+      error: 'Forbidden: Test token generation endpoint is permanently disabled in production builds.',
+    });
+  }
 
-  const validRoles = ['USER', 'SHELTER', 'FOSTER', 'ADMIN', 'SUPER_ADMIN'];
+  const { email = 'dev@adoptmatch.org', role = 'USER', name = 'Test User', testSecret } = req.body;
+
+  const validRoles = ['USER', 'SHELTER', 'FOSTER'];
+  const privilegedRoles = ['ADMIN', 'SUPER_ADMIN'];
   const normalizedRole = role.toUpperCase().trim();
 
-  if (!validRoles.includes(normalizedRole)) {
+  // Privileged roles require TEST_AUTH_SECRET even in development
+  if (privilegedRoles.includes(normalizedRole)) {
+    const expectedSecret = process.env.TEST_AUTH_SECRET;
+    if (!expectedSecret || testSecret !== expectedSecret) {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: Generating administrative tokens requires valid testSecret credentials.',
+      });
+    }
+  } else if (!validRoles.includes(normalizedRole)) {
     return res.status(400).json({
       success: false,
       error: 'Invalid role',
-      validRoles,
+      validRoles: [...validRoles, ...privilegedRoles],
     });
   }
 
@@ -65,7 +81,6 @@ app.post('/api/v1/auth/token', (req, res) => {
     message: `Generated test JWT token for role "${normalizedRole}"`,
     role: normalizedRole,
     token,
-    curlExample: `curl -H "Authorization: Bearer ${token}" http://localhost:${PORT}/api/v1/admin/stats`,
   });
 });
 
@@ -119,16 +134,34 @@ app.post('/api/v1/storage/upload', async (req, res) => {
       }
     }
 
-    // 2. Default Supabase storage path
-    const publicUrl = `https://wgztdhabgedhkaippkpd.supabase.co/storage/v1/object/public/avatars/${sanitizedFilename}`;
+    // 2. Fallback: If Supabase Service Key is configured, perform actual storage upload
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      try {
+        const { createClient } = require('@supabase/supabase-js');
+        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+        const { data, error } = await supabase.storage.from('avatars').upload(sanitizedFilename, buffer, {
+          contentType,
+          upsert: true,
+        });
+        if (error) throw error;
 
-    return res.json({
-      success: true,
-      provider: 'supabase-storage',
-      url: publicUrl,
-      sanitizedFilename,
-      bytes: buffer.length,
-      message: 'Image processed for Supabase storage bucket "avatars"',
+        const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(sanitizedFilename);
+        return res.json({
+          success: true,
+          provider: 'supabase-storage',
+          url: urlData.publicUrl,
+          sanitizedFilename,
+          bytes: buffer.length,
+        });
+      } catch (sbErr) {
+        console.warn('[STORAGE] Supabase upload failed:', sbErr.message);
+      }
+    }
+
+    // Fail closed: Do not fabricate a successful URL without actually storing bytes
+    return res.status(503).json({
+      success: false,
+      error: 'Storage service unavailable: Neither Vercel Blob nor Supabase Storage could persist the file.',
     });
   } catch (err) {
     console.error('[STORAGE ERROR]', err);

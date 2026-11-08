@@ -5,7 +5,11 @@
 
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'adoptmatch-production-secure-jwt-key-2026';
+if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+  throw new Error('FATAL SECURITY ERROR: JWT_SECRET environment variable must be explicitly defined in production!');
+}
+
+const JWT_SECRET = process.env.JWT_SECRET || 'adoptmatch-dev-only-secret-2026';
 
 // Global In-Memory Token Revocation Registry
 // Maps userId -> timestamp (ms) after which previous tokens are deemed invalidated

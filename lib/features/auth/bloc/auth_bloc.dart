@@ -649,36 +649,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         }
       }
 
-      // 3. Fallback: Authenticate with cached profile or offline credentials when server is cold
-      final cachedProfile = await SecureStorageService.instance.getUserProfile();
-      if (cachedProfile != null && cachedProfile.email.toLowerCase() == emailLower) {
-        final token = await SecureStorageService.instance.getAuthToken() ?? 'session_cached';
-        await SecureStorageService.instance.saveAuthToken(token);
-        _currentUser = cachedProfile;
-        emit(Authenticated(cachedProfile));
-        return;
-      }
-
-      // 4. Default adopter login fallback when backend is sleeping on free tier
-      if (event.password.length >= 6) {
-        final fallbackToken = 'sanctum_session_${DateTime.now().millisecondsSinceEpoch}';
-        final user = UserProfile(
-          id: 'u-${emailLower.hashCode.abs()}',
-          name: emailLower.split('@').first,
-          email: emailLower,
-          phone: '',
-          role: UserRole.adopter,
-          avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
-          isVerified: true,
-        );
-        await SecureStorageService.instance.saveAuthToken(fallbackToken);
-        await SecureStorageService.instance.saveUserProfile(user);
-        _currentUser = user;
-        emit(Authenticated(user));
-        return;
-      }
-
-      emit(const AuthFailure('Invalid email or password.'));
+      emit(const AuthFailure('Invalid credentials or authentication server is currently unreachable.'));
     } catch (e) {
       emit(AuthFailure(e.toString()));
     }
@@ -756,27 +727,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         }
       }
 
-      // 3. Fallback: Support default admin credentials if backend is cold/offline
-      if (emailLower.contains('admin') && event.password.length >= 6) {
-        final fallbackToken = 'admin_session_${DateTime.now().millisecondsSinceEpoch}';
-        final adminUser = UserProfile(
-          id: 'admin-1',
-          name: 'System Administrator',
-          email: emailLower,
-          phone: '',
-          role: UserRole.admin,
-          isVerified: true,
-        );
-        await SecureStorageService.instance.saveAuthToken(fallbackToken);
-        await SecureStorageService.instance.saveUserProfile(adminUser);
-        _currentUser = adminUser;
-        emit(Authenticated(adminUser));
-        return;
-      }
-
       emit(
         const AuthFailure(
-          '403 Forbidden: Access Denied. Invalid administrative credentials.',
+          '403 Forbidden: Access Denied. Invalid administrative credentials or server unreachable.',
         ),
       );
     } catch (e) {
@@ -789,8 +742,13 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) async {
     emit(AuthLoading());
-    await Future.delayed(const Duration(milliseconds: 400));
-    emit(AuthOtpSent(event.phoneNumber));
+    final phone = event.phoneNumber.trim();
+    if (phone.length < 11) {
+      emit(const AuthFailure('Please provide a valid 11-digit mobile phone number.'));
+      return;
+    }
+    // Fail closed: Inform user that SMS gateway integration is disabled for this build
+    emit(const AuthFailure('Direct SMS OTP gateway is not configured on this server. Please authenticate with Google or verified Email.'));
   }
 
   Future<void> _onVerifyOtp(
@@ -798,18 +756,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) async {
     emit(AuthLoading());
-    await Future.delayed(const Duration(milliseconds: 500));
-    final user = UserProfile(
-      id: 'u-${DateTime.now().millisecondsSinceEpoch}',
-      name: 'Phone User',
-      email: '${event.phoneNumber}@adoptmatch.bd',
-      phone: event.phoneNumber,
-      role: UserRole.adopter,
-      isVerified: true,
-    );
-    _currentUser = user;
-    await SecureStorageService.instance.saveUserProfile(user);
-    emit(Authenticated(user));
+    final otp = event.otp.trim();
+    if (otp.length != 6) {
+      emit(const AuthFailure('Invalid OTP. Please enter the 6-digit verification code.'));
+      return;
+    }
+    emit(const AuthFailure('OTP verification server unavailable. Please authenticate with Google.'));
   }
 
   Future<void> _onSocialLogin(

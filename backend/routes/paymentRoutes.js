@@ -88,7 +88,7 @@ router.post('/initiate-sslcommerz', async (req, res) => {
 
     const tranId = `AM-SUB-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
-    // Record initial pending transaction
+    // Record initial pending transaction with snapshot of duration & pricing
     paymentStore.createPayment({
       tranId,
       userId: effectiveUserId,
@@ -96,6 +96,7 @@ router.post('/initiate-sslcommerz', async (req, res) => {
       userEmail: effectiveEmail,
       planId: plan.id,
       planName: plan.name,
+      durationDays: plan.durationDays || 30,
       amount: plan.price,
       currency: 'BDT',
       status: 'PENDING',
@@ -156,6 +157,12 @@ router.post('/initiate-sslcommerz', async (req, res) => {
     // In sandbox or test environments if live SSLCommerz session cannot be opened,
     // provide an interactive Sandbox Payment Simulator URL so testers can simulate bKash/Card payment
     if (!gatewayUrl) {
+      if (IS_LIVE || process.env.NODE_ENV === 'production') {
+        return res.status(502).json({
+          success: false,
+          error: 'Gateway unreachable. Cannot initiate live payment session.',
+        });
+      }
       gatewayUrl = `${BASE_URL}/api/v1/payments/sandbox-simulator?tran_id=${tranId}&amount=${plan.price}&plan_id=${plan.id}&user_id=${effectiveUserId}`;
     }
 
@@ -239,9 +246,16 @@ router.get('/sandbox-simulator', (req, res) => {
  * Server-Side Validation Helper (Validates transaction directly with SSLCommerz)
  */
 async function verifyWithSslCommerzServer(valId) {
-  if (!valId || valId.startsWith('SIMULATED-VAL-')) {
-    // Simulator pass
-    return { isValid: true, status: 'VALID' };
+  if (!valId) {
+    return { isValid: false, error: 'val_id is required' };
+  }
+
+  // Strictly block simulated validation IDs in live or production environments
+  if (valId.startsWith('SIMULATED-VAL-')) {
+    if (IS_LIVE || process.env.NODE_ENV === 'production') {
+      return { isValid: false, error: 'Simulated payment verification is strictly disallowed in live or production environments.' };
+    }
+    return { isValid: true, status: 'VALID', isSimulated: true };
   }
 
   try {
@@ -252,11 +266,12 @@ async function verifyWithSslCommerzServer(valId) {
     const isValid = data && (data.status === 'VALID' || data.status === 'VALIDATED');
     return {
       isValid,
-      status: data.status,
-      amount: data.amount,
-      currency: data.currency,
-      bankTranId: data.bank_tran_id,
-      cardType: data.card_type,
+      status: data ? data.status : 'INVALID',
+      amount: data ? data.amount : null,
+      currency: data ? data.currency : null,
+      bankTranId: data ? data.bank_tran_id : null,
+      cardType: data ? data.card_type : null,
+      tranId: data ? data.tran_id : null,
     };
   } catch (err) {
     console.error('[SSL VALIDATION REQUEST ERROR]', err);
@@ -284,6 +299,17 @@ router.post('/sslcommerz-success', async (req, res) => {
       return res.redirect(`${APP_DEEP_LINK}?status=failed&tran_id=${tran_id}`);
     }
 
+    // Verify transaction amount and currency against recorded payment if gateway returned them
+    if (validation.amount && Math.abs(Number(validation.amount) - Number(payment.amount)) > 0.01) {
+      paymentStore.markPaymentFailed(tran_id, `Amount mismatch: Gateway reported ${validation.amount}, expected ${payment.amount}`);
+      return res.redirect(`${APP_DEEP_LINK}?status=failed&tran_id=${tran_id}`);
+    }
+
+    if (validation.currency && validation.currency.toUpperCase() !== payment.currency.toUpperCase()) {
+      paymentStore.markPaymentFailed(tran_id, `Currency mismatch: Gateway reported ${validation.currency}, expected ${payment.currency}`);
+      return res.redirect(`${APP_DEEP_LINK}?status=failed&tran_id=${tran_id}`);
+    }
+
     // 2. Idempotent Activation
     const { alreadySuccess } = paymentStore.markPaymentSuccess(tran_id, {
       valId: val_id,
@@ -292,8 +318,7 @@ router.post('/sslcommerz-success', async (req, res) => {
     });
 
     if (!alreadySuccess) {
-      const plan = planStore.getPlanById(payment.planId);
-      const duration = plan ? plan.durationDays : 30;
+      const duration = payment.durationDays || 30;
       userStore.activateUserSubscription(payment.userId, payment.planId, duration, tran_id);
       console.log(`[SUBSCRIPTION ACTIVATED] User: ${payment.userId} Plan: ${payment.planId} Tran: ${tran_id}`);
     }
@@ -375,15 +400,28 @@ router.post('/sslcommerz-ipn', async (req, res) => {
   const payment = paymentStore.getPaymentByTranId(tran_id);
   if (!payment) return res.status(404).send('Transaction not found');
 
-  if (status === 'VALID' || status === 'VALIDATED') {
-    const { alreadySuccess } = paymentStore.markPaymentSuccess(tran_id, { valId: val_id });
-    if (!alreadySuccess) {
-      const plan = planStore.getPlanById(payment.planId);
-      userStore.activateUserSubscription(payment.userId, payment.planId, plan ? plan.durationDays : 30, tran_id);
-    }
+  // Verify directly with SSLCommerz server instead of trusting submitted status
+  const validation = await verifyWithSslCommerzServer(val_id);
+  if (!validation.isValid) {
+    return res.status(400).json({ success: false, error: 'IPN validation with SSLCommerz failed' });
   }
 
-  res.json({ success: true, message: 'IPN processed' });
+  if (validation.amount && Math.abs(Number(validation.amount) - Number(payment.amount)) > 0.01) {
+    return res.status(400).json({ success: false, error: 'Amount mismatch detected in IPN' });
+  }
+
+  const { alreadySuccess } = paymentStore.markPaymentSuccess(tran_id, {
+    valId: val_id,
+    bankTranId: validation.bankTranId,
+    cardType: validation.cardType,
+  });
+
+  if (!alreadySuccess) {
+    const duration = payment.durationDays || 30;
+    userStore.activateUserSubscription(payment.userId, payment.planId, duration, tran_id);
+  }
+
+  res.json({ success: true, message: 'IPN verified and processed successfully' });
 });
 
 /**

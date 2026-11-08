@@ -872,7 +872,19 @@ class PetRepository {
         search: searchQuery,
       );
       if (remotePets.isNotEmpty) {
+        // Cache and merge remote pets into local state for detail & favorite lookup
+        for (final rp in remotePets) {
+          final idx = _pets.indexWhere((p) => p.id == rp.id);
+          if (idx != -1) {
+            _pets[idx] = rp;
+          } else {
+            _pets.add(rp);
+          }
+        }
         var result = List<Pet>.from(remotePets);
+        if (maxDistanceKm != null && maxDistanceKm < 50) {
+          result = result.where((p) => p.distanceKm <= maxDistanceKm).toList();
+        }
         if (kidSafeOnly == true) {
           result = result.where((p) => p.isKidSafe).toList();
         }
@@ -940,6 +952,13 @@ class PetRepository {
     try {
       return _pets.firstWhere((p) => p.id == id);
     } catch (_) {
+      try {
+        final remote = await _laravelPetService.getPetDetails(id);
+        if (remote != null) {
+          _pets.add(remote);
+          return remote;
+        }
+      } catch (_) {}
       return null;
     }
   }

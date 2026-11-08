@@ -1,6 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import '../models/application_model.dart';
 import '../services/local_storage_service.dart';
+import '../storage/secure_storage_service.dart';
+import '../services/google_auth_service.dart';
 
 class ApplicationRepository {
   static final ApplicationRepository _instance = ApplicationRepository._internal();
@@ -101,10 +106,63 @@ class ApplicationRepository {
   }) async {
     if (!_initialized) await _init();
 
-    final newId = 'AM-APP-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+    String referenceId = 'AM-APP-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+
+    // Synchronize dossier with Laravel 11 Backend API
+    try {
+      final token = await SecureStorageService.instance.getAuthToken();
+      final numericPetId = int.tryParse(petId) ?? 1;
+
+      final res = await http.post(
+        Uri.parse('${GoogleAuthService.backendBaseUrl}/api/v1/adoption-requests'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'pet_id': numericPetId,
+          'applicant_data': {
+            'applicantName': applicantName,
+            'applicantPhone': applicantPhone,
+            'applicantEmail': applicantEmail,
+            'address': address,
+            'housingType': housingType,
+            'ownershipStatus': ownershipStatus,
+            'landlordAllowsPets': landlordAllowsPets,
+            'landlordContact': landlordContact,
+            'yardType': yardType,
+            'petLivingSpace': petLivingSpace,
+            'totalAdults': totalAdults,
+            'hasKids': hasKids,
+            'childrenAges': childrenAges,
+            'hasAllergies': hasAllergies,
+            'hasOtherPets': hasOtherPets,
+            'otherPetsDetails': otherPetsDetails,
+            'dailyHoursAlone': dailyHoursAlone,
+            'primaryCaregiver': primaryCaregiver,
+            'petExperience': petExperience,
+            'emergencyVetFund': emergencyVetFund,
+            'monthlyBudget': monthlyBudget,
+            'whyAdopt': whyAdopt,
+            'nidNumber': nidNumber,
+          },
+          'signature_data': signatureData,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        final data = jsonDecode(res.body);
+        if (data['data'] != null && data['data']['reference_no'] != null) {
+          referenceId = data['data']['reference_no'].toString();
+        }
+      }
+    } catch (e) {
+      debugPrint('[ApplicationRepository] Remote adoption sync notice: $e');
+    }
 
     final newApp = AdoptionApplication(
-      id: newId,
+      id: referenceId,
       petId: petId,
       petName: petName,
       petBreed: petBreed,
