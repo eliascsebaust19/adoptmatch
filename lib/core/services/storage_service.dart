@@ -8,6 +8,12 @@ import 'supabase_service.dart';
 class StorageService {
   static final ImagePicker _picker = ImagePicker();
 
+  /// Vercel Blob Read/Write Token (Injected securely via --dart-define or empty by default)
+  static const String vercelBlobToken = String.fromEnvironment(
+    'BLOB_READ_WRITE_TOKEN',
+    defaultValue: '',
+  );
+
   @visibleForTesting
   static ApiClient Function()? apiClientFactoryForTesting;
 

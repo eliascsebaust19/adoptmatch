@@ -28,7 +28,7 @@ class AppNetworkImage extends StatelessWidget {
 
   /// Injects bearer token for private Vercel Blob store URLs
   static Map<String, String>? getHeadersForUrl(String url) {
-    if (url.contains('blob.vercel-storage.com')) {
+    if (url.contains('blob.vercel-storage.com') && StorageService.vercelBlobToken.isNotEmpty) {
       return {
         'Authorization': 'Bearer ${StorageService.vercelBlobToken}',
       };

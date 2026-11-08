@@ -4,7 +4,6 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:adoptmatch/core/repositories/admin_repository.dart';
 import 'package:adoptmatch/core/models/pet_model.dart';
-import 'package:adoptmatch/features/auth/bloc/auth_bloc.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -43,12 +42,11 @@ void main() {
   });
 
   test('failed admin write does not mutate local state', () async {
-    var banned = false;
     final client = MockClient((request) async {
       if (request.method == 'PATCH') return http.Response('{"success":false,"error":"denied"}', 403);
       if (request.url.path.endsWith('/admin/users')) return http.Response(jsonEncode({'success': true, 'data': [
         {'id': 'u-1', 'name': 'User', 'email': 'u@example.test', 'role': 'USER',
-         'status': banned ? 'Banned' : 'Active', 'joinedAt': '2026-01-01T00:00:00Z'}]}), 200);
+         'status': 'Active', 'joinedAt': '2026-01-01T00:00:00Z'}]}), 200);
       if (request.url.path.endsWith('/admin/stats')) return http.Response(jsonEncode(ok({
         'pendingShelters': 0, 'activeRescues': 0, 'flaggedListings': 0})), 200);
       return http.Response(jsonEncode({'success': true, 'data': []}), 200);

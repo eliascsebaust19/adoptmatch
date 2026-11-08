@@ -311,8 +311,9 @@ class _GoPremiumScreenState extends State<GoPremiumScreen>
   }
 
   void _copyBkashNumber() {
-    if (_bkashNumber == null) return;
-    Clipboard.setData(ClipboardData(text: _bkashNumber));
+    final num = _bkashNumber;
+    if (num == null) return;
+    Clipboard.setData(ClipboardData(text: num));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: const Color(0xFFD12053),

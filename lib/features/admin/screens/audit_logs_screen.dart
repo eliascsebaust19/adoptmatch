@@ -21,19 +21,6 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
     try { await _adminRepo.refresh(); if (mounted) setState(() => _adminError = null); }
     catch (e) { if (mounted) setState(() => _adminError = 'Could not load server data: $e'); }
   }
-  Future<void> _runAdminAction(Future<void> action, String success) async {
-    try {
-      await action;
-      if (!mounted) return;
-      setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(_adminRepo.lastSyncError ?? success)));
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        backgroundColor: const Color(0xFFE11D48), content: Text('Action not saved: $e')));
-    }
-  }
-
 
   @override
   Widget build(BuildContext context) {

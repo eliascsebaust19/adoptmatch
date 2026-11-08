@@ -486,7 +486,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
                 user.userMetadata?['full_name'] as String? ??
                 user.email?.split('@').first ??
                 'User';
-            final rawRole = user.appMetadata?['role'] as String?;
+            final rawRole = user.appMetadata['role'] as String?;
             final userRole = UserRole.fromCode(rawRole);
             if (userRole.hasAdminAccess && user.emailConfirmedAt == null) return;
             add(
@@ -638,7 +638,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
                 user.userMetadata?['full_name'] as String? ??
                 user.email?.split('@').first ??
                 'User';
-            final rawRole = user.appMetadata?['role'] as String?;
+            final rawRole = user.appMetadata['role'] as String?;
             final userRole = UserRole.fromCode(rawRole);
             _currentUser = UserProfile(
               id: user.id,
@@ -702,7 +702,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           );
           final user = response.user;
           if (user != null) {
-            final rawRole = user.appMetadata?['role'] as String?;
+            final rawRole = user.appMetadata['role'] as String?;
             final userRole = UserRole.fromCode(rawRole);
             if (!userRole.hasAdminAccess || user.emailConfirmedAt == null) {
               await SupabaseService.signOut();

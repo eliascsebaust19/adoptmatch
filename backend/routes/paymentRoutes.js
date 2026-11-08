@@ -24,8 +24,8 @@ const isStaff = (req) => ['ADMIN', 'SUPER_ADMIN'].includes(req.user?.role);
 const STORE_ID = process.env.SSLCOMMERZ_STORE_ID || (process.env.NODE_ENV === 'production' ? '' : 'adoptmatch_sandbox');
 const STORE_PASSWD = process.env.SSLCOMMERZ_STORE_PASSWORD || (process.env.NODE_ENV === 'production' ? '' : 'adoptmatch_sandbox@ssl');
 const IS_LIVE = process.env.SSLCOMMERZ_IS_LIVE === 'true';
-const BKASH_NUMBER = /^01[3-9][0-9]{8}$/.test(process.env.BKASH_OFFICIAL_NUMBER || '')
-  ? process.env.BKASH_OFFICIAL_NUMBER : null;
+const getBkashNumber = () => (/^01[3-9][0-9]{8}$/.test(process.env.BKASH_OFFICIAL_NUMBER || '')
+  ? process.env.BKASH_OFFICIAL_NUMBER : null);
 const BASE_URL = process.env.BACKEND_BASE_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5000');
 const GATEWAY_CONFIGURED = Boolean(STORE_ID && STORE_PASSWD && /^https:\/\//.test(BASE_URL));
 const APP_DEEP_LINK = process.env.APP_DEEP_LINK_SCHEME || 'adoptmatch://payment-callback';
@@ -57,19 +57,20 @@ router.get('/plans', (req, res) => {
  * Returns official bKash number and manual transfer guide
  */
 router.get('/bkash-number', (req, res) => {
-  if (!BKASH_NUMBER) {
+  const bkashNumber = getBkashNumber();
+  if (!bkashNumber) {
     return res.status(503).json({ success: false, configured: false,
       error: 'Manual payments are unavailable: no official bKash destination is configured.' });
   }
   res.json({
     success: true,
     configured: true,
-    bkashNumber: BKASH_NUMBER,
+    bkashNumber: bkashNumber,
     accountType: 'Personal / Merchant',
     currency: 'BDT',
     instructionsEn: [
       `1. Open your bKash mobile application or dial *247#`,
-      `2. Choose "Send Money" or "Payment" to ${BKASH_NUMBER}`,
+      `2. Choose "Send Money" or "Payment" to ${bkashNumber}`,
       `3. Enter the exact plan amount in BDT (৳90, ৳200, or ৳499)`,
       `4. Put your User Name or Mobile Number in Reference`,
       `5. Once transaction succeeds, copy the bKash TrxID (e.g. 9G7A2K1092)`,
@@ -77,7 +78,7 @@ router.get('/bkash-number', (req, res) => {
     ],
     instructionsBn: [
       `১. আপনার বিকাশ অ্যাপ ওপেন করুন অথবা *247# ডায়াল করুন`,
-      `২. "Send Money" অথবা "Payment" অপশনে গিয়ে ${BKASH_NUMBER} নম্বরে টাকা পাঠান`,
+      `২. "Send Money" অথবা "Payment" অপশনে গিয়ে ${bkashNumber} নম্বরে টাকা পাঠান`,
       `৩. নির্বাচিত প্যাকেজের সমপরিমাণ টাকা প্রদান করুন (৳৯০, ৳২০০, অথবা ৳৪৯৯)`,
       `৪. রেফারেন্সে আপনার নাম অথবা মোবাইল নম্বর দিন`,
       `৫. লেনদেন সম্পন্ন হলে ফিরতি এসএমএস থেকে bKash TrxID কপি করুন`,
@@ -463,7 +464,7 @@ router.post('/sslcommerz-ipn', async (req, res) => {
  * Submits a manual bKash payment for Administrator verification
  */
 router.post('/manual-bkash', authenticateToken, (req, res) => {
-  if (!BKASH_NUMBER) return res.status(503).json({ success: false,
+  if (!getBkashNumber()) return res.status(503).json({ success: false,
     error: 'Manual payments are disabled until an official destination is configured.' });
   const { planId, senderPhone, trxId } = req.body;
   const account = userStore.findById(req.user.id);
@@ -505,7 +506,7 @@ router.post('/manual-bkash', authenticateToken, (req, res) => {
     status: 'PENDING_APPROVAL',
     paymentMethod: 'bKash (Manual)',
     senderPhone: senderPhone.trim(),
-    destinationNumber: BKASH_NUMBER,
+    destinationNumber: getBkashNumber(),
     trxId: normalizedTrx,
     });
   } catch (error) {

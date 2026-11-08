@@ -239,10 +239,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               label: Text(_isBangla ? 'ব্রডকাস্ট পাঠান' : 'Broadcast Alert'),
               onPressed: () {
                 Navigator.pop(ctx);
-                final authState = context.read<AuthBloc>().state;
-                final adminName = authState is Authenticated ? authState.user.name : 'Admin';
-
-
 
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                   backgroundColor: Color(0xFFE11D48),

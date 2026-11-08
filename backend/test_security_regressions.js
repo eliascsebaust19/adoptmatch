@@ -18,10 +18,20 @@ delete process.env.SUPABASE_URL;
 delete process.env.SUPABASE_SERVICE_ROLE_KEY;
 delete process.env.ENABLE_PAYMENT_SIMULATOR;
 delete process.env.SSLCOMMERZ_IS_LIVE;
+delete process.env.BKASH_OFFICIAL_NUMBER;
 
 const assert = require('assert');
 const jwt = require('jsonwebtoken');
 const app = require('./server');
+
+// Purge live/dev credentials loaded by server's dotenv to guarantee fail-closed assertions
+delete process.env.BLOB_READ_WRITE_TOKEN;
+delete process.env.SUPABASE_URL;
+delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+delete process.env.ENABLE_PAYMENT_SIMULATOR;
+delete process.env.SSLCOMMERZ_IS_LIVE;
+delete process.env.BKASH_OFFICIAL_NUMBER;
+
 const { JWT_SECRET } = require('./middleware/rbacMiddleware');
 const userStore = require('./models/userStore');
 const paymentStore = require('./models/paymentStore');

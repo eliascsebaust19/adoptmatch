@@ -121,16 +121,7 @@ class LocalStorageService {
   Future<Map<String, dynamic>?> loadApplicationDraft(String petId) async {
     try {
       final key = '$_keyDraftPrefix$petId';
-      var raw = await _secureStore.read(key: key);
-      if (raw == null) {
-        final p = await prefs;
-        final legacy = p.getString(key);
-        if (legacy != null) {
-          await _secureStore.write(key: key, value: legacy);
-          await p.remove(key);
-          raw = legacy;
-        }
-      }
+      final raw = await _readPrivate(key);
       if (raw == null) return null;
       return jsonDecode(raw) as Map<String, dynamic>;
     } catch (_) {
@@ -143,16 +134,12 @@ class LocalStorageService {
     Map<String, dynamic> draftData,
   ) async {
     final key = '$_keyDraftPrefix$petId';
-    await _secureStore.write(key: key, value: jsonEncode(draftData));
-    final p = await prefs;
-    await p.remove(key);
+    await _writePrivate(key, jsonEncode(draftData));
   }
 
   Future<void> clearApplicationDraft(String petId) async {
     final key = '$_keyDraftPrefix$petId';
-    await _secureStore.delete(key: key);
-    final p = await prefs;
-    await p.remove(key);
+    await _deletePrivate(key);
   }
 
   // --- Conversations & Messages (encrypted at rest) ---
