@@ -41,6 +41,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
+        Route::post('/auth/password', [AuthController::class, 'changePassword'])->middleware('throttle:10,1');
         Route::post('/auth/fcm-token', [AuthController::class, 'updateFcmToken']);
 
         // Media uploads require the same Sanctum identity as every other write.

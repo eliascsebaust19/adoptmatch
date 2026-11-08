@@ -56,3 +56,18 @@ This document tracks the verified resolutions versus pending live integration ch
 
 - **SQLite Single-Process Limit**: Documented in `backend/README.md`. The backend relies on `node:sqlite` in WAL mode. Only ONE Node process can write to the database file safely. Clustering or horizontal replication requires migrating to an external PostgreSQL/MySQL database before deployment.
 - **Fail-Closed Integrations**: All unconfigured external services (SMS OTP, bKash, Cloudinary, Vercel Blob, SSLCommerz, Push Notifications) reject requests with explicit HTTP 503 or failure states instead of fabricating success.
+
+## Authentication hardening pass (Google + session authority)
+
+Follow-up change set on top of the verified results above:
+
+| Area | Change | Evidence here | Pending |
+|---|---|---|---|
+| Google client ID | Single source of truth in `lib/core/config/auth_config.dart`; removed the divergent Node dev-only default; both APIs verify an audience allow-list (`GOOGLE_CLIENT_ID` + optional `GOOGLE_CLIENT_IDS`) | `node test_google_auth.js` passes, including a new unconfigured-server 503 probe; `npm --prefix backend test` exit 0 | Live Google sign-in with your own client ID |
+| Missing ID token | Flutter fails fast with an actionable message instead of posting an empty token; no hardcoded SHA-1 in the error text | Whole-repo Dart/PHP syntax parse: 0 errors | `flutter analyze` / `flutter test` in CI |
+| Session authority | Removed Supabase email login/signup fallbacks and the Supabase auth-state listener from `AuthBloc` (its JWT is not accepted by the Laravel/Node APIs) | Existing auth bloc tests unaffected; 2 new password-change bloc tests added | CI Flutter job |
+| Password change | New `POST /api/v1/auth/password` (current-password check, min 8, confirmation, re-hash, revoke other tokens); dialog has no offline success path | 3 Laravel feature tests written | `vendor/bin/phpunit` (no PHP here) |
+| iOS config | `GIDClientID`, `GIDServerClientID`, URL scheme now come from `ios/Flutter/GoogleAuth.xcconfig` | `Info.plist` parses | iOS OAuth client registration + device run |
+| Preflight | `npm --prefix backend run check:config` reports missing auth config and exits 1 | Verified locally: unset -> exit 1, configured -> exit 0 | Run in the deployment pipeline |
+
+See `docs/AUTH_SETUP.md` for the values the operator must provide.

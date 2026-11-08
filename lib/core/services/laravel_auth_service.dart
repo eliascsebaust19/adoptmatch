@@ -119,6 +119,21 @@ class LaravelAuthService {
     return response.data;
   }
 
+  /// Change the password on the server. Throws unless the server confirms it.
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final response = await _apiClient.dio.post('/auth/password', data: {
+      'current_password': currentPassword,
+      'password': newPassword,
+      'password_confirmation': newPassword,
+    });
+    if (response.statusCode != 200 || response.data['status'] != 'success') {
+      throw Exception('The server did not change your password.');
+    }
+  }
+
   /// Get current authenticated user profile
   Future<Map<String, dynamic>?> getMe() async {
     try {

@@ -13,6 +13,9 @@
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'security-regression-test-secret';
 process.env.TEST_AUTH_SECRET = 'security-regression-test-auth-secret';
+// Google verification needs a configured audience; the unconfigured 503 path is
+// covered separately in test_google_auth.js.
+process.env.GOOGLE_CLIENT_ID = 'test-web-client.apps.googleusercontent.com';
 delete process.env.BLOB_READ_WRITE_TOKEN;
 delete process.env.SUPABASE_URL;
 delete process.env.SUPABASE_SERVICE_ROLE_KEY;

@@ -1,0 +1,15 @@
+# Google Sign-In configuration for iOS.
+# Client IDs are public identifiers (not secrets). See docs/AUTH_SETUP.md.
+#
+# 1) GOOGLE_WEB_CLIENT_ID must equal the Web OAuth client ID used by
+#    --dart-define=GOOGLE_CLIENT_ID and by both backends.
+# 2) Create an **iOS** OAuth client for bundle id com.adoptmatch.adoptmatch, then
+#    fill GOOGLE_IOS_CLIENT_ID and its reversed form in GOOGLE_IOS_URL_SCHEME:
+#    e.g. com.googleusercontent.apps.<ios-client-id-prefix>
+#
+# Leaving the iOS values empty makes iOS Google Sign-In fail with a clear error
+# instead of silently issuing an unverifiable token.
+
+GOOGLE_WEB_CLIENT_ID = 94403915199-c47hcn9ols70b1gikoamlrgkbqqdmag6.apps.googleusercontent.com
+GOOGLE_IOS_CLIENT_ID =
+GOOGLE_IOS_URL_SCHEME =

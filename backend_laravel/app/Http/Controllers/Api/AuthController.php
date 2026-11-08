@@ -68,6 +68,16 @@ class AuthController extends Controller
                 return response()->json(['status' => 'error',
                     'message' => 'Google token issuer, subject or expiry is invalid.'], 401);
             }
+            // Defence in depth: the token must be issued for one of our clients.
+            $allowedAudiences = array_values(array_unique(array_filter(array_merge(
+                [$clientId], config('services.google.client_ids', [])
+            ))));
+            $tokenAudiences = array_filter([$payload['aud'] ?? null, $payload['azp'] ?? null]);
+            if (empty(array_intersect($tokenAudiences, $allowedAudiences))) {
+                return response()->json(['status' => 'error',
+                    'message' => 'Google token was issued for a different application.'], 401);
+            }
+
             $googleId = $payload['sub'];
             $email = $payload['email'];
             $name = $payload['name'] ?? 'AdoptMatch User';
@@ -184,6 +194,45 @@ class AuthController extends Controller
             'token_type' => 'Bearer',
             'user' => $user,
         ], 201);
+    }
+
+    /**
+     * Change the password of the authenticated account.
+     * The current password must match; other sessions are revoked.
+     */
+    public function changePassword(Request $request)
+    {
+        $request->validate([
+            'current_password' => 'required|string',
+            'password' => 'required|string|min:8|confirmed',
+        ]);
+
+        $user = $request->user();
+
+        if (empty($user->password) || !Hash::check($request->current_password, $user->password)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'The current password is incorrect.',
+            ], 422);
+        }
+
+        if (Hash::check($request->password, $user->password)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'The new password must be different from the current password.',
+            ], 422);
+        }
+
+        $user->update(['password' => Hash::make($request->password)]);
+
+        // Keep the calling session, revoke every other personal access token.
+        $current = $user->currentAccessToken();
+        $user->tokens()->when($current, fn ($q) => $q->where('id', '!=', $current->id))->delete();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Password updated successfully.',
+        ], 200);
     }
 
     /**

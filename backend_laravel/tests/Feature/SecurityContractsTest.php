@@ -128,6 +128,33 @@ class SecurityContractsTest extends TestCase
             ->assertJsonPath('data.data.0.id', $mine->id);
     }
 
+    public function test_password_change_requires_authentication(): void
+    {
+        $this->postJson('/api/v1/auth/password', [])->assertUnauthorized();
+    }
+
+    public function test_password_change_requires_the_correct_current_password(): void
+    {
+        $user = $this->user('pw@example.test');
+        Sanctum::actingAs($user, ['*']);
+        $this->postJson('/api/v1/auth/password', ['current_password' => 'wrong-password',
+            'password' => 'brand-new-password', 'password_confirmation' => 'brand-new-password'])
+            ->assertStatus(422);
+        $this->assertTrue(\Illuminate\Support\Facades\Hash::check('correct-password', $user->fresh()->password));
+    }
+
+    public function test_password_change_updates_the_hash_and_revokes_other_sessions(): void
+    {
+        $user = $this->user('pw2@example.test');
+        $user->createToken('other-device');
+        Sanctum::actingAs($user, ['*']);
+        $this->postJson('/api/v1/auth/password', ['current_password' => 'correct-password',
+            'password' => 'brand-new-password', 'password_confirmation' => 'brand-new-password'])
+            ->assertOk()->assertJsonPath('status', 'success');
+        $this->assertTrue(\Illuminate\Support\Facades\Hash::check('brand-new-password', $user->fresh()->password));
+        $this->assertSame(0, $user->tokens()->count(), 'other personal access tokens are revoked');
+    }
+
     public function test_public_registration_cannot_self_assign_shelter_role(): void
     {
         $this->postJson('/api/v1/auth/register', ['name' => 'Shelter Attempt',

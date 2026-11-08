@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
@@ -375,10 +374,11 @@ class UpdateUserProfileEvent extends AuthEvent {
 }
 
 class ChangePasswordEvent extends AuthEvent {
+  final String currentPassword;
   final String newPassword;
-  const ChangePasswordEvent(this.newPassword);
+  const ChangePasswordEvent({required this.currentPassword, required this.newPassword});
   @override
-  List<Object?> get props => [newPassword];
+  List<Object?> get props => [currentPassword, newPassword];
 }
 
 class ActivateSubscriptionEvent extends AuthEvent {
@@ -433,6 +433,8 @@ class AuthSignUpConfirmationPending extends AuthState {
   List<Object?> get props => [email, message];
 }
 
+class AuthPasswordChanged extends AuthState {}
+
 class AuthUnauthenticated extends AuthState {}
 
 class AuthFailure extends AuthState {
@@ -447,7 +449,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   UserProfile? _currentUser;
   final AuthRepository _authRepository;
   final LaravelAuthService _laravelAuthService;
-  StreamSubscription<sb.AuthState>? _supabaseAuthSubscription;
 
   AuthBloc({UserProfile? initialUser, AuthRepository? authRepository,
       LaravelAuthService? laravelAuthService})
@@ -470,43 +471,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<ActivateSubscriptionEvent>(_onActivateSubscription);
     on<LogoutEvent>(_onLogout);
 
-    _initSupabaseListener();
   }
 
-  void _initSupabaseListener() {
-    if (SupabaseService.isInitialized) {
-      _supabaseAuthSubscription = SupabaseService.auth.onAuthStateChange.listen(
-        (data) {
-          final session = data.session;
-          if (session != null &&
-              (data.event == sb.AuthChangeEvent.signedIn ||
-                  data.event == sb.AuthChangeEvent.userUpdated)) {
-            final user = session.user;
-            final fullName =
-                user.userMetadata?['full_name'] as String? ??
-                user.email?.split('@').first ??
-                'User';
-            final rawRole = user.appMetadata['role'] as String?;
-            final userRole = UserRole.fromCode(rawRole);
-            if (userRole.hasAdminAccess && user.emailConfirmedAt == null) return;
-            add(
-              UserConfirmedSessionEvent(
-                UserProfile(
-                  id: user.id,
-                  name: fullName,
-                  email: user.email ?? '',
-                  phone: user.phone ?? '',
-                  role: userRole,
-                  isVerified: user.emailConfirmedAt != null,
-                ),
-                accessToken: session.accessToken,
-              ),
-            );
-          }
-        },
-      );
-    }
-  }
+  // Sessions are issued only by the AdoptMatch API. Supabase auth events must
+  // not mint app sessions: its JWT is not accepted by the Laravel/Node APIs.
 
   Future<void> _onCheckSession(
     CheckSessionEvent event,
@@ -553,42 +521,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         debugPrint('[AuthBloc] Laravel register notice: $laravelErr');
       }
 
-      if (SupabaseService.isInitialized) {
-        try {
-          final response = await SupabaseService.signUpWithEmail(
-            email: emailLower,
-            password: event.password,
-            fullName: event.fullName.trim(),
-          );
-          final session = response.session;
-          if (response.user != null && session != null) {
-            await SecureStorageService.instance.saveAuthToken(session.accessToken);
-            final user = UserProfile(
-              id: response.user!.id,
-              name: event.fullName.trim(),
-              email: emailLower,
-              phone: '',
-              role: UserRole.adopter,
-              isVerified: response.user!.emailConfirmedAt != null,
-            );
-            await SecureStorageService.instance.saveUserProfile(user);
-            _currentUser = user;
-            emit(Authenticated(user, isNewUser: true));
-            return;
-          }
-          if (response.user != null && session == null) {
-            // Account created but the email is not confirmed yet: no session exists.
-            emit(AuthSignUpConfirmationPending(
-              email: emailLower,
-              message: 'Account created. Confirm your email address, then sign in.',
-            ));
-            return;
-          }
-        } catch (sbErr) {
-          debugPrint('[AuthBloc] Supabase signup notice: $sbErr');
-        }
-      }
-
       // Fail closed: an account only exists once a server has created it.
       emit(const AuthFailure(
         'Could not create your account. The authentication server is unreachable — please try again.',
@@ -617,44 +549,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         return;
       } catch (laravelErr) {
         debugPrint('[AuthBloc] Laravel login failed: $laravelErr');
-      }
-
-      // 2. Secondary: Live Supabase authentication
-      if (SupabaseService.isInitialized) {
-        try {
-          final response = await SupabaseService.signInWithEmail(
-            email: emailLower,
-            password: event.password,
-          );
-          final user = response.user;
-          if (user != null) {
-            final token = response.session?.accessToken;
-            if (token == null || token.isEmpty || user.emailConfirmedAt == null) {
-              await SupabaseService.signOut();
-              throw sb.AuthException('A verified server session is required.');
-            }
-            await SecureStorageService.instance.saveAuthToken(token);
-            final fullName =
-                user.userMetadata?['full_name'] as String? ??
-                user.email?.split('@').first ??
-                'User';
-            final rawRole = user.appMetadata['role'] as String?;
-            final userRole = UserRole.fromCode(rawRole);
-            _currentUser = UserProfile(
-              id: user.id,
-              name: fullName,
-              email: user.email ?? emailLower,
-              phone: user.phone ?? '',
-              role: userRole,
-              isVerified: user.emailConfirmedAt != null,
-            );
-            await SecureStorageService.instance.saveUserProfile(_currentUser!);
-            emit(Authenticated(_currentUser!));
-            return;
-          }
-        } on sb.AuthException catch (e) {
-          debugPrint('[AuthBloc] Supabase sign-in error: ${e.message}');
-        }
       }
 
       emit(const AuthFailure('Invalid credentials or authentication server is currently unreachable.'));
@@ -693,51 +587,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         debugPrint('[AuthBloc] Admin Laravel login: $laravelErr');
       }
 
-      // 2. Secondary: Supabase Authentication
-      if (SupabaseService.isInitialized) {
-        try {
-          final response = await SupabaseService.signInWithEmail(
-            email: emailLower,
-            password: event.password,
-          );
-          final user = response.user;
-          if (user != null) {
-            final rawRole = user.appMetadata['role'] as String?;
-            final userRole = UserRole.fromCode(rawRole);
-            if (!userRole.hasAdminAccess || user.emailConfirmedAt == null) {
-              await SupabaseService.signOut();
-              emit(
-                const AuthFailure(
-                  '403 Forbidden: Access Denied. Administrator or Shelter Manager privileges required.',
-                ),
-              );
-              return;
-            }
-            final token = response.session?.accessToken;
-            if (token == null || token.isEmpty) {
-              await SupabaseService.signOut();
-              throw sb.AuthException('A verified server session is required.');
-            }
-            await SecureStorageService.instance.saveAuthToken(token);
-            final fullName =
-                user.userMetadata?['full_name'] as String? ?? 'Administrator';
-            _currentUser = UserProfile(
-              id: user.id,
-              name: fullName,
-              email: user.email ?? emailLower,
-              phone: user.phone ?? '',
-              role: userRole,
-              isVerified: true,
-            );
-            await SecureStorageService.instance.saveUserProfile(_currentUser!);
-            emit(Authenticated(_currentUser!));
-            return;
-          }
-        } on sb.AuthException catch (e) {
-          emit(AuthFailure(e.message));
-          return;
-        }
-      }
 
       emit(
         const AuthFailure(
@@ -897,7 +746,22 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     ChangePasswordEvent event,
     Emitter<AuthState> emit,
   ) async {
-    emit(const AuthFailure('Password change is not configured for this account API. No password was changed.'));
+    if (_currentUser == null) {
+      emit(const AuthFailure('Sign in before changing your password.'));
+      return;
+    }
+    emit(AuthLoading());
+    try {
+      await _laravelAuthService.changePassword(
+        currentPassword: event.currentPassword,
+        newPassword: event.newPassword,
+      );
+      emit(AuthPasswordChanged());
+      emit(Authenticated(_currentUser!));
+    } catch (e) {
+      emit(AuthFailure('Password was not changed: $e'));
+      emit(Authenticated(_currentUser!));
+    }
   }
 
   /// Refreshes the premium entitlement from the server. The requested plan and
@@ -939,7 +803,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   @override
   Future<void> close() {
-    _supabaseAuthSubscription?.cancel();
     return super.close();
   }
 }

@@ -12,6 +12,11 @@ AdoptMatch is a non-commercial pet adoption and foster platform. This repository
 
 The Flutter app uses one configured root, `ApiClient.rootUrl` (`--dart-define=API_BASE_URL=...`, legacy alias `BACKEND_URL`), defaulting to `https://adoptmatch-api.onrender.com`. Consumer calls append `/api/v1`; Node admin/payment calls use the same root. Deploy the stacks behind a gateway that routes those paths, or change the client configuration before pointing at separate hosts. Do not point browser or device builds at `localhost`.
 
+Authentication setup (Google client IDs, Android SHA-1, iOS URL scheme, Supabase OTP)
+is documented step by step in **`docs/AUTH_SETUP.md`**, including exactly which
+values you must supply. Run `npm --prefix backend run check:config` to verify the
+Node auth configuration before serving traffic.
+
 ## Security and configuration notes
 
 - **No demo admin credentials.** Bootstrap the first Node superadministrator with a verified Google subject:

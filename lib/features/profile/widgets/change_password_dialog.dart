@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import '../../auth/bloc/auth_bloc.dart';
-import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/shared_widgets.dart';
 
@@ -13,7 +11,10 @@ class ChangePasswordDialog extends StatefulWidget {
     return showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const ChangePasswordDialog(),
+      builder: (ctx) => BlocProvider.value(
+        value: context.read<AuthBloc>(),
+        child: const ChangePasswordDialog(),
+      ),
     );
   }
 
@@ -23,6 +24,7 @@ class ChangePasswordDialog extends StatefulWidget {
 
 class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
   final _formKey = GlobalKey<FormState>();
+  final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
@@ -33,68 +35,47 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
 
   @override
   void dispose() {
+    _currentPasswordController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  Future<void> _handleSubmit() async {
+  void _handleSubmit() {
     setState(() => _errorMessage = null);
-
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
     final newPassword = _newPasswordController.text.trim();
-    final confirmPassword = _confirmPasswordController.text.trim();
-
-    if (newPassword != confirmPassword) {
+    if (newPassword != _confirmPasswordController.text.trim()) {
       setState(() => _errorMessage = 'Passwords do not match');
       return;
     }
 
     setState(() => _isLoading = true);
-
-    try {
-      if (SupabaseService.isInitialized && SupabaseService.auth.currentUser != null) {
-        await SupabaseService.updatePassword(newPassword);
-      } else {
-        // Offline / mock mode
-        await Future.delayed(const Duration(milliseconds: 600));
-        if (mounted) {
-          context.read<AuthBloc>().add(ChangePasswordEvent(newPassword));
-        }
-      }
-
-      if (!mounted) return;
-
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: Color(0xFF059669),
-          content: Text('Password updated successfully!'),
-        ),
-      );
-    } on sb.AuthException catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage = e.message;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage = 'Failed to update password. Please check your connection.';
-        });
-      }
-    }
+    // The server is the only authority: no offline/mock success path.
+    context.read<AuthBloc>().add(ChangePasswordEvent(
+      currentPassword: _currentPasswordController.text.trim(),
+      newPassword: newPassword,
+    ));
   }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
+    return BlocListener<AuthBloc, AuthState>(
+      listener: (context, state) {
+        if (state is AuthPasswordChanged) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            backgroundColor: Color(0xFF059669),
+            content: Text('Password updated on the server.'),
+          ));
+        } else if (state is AuthFailure) {
+          setState(() { _isLoading = false; _errorMessage = state.errorMessage; });
+        } else if (state is AuthLoading) {
+          setState(() => _isLoading = true);
+        }
+      },
+      child: Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       child: Container(
@@ -172,11 +153,23 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                 const SizedBox(height: AppSpacing.md),
               ],
 
+              AppTextField(
+                controller: _currentPasswordController,
+                label: 'Current Password',
+                hint: 'Enter your current password',
+                obscureText: true,
+                prefixIconData: Icons.lock_open_rounded,
+                validator: (val) => (val == null || val.trim().isEmpty)
+                    ? 'Please enter your current password'
+                    : null,
+              ),
+              const SizedBox(height: AppSpacing.md),
+
               // New Password
               AppTextField(
                 controller: _newPasswordController,
                 label: 'New Password',
-                hint: 'At least 6 characters',
+                hint: 'At least 8 characters',
                 obscureText: _obscureNew,
                 prefixIconData: Icons.lock_outline,
                 suffixIcon: IconButton(
@@ -191,8 +184,8 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                   if (val == null || val.trim().isEmpty) {
                     return 'Please enter a new password';
                   }
-                  if (val.trim().length < 6) {
-                    return 'Password must be at least 6 characters';
+                  if (val.trim().length < 8) {
+                    return 'Password must be at least 8 characters';
                   }
                   return null;
                 },
@@ -278,6 +271,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

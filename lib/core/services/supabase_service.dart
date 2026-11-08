@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../config/auth_config.dart';
 
 class SupabaseService {
   static const String defaultUrl = String.fromEnvironment(
@@ -14,11 +15,7 @@ class SupabaseService {
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndnenRkaGFiZ2VkaGthaXBwa3BkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3ODAzMTksImV4cCI6MjEwODM1NjMxOX0.KolY1dw6NuDxZAt14bCcJz0NLLmMa05HHixz4TFtZMM',
   );
 
-  static const String googleClientId = String.fromEnvironment(
-    'GOOGLE_CLIENT_ID',
-    defaultValue:
-        '94403915199-c47hcn9ols70b1gikoamlrgkbqqdmag6.apps.googleusercontent.com',
-  );
+  static String get googleClientId => AuthConfig.googleWebClientId;
 
   static bool _isInitialized = false;
   static bool get isInitialized => _isInitialized;

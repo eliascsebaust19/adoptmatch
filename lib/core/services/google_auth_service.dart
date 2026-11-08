@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../features/auth/bloc/auth_bloc.dart';
+import '../config/auth_config.dart';
 import '../network/api_client.dart';
 import '../storage/secure_storage_service.dart';
 
@@ -26,10 +27,8 @@ class GoogleAuthResult {
 }
 
 class GoogleAuthService {
-  static const String webClientId = String.fromEnvironment(
-    'GOOGLE_CLIENT_ID',
-    defaultValue: '94403915199-c47hcn9ols70b1gikoamlrgkbqqdmag6.apps.googleusercontent.com',
-  );
+  /// Kept for existing callers; the value lives in [AuthConfig] only.
+  static String get webClientId => AuthConfig.googleWebClientId;
 
   static String get backendBaseUrl => ApiClient.rootUrl;
 
@@ -46,6 +45,12 @@ class GoogleAuthService {
   ///    gracefully falls back to direct Laravel 11 backend sync so dev/testing is never blocked.
   /// 4. Syncs with Laravel 11 Backend (/api/v1/auth/google) for Sanctum Bearer token.
   static Future<GoogleAuthResult> signIn() async {
+    if (!AuthConfig.isGoogleConfigured) {
+      return const GoogleAuthResult(
+        success: false,
+        errorMessage: AuthConfig.notConfiguredMessage,
+      );
+    }
     try {
       debugPrint('[GoogleAuthService] Initiating Google Sign-In flow...');
 
@@ -61,12 +66,12 @@ class GoogleAuthService {
       if (account == null) {
         if (nativeError != null) {
           String userFriendlyMsg = nativeError;
-          if (nativeError.contains('10') ||
-              nativeError.contains('ApiException: 10')) {
+          if (nativeError.contains('ApiException: 10') ||
+              nativeError.contains('DEVELOPER_ERROR')) {
             userFriendlyMsg =
-                'Google Sign-In configuration error (ApiException 10): '
-                'The Android SHA-1 fingerprint (D0:AB:88:E2:C5:41:82:16:4C:15:4D:C5:54:1E:4A:D0:61:66:EE:91) '
-                'must be added to Google Cloud Console for package com.adoptmatch.adoptmatch.';
+                'Google Sign-In configuration error (ApiException 10). Register this '
+                'build\'s SHA-1 for package com.adoptmatch.adoptmatch in Google Cloud '
+                'Console and use the matching Web client ID. See docs/AUTH_SETUP.md.';
           }
           return GoogleAuthResult(
             success: false,
@@ -87,6 +92,13 @@ class GoogleAuthService {
         idToken = authHeaders.idToken;
       } catch (tokenErr) {
         debugPrint('[GoogleAuthService] Token retrieval error: $tokenErr');
+      }
+
+      if (idToken == null || idToken.isEmpty) {
+        return const GoogleAuthResult(
+          success: false,
+          errorMessage: AuthConfig.missingIdTokenMessage,
+        );
       }
 
       // Real user details strictly from authenticated Google account
@@ -111,8 +123,9 @@ class GoogleAuthService {
                 'Accept': 'application/json',
               },
               body: jsonEncode({
-                'id_token': idToken ?? '',
-                'idToken': idToken ?? '',
+                'id_token': idToken,
+                'idToken': idToken,
+                'device_name': 'flutter_google',
               }),
             )
             .timeout(const Duration(seconds: 35));

@@ -80,4 +80,42 @@ void main() {
     act: (bloc) => bloc.add(const GuestLoginEvent()),
     expect: () => [isA<AuthFailure>().having((s) => s.errorMessage, 'message', contains('Guest access is disabled'))],
   );
+
+  blocTest<AuthBloc, AuthState>(
+    'password change succeeds only when the server confirms it',
+    build: () {
+      when(() => auth.loginWithEmail(email: any(named: 'email'), password: any(named: 'password')))
+        .thenAnswer((_) async => const UserProfile(id: '1', name: 'Nadia',
+          email: 'nadia@example.test', phone: '', role: UserRole.adopter));
+      when(() => laravel.changePassword(currentPassword: any(named: 'currentPassword'),
+        newPassword: any(named: 'newPassword'))).thenAnswer((_) async {});
+      return AuthBloc(authRepository: auth, laravelAuthService: laravel);
+    },
+    act: (bloc) async {
+      bloc.add(const LoginWithEmailEvent('nadia@example.test', 'old-password'));
+      await Future<void>.delayed(Duration.zero);
+      bloc.add(const ChangePasswordEvent(currentPassword: 'old-password', newPassword: 'new-password-1'));
+    },
+    expect: () => [isA<AuthLoading>(), isA<Authenticated>(), isA<AuthLoading>(),
+      isA<AuthPasswordChanged>(), isA<Authenticated>()],
+  );
+
+  blocTest<AuthBloc, AuthState>(
+    'password change failure never reports success',
+    build: () {
+      when(() => auth.loginWithEmail(email: any(named: 'email'), password: any(named: 'password')))
+        .thenAnswer((_) async => const UserProfile(id: '1', name: 'Nadia',
+          email: 'nadia@example.test', phone: '', role: UserRole.adopter));
+      when(() => laravel.changePassword(currentPassword: any(named: 'currentPassword'),
+        newPassword: any(named: 'newPassword'))).thenThrow(Exception('wrong current password'));
+      return AuthBloc(authRepository: auth, laravelAuthService: laravel);
+    },
+    act: (bloc) async {
+      bloc.add(const LoginWithEmailEvent('nadia@example.test', 'old-password'));
+      await Future<void>.delayed(Duration.zero);
+      bloc.add(const ChangePasswordEvent(currentPassword: 'wrong', newPassword: 'new-password-1'));
+    },
+    expect: () => [isA<AuthLoading>(), isA<Authenticated>(), isA<AuthLoading>(),
+      isA<AuthFailure>(), isA<Authenticated>()],
+  );
 }

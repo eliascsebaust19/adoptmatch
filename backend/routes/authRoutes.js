@@ -24,8 +24,15 @@ const {
   JWT_SECRET,
 } = require('../middleware/rbacMiddleware');
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ||
-  (process.env.NODE_ENV === 'production' ? '' : '94403915199-50ug4q14m66gn3pjmhh441givdf0etie.apps.googleusercontent.com');
+// One audience allow-list for every environment. A dev-only default silently
+// mismatched the Flutter Web client ID and produced unverifiable tokens.
+// GOOGLE_CLIENT_ID must be the same Web client ID the app uses as serverClientId;
+// GOOGLE_CLIENT_IDS may add further platform audiences (comma separated).
+const GOOGLE_CLIENT_IDS = [
+  process.env.GOOGLE_CLIENT_ID,
+  ...(process.env.GOOGLE_CLIENT_IDS || '').split(','),
+].map((v) => (v || '').trim()).filter(Boolean);
+const GOOGLE_CLIENT_ID = GOOGLE_CLIENT_IDS[0] || '';
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 /**
@@ -36,7 +43,7 @@ async function verifyGoogleToken(idToken) {
   try {
     const ticket = await googleClient.verifyIdToken({
       idToken,
-      audience: GOOGLE_CLIENT_ID,
+      audience: GOOGLE_CLIENT_IDS,
     });
     const payload = ticket.getPayload();
     const issuerOk = ['accounts.google.com', 'https://accounts.google.com'].includes(payload.iss);
@@ -61,8 +68,8 @@ async function verifyGoogleToken(idToken) {
               return reject(new Error(data.error_description || data.error));
             }
             // Cryptographic audience and verification checks
-            if (data.aud !== GOOGLE_CLIENT_ID) {
-              return reject(new Error(`Invalid token audience: ${data.aud}. Expected ${GOOGLE_CLIENT_ID}`));
+            if (!GOOGLE_CLIENT_IDS.includes(data.aud)) {
+              return reject(new Error(`Invalid token audience: ${data.aud}. Expected one of ${GOOGLE_CLIENT_IDS.join(', ')}`));
             }
             if (!['accounts.google.com', 'https://accounts.google.com'].includes(data.iss) ||
                 !data.sub || !data.exp || Number(data.exp) * 1000 <= Date.now()) {

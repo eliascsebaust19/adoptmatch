@@ -10,8 +10,10 @@
 
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'google-auth-test-secret';
+process.env.GOOGLE_CLIENT_ID = 'test-web-client.apps.googleusercontent.com';
 
 const assert = require('assert');
+const { spawnSync } = require('child_process');
 const jwt = require('jsonwebtoken');
 const app = require('./server');
 const { JWT_SECRET } = require('./middleware/rbacMiddleware');
@@ -56,6 +58,24 @@ async function run() {
       assert.strictEqual(res.status, 401, `${key} must be verified, not trusted`);
       assert.strictEqual(res.data.code, 'INVALID_GOOGLE_TOKEN');
     }
+
+    console.log('[3b] Without a configured client ID the endpoint fails closed (503)');
+    const probe = spawnSync(process.execPath, ['-e', `
+      process.env.NODE_ENV='test';
+      process.env.JWT_SECRET='google-auth-probe-secret';
+      delete process.env.GOOGLE_CLIENT_ID;
+      delete process.env.GOOGLE_CLIENT_IDS;
+      const app = require('./server');
+      const srv = app.listen(0, '127.0.0.1', async () => {
+        const res = await fetch('http://127.0.0.1:' + srv.address().port + '/api/v1/auth/google', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ id_token: 'anything' })
+        });
+        console.log('STATUS=' + res.status);
+        srv.close();
+      });
+    `], { cwd: __dirname, encoding: 'utf8', timeout: 20000 });
+    assert.match(probe.stdout, /STATUS=503/, `expected 503 when Google is unconfigured, got: ${probe.stdout} ${probe.stderr}`);
 
     console.log('[4] An unauthenticated /me request is rejected');
     res = await request('/api/v1/auth/me');
