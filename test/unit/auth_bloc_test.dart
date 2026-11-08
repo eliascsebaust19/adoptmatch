@@ -97,7 +97,12 @@ void main() {
     blocTest<AuthBloc, AuthState>(
       'AdminLoginWithEmailEvent with invalid credentials rejects with Access Denied',
       build: () => AuthBloc(),
-      act: (bloc) => bloc.add(const AdminLoginWithEmailEvent('unauthorized@adoptmatch.org', 'invalidPass')),
+      act: (bloc) => bloc.add(
+        const AdminLoginWithEmailEvent(
+          'unauthorized@adoptmatch.org',
+          'invalidPass',
+        ),
+      ),
       wait: const Duration(milliseconds: 800),
       expect: () => [
         isA<AuthLoading>(),
