@@ -1,8 +1,10 @@
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../features/auth/bloc/auth_bloc.dart';
 import '../network/api_client.dart';
 import '../storage/secure_storage_service.dart';
@@ -26,7 +28,7 @@ class GoogleAuthResult {
 class GoogleAuthService {
   static const String webClientId = String.fromEnvironment(
     'GOOGLE_CLIENT_ID',
-    defaultValue: '94403915199-50ug4q14m66gn3pjmhh441givdf0etie.apps.googleusercontent.com',
+    defaultValue: '94403915199-c47hcn9ols70b1gikoamlrgkbqqdmag6.apps.googleusercontent.com',
   );
 
   static const String backendBaseUrl = String.fromEnvironment(
@@ -62,8 +64,10 @@ class GoogleAuthService {
       if (account == null) {
         if (nativeError != null) {
           String userFriendlyMsg = nativeError;
-          if (nativeError.contains('10') || nativeError.contains('ApiException: 10')) {
-            userFriendlyMsg = 'Google Sign-In configuration error (ApiException 10): '
+          if (nativeError.contains('10') ||
+              nativeError.contains('ApiException: 10')) {
+            userFriendlyMsg =
+                'Google Sign-In configuration error (ApiException 10): '
                 'The Android SHA-1 fingerprint (D0:AB:88:E2:C5:41:82:16:4C:15:4D:C5:54:1E:4A:D0:61:66:EE:91) '
                 'must be added to Google Cloud Console for package com.adoptmatch.adoptmatch.';
           }
@@ -103,23 +107,25 @@ class GoogleAuthService {
 
       // Sync with Laravel 11 Backend API
       try {
-        final res = await http.post(
-          Uri.parse('$backendBaseUrl/api/v1/auth/google'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          body: jsonEncode({
-            'id_token': idToken ?? 'google_android_token',
-            'accessToken': accessToken,
-            'profile': {
-              'id': googleId,
-              'email': userEmail,
-              'name': userName,
-              'photoUrl': userPhoto,
-            },
-          }),
-        ).timeout(const Duration(seconds: 35));
+        final res = await http
+            .post(
+              Uri.parse('$backendBaseUrl/api/v1/auth/google'),
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
+              body: jsonEncode({
+                'id_token': idToken ?? 'google_android_token',
+                'accessToken': accessToken,
+                'profile': {
+                  'id': googleId,
+                  'email': userEmail,
+                  'name': userName,
+                  'photoUrl': userPhoto,
+                },
+              }),
+            )
+            .timeout(const Duration(seconds: 35));
 
         if (res.statusCode == 200) {
           final data = jsonDecode(res.body);
@@ -128,7 +134,9 @@ class GoogleAuthService {
           final sanctumToken = data['access_token'] ?? data['token'];
 
           if (sanctumToken != null) {
-            await SecureStorageService.instance.saveAuthToken(sanctumToken.toString());
+            await SecureStorageService.instance.saveAuthToken(
+              sanctumToken.toString(),
+            );
             await ApiClient.saveToken(sanctumToken.toString());
             final prefs = await SharedPreferences.getInstance();
             await prefs.setString('auth_token', sanctumToken.toString());
@@ -174,7 +182,8 @@ class GoogleAuthService {
       // Guarantee a persistent token so session is valid even during backend cold starts
       final currentToken = await SecureStorageService.instance.getAuthToken();
       if (currentToken == null || currentToken.isEmpty) {
-        final fallbackToken = 'sanctum_session_${googleId}_${DateTime.now().millisecondsSinceEpoch}';
+        final fallbackToken =
+            'sanctum_session_${googleId}_${DateTime.now().millisecondsSinceEpoch}';
         await SecureStorageService.instance.saveAuthToken(fallbackToken);
         await ApiClient.saveToken(fallbackToken);
       }
@@ -186,22 +195,24 @@ class GoogleAuthService {
       );
     } catch (e) {
       debugPrint('[GoogleAuthService] Exception in Google Sign-In: $e');
-      return GoogleAuthResult(
-        success: false,
-        errorMessage: e.toString(),
-      );
+      return GoogleAuthResult(success: false, errorMessage: e.toString());
     }
   }
 
   /// Sign out from Google and clear local session
   static Future<void> signOut() async {
     try {
-      await _googleSignIn.signOut().timeout(const Duration(milliseconds: 300), onTimeout: () => null);
+      await _googleSignIn.signOut().timeout(
+        const Duration(milliseconds: 300),
+        onTimeout: () => null,
+      );
     } catch (_) {}
 
     try {
       await SecureStorageService.instance.clearSession();
-      final prefs = await SharedPreferences.getInstance().timeout(const Duration(milliseconds: 300));
+      final prefs = await SharedPreferences.getInstance().timeout(
+        const Duration(milliseconds: 300),
+      );
       await prefs.remove('auth_token');
       await prefs.remove('cached_user_id');
       await prefs.remove('cached_user_email');

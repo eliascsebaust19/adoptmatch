@@ -17,7 +17,7 @@ class SupabaseService {
   static const String googleClientId = String.fromEnvironment(
     'GOOGLE_CLIENT_ID',
     defaultValue:
-        '94403915199-50ug4q14m66gn3pjmhh441givdf0etie.apps.googleusercontent.com',
+        '94403915199-c47hcn9ols70b1gikoamlrgkbqqdmag6.apps.googleusercontent.com',
   );
 
   static bool _isInitialized = false;
