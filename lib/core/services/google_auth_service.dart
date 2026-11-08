@@ -108,7 +108,7 @@ class GoogleAuthService {
               'photoUrl': userPhoto,
             },
           }),
-        ).timeout(const Duration(seconds: 10));
+        ).timeout(const Duration(seconds: 35));
 
         if (res.statusCode == 200) {
           final data = jsonDecode(res.body);
