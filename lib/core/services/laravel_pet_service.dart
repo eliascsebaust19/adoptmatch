@@ -13,11 +13,18 @@ class LaravelPetService {
   /// Fetch public pet catalog
   Future<List<Pet>> getPets({String? species, String? search, int page = 1}) async {
     try {
-      final response = await _apiClient.dio.get('/pets', queryParameters: {
-        if (species != null && species != 'all') 'species': species,
-        if (search != null && search.isNotEmpty) 'search': search,
-        'page': page,
-      });
+      final response = await _apiClient.dio.get(
+        '/pets',
+        queryParameters: {
+          if (species != null && species != 'all') 'species': species,
+          if (search != null && search.isNotEmpty) 'search': search,
+          'page': page,
+        },
+        options: Options(
+          receiveTimeout: const Duration(seconds: 4),
+          sendTimeout: const Duration(seconds: 4),
+        ),
+      );
 
       if (response.statusCode == 200 &&
           (response.data['status'] == 'success' || response.data['success'] == true)) {
