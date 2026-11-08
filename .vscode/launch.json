@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "AdoptMatch (Chrome Web - Port 3913)",
+      "request": "launch",
+      "type": "dart",
+      "args": [
+        "-d",
+        "chrome",
+        "--web-port=3913"
+      ]
+    },
+    {
+      "name": "AdoptMatch (Mobile / Device)",
+      "request": "launch",
+      "type": "dart"
+    }
+  ]
+}

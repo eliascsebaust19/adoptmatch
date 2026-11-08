@@ -1,6 +1,8 @@
 import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+
 import '../storage/secure_storage_service.dart';
 
 class ApiClient {
@@ -16,8 +18,8 @@ class ApiClient {
     dio = Dio(
       BaseOptions(
         baseUrl: baseUrl ?? defaultBaseUrl,
-        connectTimeout: const Duration(seconds: 60), // Handles Render cold start
-        receiveTimeout: const Duration(seconds: 60),
+        connectTimeout: const Duration(seconds: 15), // Responsive timeout
+        receiveTimeout: const Duration(seconds: 15),
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
@@ -36,9 +38,12 @@ class ApiClient {
         },
         onError: (DioException error, handler) async {
           // Render free tier cold-start retry logic (502 / 503 Bad Gateway)
-          if (_isColdStartError(error) && error.requestOptions.extra['retry'] == null) {
+          if (_isColdStartError(error) &&
+              error.requestOptions.extra['retry'] == null) {
             error.requestOptions.extra['retry'] = true;
-            debugPrint('[ApiClient] Cold start detected (${error.response?.statusCode}). Retrying in 3 seconds...');
+            debugPrint(
+              '[ApiClient] Cold start detected (${error.response?.statusCode}). Retrying in 3 seconds...',
+            );
             await Future.delayed(const Duration(seconds: 3));
             try {
               final response = await dio.fetch(error.requestOptions);
@@ -55,7 +60,9 @@ class ApiClient {
 
   bool _isColdStartError(DioException error) {
     final status = error.response?.statusCode;
-    return status == 502 || status == 503 || status == 504 ||
+    return status == 502 ||
+        status == 503 ||
+        status == 504 ||
         error.type == DioExceptionType.connectionTimeout;
   }
 

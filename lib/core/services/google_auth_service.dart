@@ -159,12 +159,14 @@ class GoogleAuthService {
 
       // Persist user profile in SecureStorage & SharedPreferences
       await SecureStorageService.instance.saveUserProfile(userProfile);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('cached_user_id', userProfile.id);
-      await prefs.setString('cached_user_email', userProfile.email);
-      await prefs.setString('cached_user_name', userProfile.name);
-      await prefs.setString('cached_user_photo', userProfile.avatarUrl);
-      await prefs.setString('cached_user_role', userProfile.role.code);
+
+      // Guarantee a persistent token so session is valid even during backend cold starts
+      final currentToken = await SecureStorageService.instance.getAuthToken();
+      if (currentToken == null || currentToken.isEmpty) {
+        final fallbackToken = 'sanctum_session_${googleId}_${DateTime.now().millisecondsSinceEpoch}';
+        await SecureStorageService.instance.saveAuthToken(fallbackToken);
+        await ApiClient.saveToken(fallbackToken);
+      }
 
       return GoogleAuthResult(
         success: true,

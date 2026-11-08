@@ -108,56 +108,45 @@ class AppRouter {
           return null;
         }
 
-        // 1. Guarding First-time Onboarding:
-        if (!hasSeenOnboarding && !isAdminPath) {
+        // 1. Authenticated users:
+        if (isAuthenticated) {
+          // If on auth or onboarding screens, redirect to destination
+          if (isOnboardingPath || path == '/login' || path == '/register') {
+            return hasAdminAccess ? '/admin/dashboard' : '/home';
+          }
+          // Guard admin vs consumer
+          if (hasAdminAccess && !isAdminPath) {
+            return '/admin/dashboard';
+          }
+          if (!hasAdminAccess && isAdminPath && !isAdminLogin) {
+            return '/home';
+          }
+          if (isAdminLogin) {
+            return hasAdminAccess ? '/admin/dashboard' : '/home';
+          }
+          return null;
+        }
+
+        // 2. Unauthenticated first-time visitors:
+        if (!hasSeenOnboarding && !isAdminPath && path != '/login' && path != '/register' && path != '/auth-callback') {
           if (!isOnboardingPath) {
             return '/onboarding';
           }
           return null;
         }
 
-        // Returning users who have completed onboarding should skip /onboarding
+        // 3. Returning visitors who have completed onboarding should skip /onboarding
         if (isOnboardingPath && hasSeenOnboarding) {
-          return isAuthenticated ? '/home' : '/login';
+          return '/login';
         }
 
-        // 2. Guarding Admin & Shelter Routes (Strict 403 / Redirect isolation):
+        // 4. Guarding Admin & Shelter Routes:
         if (isAdminPath && !isAdminLogin) {
-          if (!isAuthenticated) {
-            return '/admin/login';
-          }
-          if (!hasAdminAccess) {
-            return '/home';
-          }
-          if (path == '/shelter/admin') {
-            return '/admin/dashboard';
-          }
-          return null;
+          return '/admin/login';
         }
 
-        // 3. Guarding Consumer Routes for Admin/Moderator Users:
-        if (isAuthenticated && hasAdminAccess) {
-          if (!isAdminPath) {
-            return '/admin/dashboard';
-          }
-          if (isAdminLogin) {
-            return '/admin/dashboard';
-          }
-          return null;
-        }
-
-        // 4. Regular users trying to access /admin/login while logged in as consumer:
-        if (isAdminLogin && isAuthenticated && !hasAdminAccess) {
-          return '/home';
-        }
-
-        // 5. Authenticated users on login screen redirected to home
-        if (isAuthenticated && (path == '/login' || path == '/register')) {
-          return hasAdminAccess ? '/admin/dashboard' : '/home';
-        }
-
-        // 6. Unauthenticated users attempting to access account-restricted screens
-        if (!isAuthenticated && !isAdminPath && path != '/login' && path != '/onboarding' && path != '/auth-callback') {
+        // 5. Unauthenticated users attempting to access account-restricted screens
+        if (!isAdminPath && path != '/login' && path != '/onboarding' && path != '/auth-callback') {
           if (path.startsWith('/profile') || path.startsWith('/chat') || path.startsWith('/applications')) {
             return '/login';
           }

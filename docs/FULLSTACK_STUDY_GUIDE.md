@@ -535,3 +535,4 @@ services:
 | **`VERCEL_BLOB_STORE_ID`** | `3kHT7mDTcvdaG9fF` | High-speed permanent pet photo storage. |
 
 এই গাইডটি অনুসরণ করলে আপনার AdoptMatch প্রজেক্টটি কোনো খরচ ছাড়াই Render.com ও Clever Cloud-এ সফলভাবে ডেপ্লয় থাকবে এবং সকল ফিচার নির্বিঘ্নে কাজ করবে।
+

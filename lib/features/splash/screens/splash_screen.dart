@@ -76,15 +76,40 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
       if (!mounted) return;
 
+      if (!mounted) return;
       if (user != null) {
         context.read<AuthBloc>().add(UserConfirmedSessionEvent(user));
-        context.go('/home');
+        if (user.role.hasAdminAccess) {
+          context.go('/admin/dashboard');
+        } else {
+          context.go('/home');
+        }
       } else {
-        context.read<AuthBloc>().add(CheckSessionEvent());
-        context.go('/login');
+        final cachedUser = await SecureStorageService.instance.getUserProfile();
+        if (!mounted) return;
+        if (cachedUser != null) {
+          context.read<AuthBloc>().add(UserConfirmedSessionEvent(cachedUser));
+          if (cachedUser.role.hasAdminAccess) {
+            context.go('/admin/dashboard');
+          } else {
+            context.go('/home');
+          }
+        } else {
+          context.read<AuthBloc>().add(CheckSessionEvent());
+          context.go('/login');
+        }
       }
     } catch (_) {
-      if (mounted) {
+      final cachedUser = await SecureStorageService.instance.getUserProfile();
+      if (!mounted) return;
+      if (cachedUser != null) {
+        context.read<AuthBloc>().add(UserConfirmedSessionEvent(cachedUser));
+        if (cachedUser.role.hasAdminAccess) {
+          context.go('/admin/dashboard');
+        } else {
+          context.go('/home');
+        }
+      } else {
         context.go('/login');
       }
     }

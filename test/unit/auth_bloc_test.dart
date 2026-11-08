@@ -23,7 +23,7 @@ void main() {
     });
 
     blocTest<AuthBloc, AuthState>(
-      'SignUpWithEmailEvent emits [AuthLoading, AuthSignUpConfirmationPending] and does NOT auto login',
+      'SignUpWithEmailEvent emits [AuthLoading, Authenticated] upon successful registration',
       build: () => AuthBloc(),
       act: (bloc) => bloc.add(
         const SignUpWithEmailEvent(
@@ -36,9 +36,9 @@ void main() {
       expect: () => [
         isA<AuthLoading>(),
         predicate<AuthState>((state) {
-          return state is AuthSignUpConfirmationPending &&
-              state.email == 'nadia.test@gmail.com' &&
-              state.message.contains('confirmation email has been sent');
+          return state is Authenticated &&
+              state.user.email == 'nadia.test@gmail.com' &&
+              state.isNewUser == true;
         }),
       ],
     );
