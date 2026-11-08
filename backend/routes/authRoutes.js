@@ -28,22 +28,23 @@ const {
 // mismatched the Flutter Web client ID and produced unverifiable tokens.
 // GOOGLE_CLIENT_ID must be the same Web client ID the app uses as serverClientId;
 // GOOGLE_CLIENT_IDS may add further platform audiences (comma separated).
-const GOOGLE_CLIENT_IDS = [
+const getGoogleClientIds = () => [
   process.env.GOOGLE_CLIENT_ID,
   ...(process.env.GOOGLE_CLIENT_IDS || '').split(','),
 ].map((v) => (v || '').trim()).filter(Boolean);
-const GOOGLE_CLIENT_ID = GOOGLE_CLIENT_IDS[0] || '';
-const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+const getGoogleClientId = () => getGoogleClientIds()[0] || '';
+const googleClient = new OAuth2Client();
 
 /**
  * Helper to verify Google ID token with Google Cloud OAuth2
  * Falls back to Google tokeninfo HTTP endpoint if library encounters local config quirks.
  */
 async function verifyGoogleToken(idToken) {
+  const allowedAudiences = getGoogleClientIds();
   try {
     const ticket = await googleClient.verifyIdToken({
       idToken,
-      audience: GOOGLE_CLIENT_IDS,
+      audience: allowedAudiences,
     });
     const payload = ticket.getPayload();
     const issuerOk = ['accounts.google.com', 'https://accounts.google.com'].includes(payload.iss);
@@ -68,8 +69,8 @@ async function verifyGoogleToken(idToken) {
               return reject(new Error(data.error_description || data.error));
             }
             // Cryptographic audience and verification checks
-            if (!GOOGLE_CLIENT_IDS.includes(data.aud)) {
-              return reject(new Error(`Invalid token audience: ${data.aud}. Expected one of ${GOOGLE_CLIENT_IDS.join(', ')}`));
+            if (!allowedAudiences.includes(data.aud)) {
+              return reject(new Error(`Invalid token audience: ${data.aud}. Expected one of ${allowedAudiences.join(', ')}`));
             }
             if (!['accounts.google.com', 'https://accounts.google.com'].includes(data.iss) ||
                 !data.sub || !data.exp || Number(data.exp) * 1000 <= Date.now()) {
@@ -121,7 +122,7 @@ function generateTokens(user) {
 router.post('/google', async (req, res) => {
   try {
     const idToken = req.body.idToken || req.body.id_token;
-    if (!GOOGLE_CLIENT_ID) {
+    if (!getGoogleClientId()) {
       return res.status(503).json({ success: false, code: 'GOOGLE_AUTH_NOT_CONFIGURED',
         error: 'Google sign-in is not configured on this server.' });
     }

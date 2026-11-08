@@ -63,9 +63,11 @@ async function run() {
     const probe = spawnSync(process.execPath, ['-e', `
       process.env.NODE_ENV='test';
       process.env.JWT_SECRET='google-auth-probe-secret';
+      process.env.GOOGLE_CLIENT_ID='';
+      process.env.GOOGLE_CLIENT_IDS='';
+      const app = require('./server');
       delete process.env.GOOGLE_CLIENT_ID;
       delete process.env.GOOGLE_CLIENT_IDS;
-      const app = require('./server');
       const srv = app.listen(0, '127.0.0.1', async () => {
         const res = await fetch('http://127.0.0.1:' + srv.address().port + '/api/v1/auth/google', {
           method: 'POST', headers: {'Content-Type':'application/json'},
