@@ -15,6 +15,34 @@ class TransparentMatchingEngine:
     """
 
     @staticmethod
+    def normalize_exercise_requirement(req: str) -> Tuple[str, int, bool]:
+        """
+        Normalize exercise requirement into (canonical_label, required_daily_hours, is_known).
+        Handles case insensitivity, whitespace, underscores and hyphens (e.g. 'High', 'HIGH', 'very_high').
+        Unknown values do not silently assume low requirements; they fall back safely to 4 hours.
+        """
+        if not req or not str(req).strip():
+            return ("Unknown", 4, False)
+
+        clean = " ".join(str(req).strip().replace("_", " ").replace("-", " ").upper().split())
+        mapping = {
+            "LOW": ("Low", 1),
+            "LIGHT": ("Low", 1),
+            "MODERATE": ("Moderate", 2),
+            "MEDIUM": ("Moderate", 2),
+            "MED": ("Moderate", 2),
+            "HIGH": ("High", 4),
+            "VERY HIGH": ("Very High", 6),
+            "VERYHIGH": ("Very High", 6),
+            "EXTREME": ("Very High", 6),
+        }
+        if clean in mapping:
+            label, hrs = mapping[clean]
+            return (label, hrs, True)
+
+        return (f"Unknown ({req})", 4, False)
+
+    @staticmethod
     def calculate_match(assessment: AdopterAssessmentSchema, pet: PetDataSchema) -> MatchResultSchema:
         # Safety/welfare constraints cannot be compensated for by other weights.
         blockers: List[str] = []
@@ -26,14 +54,34 @@ class TransparentMatchingEngine:
             blockers.append("This pet requires an adult-only home")
         if pet.special_needs and not assessment.special_needs_willingness:
             blockers.append("This pet requires special-needs care capacity")
+
+        # Pet compatibility: validate existing household pets
         if assessment.has_other_pets:
-            if pet.species == "Dog" and not pet.dog_friendly:
-                blockers.append("This pet must be the only dog in the household")
-            if pet.species == "Cat" and not pet.cat_friendly:
-                blockers.append("This pet must be the only cat in the household")
-        required_hours = {"Low": 1, "Moderate": 2, "High": 4, "Very High": 6}.get(pet.exercise_requirement, 2)
+            if assessment.other_pets_species:
+                norm_species = [s.strip().lower() for s in assessment.other_pets_species if s and s.strip()]
+                has_dogs = any(s in ["dog", "dogs", "canine", "puppy"] for s in norm_species)
+                has_cats = any(s in ["cat", "cats", "feline", "kitten"] for s in norm_species)
+
+                if has_dogs and not pet.dog_friendly:
+                    blockers.append("This pet is not compatible with dogs in the household")
+                if has_cats and not pet.cat_friendly:
+                    blockers.append("This pet is not compatible with cats in the household")
+
+                other_animals = [s for s in norm_species if s not in ["dog", "dogs", "canine", "puppy", "cat", "cats", "feline", "kitten"]]
+                if other_animals and not (pet.dog_friendly and pet.cat_friendly):
+                    blockers.append("This pet is not confirmed compatible with other household animals")
+            else:
+                # Information missing: fail closed, never assume safe
+                if not pet.dog_friendly:
+                    blockers.append("Existing household pet species not specified; this pet must be the only dog in the household" if pet.species == "Dog" else "Existing household pet species not specified; pet is not dog-friendly")
+                if not pet.cat_friendly:
+                    blockers.append("Existing household pet species not specified; this pet must be the only cat in the household" if pet.species == "Cat" else "Existing household pet species not specified; pet is not cat-friendly")
+
+        # Exercise requirement normalization with safe fallback
+        canon_ex, required_hours, is_known_ex = TransparentMatchingEngine.normalize_exercise_requirement(pet.exercise_requirement)
         if assessment.daily_free_time_hours < required_hours:
             blockers.append(f"At least {required_hours} daily care/exercise hours are required")
+
         if blockers:
             return MatchResultSchema(pet_id=pet.id, score=0,
                 classification="Not Recommended", reasons=[], considerations=blockers,
@@ -144,11 +192,37 @@ class TransparentMatchingEngine:
 
         # 5. Pet Preference (10 pts)
         pref_pts = 0
-        if assessment.preferred_species.lower() == pet.species.lower() or assessment.preferred_species == "Any":
-            pref_pts += 5
+
+        # 5a. Species preference (3 pts)
+        if assessment.preferred_species.lower() in [pet.species.lower(), "any"]:
+            pref_pts += 3
             reasons.append(f"Matches your preference for a {pet.species}")
-        if assessment.preferred_size == "Any" or assessment.preferred_size == pet.size:
-            pref_pts += 5
+        else:
+            considerations.append(f"Species ({pet.species}) differs from preferred ({assessment.preferred_species})")
+
+        # 5b. Age range preference (3 pts)
+        if assessment.preferred_age_min <= pet.age_months <= assessment.preferred_age_max:
+            pref_pts += 3
+            reasons.append(f"Age ({pet.age_months}m) is within your preferred range ({assessment.preferred_age_min}-{assessment.preferred_age_max}m)")
+        else:
+            diff_months = pet.age_months - assessment.preferred_age_max if pet.age_months > assessment.preferred_age_max else assessment.preferred_age_min - pet.age_months
+            if diff_months <= 6:
+                pref_pts += 1
+            considerations.append(f"Age ({pet.age_months}m) is outside your preferred range ({assessment.preferred_age_min}-{assessment.preferred_age_max}m)")
+
+        # 5c. Size preference (2 pts)
+        if assessment.preferred_size.lower() in [pet.size.lower(), "any"]:
+            pref_pts += 2
+            reasons.append(f"Matches your size preference ({pet.size})")
+        else:
+            considerations.append(f"Size ({pet.size}) differs from preferred ({assessment.preferred_size})")
+
+        # 5d. Gender preference (2 pts)
+        if assessment.preferred_gender.lower() in [pet.gender.lower(), "any"]:
+            pref_pts += 2
+            reasons.append(f"Matches your gender preference ({pet.gender})")
+        else:
+            considerations.append(f"Gender ({pet.gender}) differs from preferred ({assessment.preferred_gender})")
 
         score += pref_pts
 
@@ -165,12 +239,28 @@ class TransparentMatchingEngine:
             fam_pts += 5
 
         if assessment.has_other_pets:
-            if (pet.species == "Dog" and pet.dog_friendly) or (pet.species == "Cat" and pet.cat_friendly):
-                fam_pts += 5
-                reasons.append("Sociable with existing household pets")
+            if assessment.other_pets_species:
+                norm_species = [s.strip().lower() for s in assessment.other_pets_species if s and s.strip()]
+                has_dogs = any(s in ["dog", "dogs", "canine", "puppy"] for s in norm_species)
+                has_cats = any(s in ["cat", "cats", "feline", "kitten"] for s in norm_species)
+                compatible = True
+                if has_dogs and not pet.dog_friendly:
+                    compatible = False
+                if has_cats and not pet.cat_friendly:
+                    compatible = False
+                if compatible:
+                    fam_pts += 5
+                    reasons.append("Sociable with existing household pets")
+                else:
+                    fam_pts += 1
+                    considerations.append("May require careful introduction to existing household pets")
             else:
-                fam_pts += 2
-                considerations.append("Prefers to be the only pet in the household")
+                if pet.dog_friendly and pet.cat_friendly:
+                    fam_pts += 4
+                    reasons.append("Sociable with other animals")
+                else:
+                    fam_pts += 1
+                    considerations.append("Compatibility with existing pets is unconfirmed")
         else:
             fam_pts += 5
 
@@ -190,6 +280,9 @@ class TransparentMatchingEngine:
 
         score += care_pts
 
+        if not is_known_ex:
+            considerations.append(f"Exercise requirement '{pet.exercise_requirement}' is unconfirmed; conservative care capacity applied")
+
         # Cap score between 0 and 100
         final_score = max(0, min(100, score))
 
@@ -207,6 +300,6 @@ class TransparentMatchingEngine:
             pet_id=pet.id,
             score=final_score,
             classification=classification,
-            reasons=reasons[:5], # top 5 reasons
-            considerations=considerations[:4] # top 4 considerations
+            reasons=reasons[:10],
+            considerations=considerations[:8]
         )

@@ -17,6 +17,10 @@ class AdopterAssessmentSchema(BaseModel):
     has_children: bool = Field(default=False)
     has_elderly: bool = Field(default=False)
     has_other_pets: bool = Field(default=False)
+    other_pets_species: Optional[List[str]] = Field(
+        default=None,
+        description="Species of existing household pets, e.g. ['dog', 'cat']. If omitted while has_other_pets is true, fails closed.",
+    )
     preferred_species: str = Field(default="Dog")
     preferred_age_min: int = Field(default=0, ge=0, le=600)
     preferred_age_max: int = Field(default=180, ge=0, le=600)

@@ -1,15 +1,25 @@
 {
   "name": "adoptmatch",
-  "version": "1.0.0",
-  "description": "AI-Powered Pet Adoption & Matching Platform",
-  "main": "server/index.js",
+  "version": "2.0.0",
+  "description": "AdoptMatch - AI-Powered Pet Adoption & Matching Platform (Flutter + Supabase + Python AI Service)",
+  "private": true,
   "scripts": {
-    "start:server": "cd server && npm start",
     "start:ai": "cd ai-service && python -m uvicorn app.main:app --reload --port 8000",
-    "start:frontend": "cd src-frontend && npm run dev",
-    "seed": "cd server && node scripts/seedRunner.js"
+    "test:ai": "python -m pytest ai-service/tests",
+    "test:flutter": "flutter test",
+    "analyze:flutter": "flutter analyze --no-fatal-infos",
+    "bootstrap:admin": "node supabase-edition/scripts/bootstrap-admin.mjs",
+    "db:push": "cd supabase-edition && supabase db push",
+    "test:db": "cd supabase-edition && supabase test db"
   },
-  "keywords": ["pet-adoption", "ai-matching", "react", "express", "fastapi"],
-  "author": "",
-  "license": "ISC"
+  "keywords": [
+    "pet-adoption",
+    "ai-matching",
+    "flutter",
+    "supabase",
+    "fastapi",
+    "edge-functions"
+  ],
+  "author": "AdoptMatch Team",
+  "license": "UNLICENSED"
 }

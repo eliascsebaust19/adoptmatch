@@ -113,6 +113,90 @@ def test_invalid_labels_and_age_ranges_are_rejected():
         raise AssertionError(f"Invalid assessment accepted: {kwargs}")
 
 
+def test_pet_compatibility_with_existing_household_species():
+    """Validates compatibility against actual household pet species, failing closed when species is omitted."""
+    # 1. Household has a dog: adopting a cat that is not dog-friendly must be blocked
+    cat_pet = make_pet(species="Cat", dog_friendly=False, cat_friendly=True)
+    assessment_with_dog = AdopterAssessmentSchema(has_other_pets=True, other_pets_species=["Dog"])
+    res1 = TransparentMatchingEngine.calculate_match(assessment_with_dog, cat_pet)
+    assert not res1.eligible and res1.score == 0
+    assert any("dogs in the household" in r for r in res1.blocking_reasons)
+
+    # 2. Household has a dog: adopting a cat that IS dog-friendly must pass
+    friendly_cat = make_pet(species="Cat", dog_friendly=True, cat_friendly=True)
+    res2 = TransparentMatchingEngine.calculate_match(assessment_with_dog, friendly_cat)
+    assert res2.eligible and res2.score > 0
+
+    # 3. Household has a cat: adopting a dog that is not cat-friendly must be blocked
+    dog_not_cat_friendly = make_pet(species="Dog", dog_friendly=True, cat_friendly=False)
+    assessment_with_cat = AdopterAssessmentSchema(has_other_pets=True, other_pets_species=["cat"])
+    res3 = TransparentMatchingEngine.calculate_match(assessment_with_cat, dog_not_cat_friendly)
+    assert not res3.eligible and res3.score == 0
+    assert any("cats in the household" in r for r in res3.blocking_reasons)
+
+    # 4. Fail-closed: has_other_pets is True without species info -> pet without both friendly flags must block
+    res4 = TransparentMatchingEngine.calculate_match(
+        AdopterAssessmentSchema(has_other_pets=True, other_pets_species=None),
+        dog_not_cat_friendly
+    )
+    assert not res4.eligible and res4.score == 0
+    assert any("not specified" in r.lower() for r in res4.blocking_reasons)
+
+
+def test_exercise_requirement_normalization_and_safe_fallback():
+    """Exercise formats must normalize and unknown values must not silently downgrade to low requirement."""
+    # Test normalization across case and whitespace/symbols
+    norm_high, hrs_high, known_high = TransparentMatchingEngine.normalize_exercise_requirement("HIGH")
+    assert hrs_high == 4 and known_high
+
+    norm_vh, hrs_vh, known_vh = TransparentMatchingEngine.normalize_exercise_requirement("very_high")
+    assert hrs_vh == 6 and known_vh
+
+    norm_mod, hrs_mod, known_mod = TransparentMatchingEngine.normalize_exercise_requirement("  Moderate  ")
+    assert hrs_mod == 2 and known_mod
+
+    # Test safe fallback for unknown value: conservative 4 hours (High), not 1 or 2
+    norm_unk, hrs_unk, known_unk = TransparentMatchingEngine.normalize_exercise_requirement("Ultra-Athletic")
+    assert hrs_unk == 4 and not known_unk
+
+    # An adopter with only 2 free hours must be blocked by unknown/extreme exercise requirement
+    res_unk = TransparentMatchingEngine.calculate_match(
+        AdopterAssessmentSchema(daily_free_time_hours=2),
+        make_pet(exercise_requirement="Ultra-Athletic")
+    )
+    assert not res_unk.eligible
+    assert any("4 daily" in r for r in res_unk.blocking_reasons)
+
+
+def test_matching_preferences_age_and_gender():
+    """Preferred age range and preferred gender must directly and transparently impact matching scores and reasons."""
+    # Assessment: prefers female pet between 12 and 36 months
+    assessment = AdopterAssessmentSchema(
+        preferred_species="Dog",
+        preferred_gender="Female",
+        preferred_age_min=12,
+        preferred_age_max=36,
+        preferred_size="Medium"
+    )
+
+    # Perfect preference match (Luna: Dog, Female, 24m, Medium)
+    matched_pet = make_pet(species="Dog", gender="Female", age_months=24, size="Medium")
+    res_matched = TransparentMatchingEngine.calculate_match(assessment, matched_pet)
+
+    # Mismatched pet (Male, 72m)
+    mismatched_pet = make_pet(species="Dog", gender="Male", age_months=72, size="Medium")
+    res_mismatched = TransparentMatchingEngine.calculate_match(assessment, mismatched_pet)
+
+    assert res_matched.score > res_mismatched.score
+    # Matched reasons must include age and gender confirmation
+    assert any("gender preference (Female)" in r for r in res_matched.reasons)
+    assert any("preferred range (12-36m)" in r for r in res_matched.reasons)
+
+    # Mismatched considerations must point out age and gender variance
+    assert any("outside your preferred range" in c for c in res_mismatched.considerations)
+    assert any("differs from preferred (Female)" in c for c in res_mismatched.considerations)
+
+
 if __name__ == "__main__":
     tests = [value for name, value in sorted(globals().items()) if name.startswith("test_")]
     failures = 0
