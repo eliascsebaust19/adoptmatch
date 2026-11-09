@@ -6,9 +6,6 @@ analyzer:
     prefer_const_constructors: ignore
     prefer_const_literals_to_create_immutables: ignore
   exclude:
-    # Separate backend edition with its own project; it is not part of this
-    # Flutter package and must not be analysed by `flutter analyze`.
-    - supabase-edition/**
     - build/**
     - android/**
     - ios/**
