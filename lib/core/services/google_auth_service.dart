@@ -79,6 +79,25 @@ class GoogleAuthService {
 
       if (account == null) {
         if (nativeError != null) {
+          // On Web, if GIS native popup encountered an issue (e.g. third-party cookie/popup block or origin issue),
+          // attempt browser OAuth redirect via Supabase.
+          if (kIsWeb && AdoptMatchBackend.isInitialized) {
+            try {
+              debugPrint('[GoogleAuthService] Web native popup failed ($nativeError). Falling back to Supabase browser OAuth redirect...');
+              final redirected = await Supabase.instance.client.auth.signInWithOAuth(
+                OAuthProvider.google,
+              );
+              if (redirected) {
+                return const GoogleAuthResult(
+                  success: true,
+                  wasCancelled: false,
+                );
+              }
+            } catch (oauthErr) {
+              debugPrint('[GoogleAuthService] Supabase OAuth redirect fallback failed: $oauthErr');
+            }
+          }
+
           String userFriendlyMsg = nativeError;
           if (nativeError.contains('ApiException: 10') ||
               nativeError.contains('DEVELOPER_ERROR')) {
