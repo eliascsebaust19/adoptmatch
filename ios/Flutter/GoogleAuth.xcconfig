@@ -10,6 +10,6 @@
 # Leaving the iOS values empty makes iOS Google Sign-In fail with a clear error
 # instead of silently issuing an unverifiable token.
 
-GOOGLE_WEB_CLIENT_ID = 94403915199-vk45tro12gsp8q2rc2mn9ub754pug849.apps.googleusercontent.com
+GOOGLE_WEB_CLIENT_ID = 94403915199-50ug4q14m66gn3pjmhh441givdf0etie.apps.googleusercontent.com
 GOOGLE_IOS_CLIENT_ID =
 GOOGLE_IOS_URL_SCHEME =
