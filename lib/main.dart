@@ -1,14 +1,11 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'core/network/api_client.dart';
 import 'core/theme/app_theme.dart';
 import 'core/localization/app_locale.dart';
 import 'core/navigation/app_router.dart';
 import 'core/repositories/pet_repository.dart';
-import 'core/services/supabase_service.dart';
 import 'core/services/local_storage_service.dart';
 import 'core/storage/secure_storage_service.dart';
 import 'features/auth/bloc/auth_bloc.dart';
@@ -16,10 +13,16 @@ import 'features/adoption_match/bloc/pet_match_bloc.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Start waking the API now so the session check and the first sign-in do not
-  // wait on a container that is still booting.
-  unawaited(ApiClient.warmUp());
-  await SupabaseService.initialize();
+  await Supabase.initialize(
+    url: const String.fromEnvironment(
+      'SUPABASE_URL',
+      defaultValue: 'https://wgztdhabgedhkaippkpd.supabase.co',
+    ),
+    anonKey: const String.fromEnvironment(
+      'SUPABASE_ANON_KEY',
+      defaultValue: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndnenRkaGFiZ2VkaGthaXBwa3BkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3ODAzMTksImV4cCI6MjEwODM1NjMxOX0.KolY1dw6NuDxZAt14bCcJz0NLLmMa05HHixz4TFtZMM',
+    ),
+  );
   await LocalStorageService.instance.init();
   // Drop plaintext session/profile copies written by older builds.
   await SecureStorageService.instance.purgeLegacyPlaintextCopies();

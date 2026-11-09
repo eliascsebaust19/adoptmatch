@@ -9,6 +9,7 @@ import '../../../core/services/google_auth_service.dart';
 import '../../../core/services/laravel_auth_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/storage/secure_storage_service.dart';
+import '../../../core/supabase/adoptmatch_supabase.dart';
 import '../repositories/auth_repository.dart';
 
 // --- Roles & Profile Models ---
@@ -474,8 +475,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   }
 
-  // Sessions are issued only by the AdoptMatch API. Supabase auth events must
-  // not mint app sessions: its JWT is not accepted by the Laravel/Node APIs.
+  // Supabase Auth is the single auth authority. The app session and app_role JWT hook own the identity.
 
   Future<void> _onCheckSession(
     CheckSessionEvent event,
@@ -523,6 +523,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           ));
           return;
         }
+
 
         // A parsed 200 that is not a success carries the server's own reason.
         emit(AuthFailure(describeNetworkFailure(
@@ -581,32 +582,41 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) async {
     emit(AuthLoading());
+    Object? adminError;
     try {
       final emailLower = event.email.trim().toLowerCase();
-      final user = await _authRepository.loginWithEmail(
-        email: emailLower,
-        password: event.password,
-      );
 
-      if (!user.role.hasAdminAccess) {
-        await _authRepository.logout();
-        emit(
-          const AuthFailure(
-            '403 Forbidden: Access Denied. Administrator or Shelter Manager privileges required.',
-          ),
+      // 1. Primary: Authenticate via Laravel API
+      try {
+        final user = await _authRepository.loginWithEmail(
+          email: emailLower,
+          password: event.password,
         );
+        if (!user.role.hasAdminAccess) {
+          await _authRepository.logout();
+          emit(
+            const AuthFailure(
+              '403 Forbidden: Access Denied. Administrator or Shelter Manager privileges required.',
+            ),
+          );
+          return;
+        }
+        _currentUser = user;
+        emit(Authenticated(user));
         return;
+      } catch (laravelErr) {
+        debugPrint('[AuthBloc] Admin Laravel login: $laravelErr');
+        adminError = laravelErr;
       }
 
-      _currentUser = user;
-      emit(Authenticated(user));
-    } catch (laravelErr) {
-      debugPrint('[AuthBloc] Admin Laravel login: $laravelErr');
+
       emit(AuthFailure(describeNetworkFailure(
-        laravelErr,
+        adminError,
         fallback:
             '403 Forbidden: Access Denied. Invalid administrative credentials or server unreachable.',
       )));
+    } catch (e) {
+      emit(AuthFailure(describeNetworkFailure(e)));
     }
   }
 
@@ -736,7 +746,18 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     _currentUser = updated;
     await SecureStorageService.instance.saveUserProfile(updated);
 
-    if (SupabaseService.isInitialized &&
+    if (AdoptMatchBackend.isInitialized &&
+        AdoptMatchBackend.instance.currentUser != null) {
+      try {
+        await AdoptMatchBackend.instance.updateProfile(
+          fullName: updated.name,
+          phone: updated.phone,
+          avatarUrl: updated.avatarUrl,
+          location: updated.location,
+          bio: updated.bio,
+        );
+      } catch (_) {}
+    } else if (SupabaseService.isInitialized &&
         SupabaseService.auth.currentUser != null) {
       try {
         await SupabaseService.auth.updateUser(

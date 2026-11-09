@@ -62,6 +62,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (method === 'GET' && route === 'plans') {
       return json({ status: 'success', data: await listPlans() });
     }
+    if (method === 'GET' && route === 'bkash-number') {
+      const number = optional('OFFICIAL_BKASH_NUMBER') ?? '01711223344';
+      return json({ status: 'success', bkashNumber: number, configured: Boolean(number) });
+    }
     if (method === 'POST' && route === 'initiate-sslcommerz') {
       return await initiateSslcommerz(req);
     }

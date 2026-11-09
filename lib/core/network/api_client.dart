@@ -145,7 +145,8 @@ class ApiClient {
     return status == 502 ||
         status == 503 ||
         status == 504 ||
-        error.type == DioExceptionType.connectionTimeout;
+        error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.receiveTimeout;
   }
 
   static Future<void> saveToken(String token) async {

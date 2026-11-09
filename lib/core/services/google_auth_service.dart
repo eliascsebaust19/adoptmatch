@@ -1,13 +1,17 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../features/auth/bloc/auth_bloc.dart';
+import '../../features/auth/repositories/auth_repository.dart';
 import '../config/auth_config.dart';
 import '../network/api_client.dart';
 import '../network/network_error.dart';
 import '../storage/secure_storage_service.dart';
+import '../supabase/adoptmatch_supabase.dart';
 
 class GoogleAuthResult {
   final bool success;
@@ -91,9 +95,10 @@ class GoogleAuthService {
       }
 
       String? idToken;
+      GoogleSignInAuthentication? authHeaders;
 
       try {
-        final authHeaders = await account.authentication;
+        authHeaders = await account.authentication;
         idToken = authHeaders.idToken;
       } catch (tokenErr) {
         debugPrint('[GoogleAuthService] Token retrieval error: $tokenErr');
@@ -118,66 +123,96 @@ class GoogleAuthService {
       bool isNewUser = false;
       String? backendError;
 
-      // Exchange the Google ID token with the Laravel API. This goes through
-      // ApiClient rather than a one-off http.post: it used to carry its own 35s
-      // ceiling, skip the warm-up probe and print raw TimeoutException text in
-      // the dialog while every other endpoint used different timeouts.
-      try {
-        // Bounded: the request below has its own 60s ceiling.
-        await serverWarmUp.timeout(const Duration(seconds: 30), onTimeout: () {});
-        final response = await _apiClient.dio.post('/auth/google', data: {
-          'id_token': idToken,
-          'idToken': idToken,
-          'device_name': 'flutter_google',
-        });
-
-        final data = response.data;
-        if (data is Map) {
-          isNewUser = data['is_new_user'] == true;
-          final u = data['user'] ?? data['data'];
-          final sanctumToken = data['access_token'] ??
-              data['token'] ??
-              (data['tokens'] != null ? data['tokens']['accessToken'] : null);
-
-          if (sanctumToken != null) {
-            await SecureStorageService.instance.saveAuthToken(
-              sanctumToken.toString(),
-            );
-            await ApiClient.saveToken(sanctumToken.toString());
+      // Sign in via Supabase Auth (or fallback to test mock)
+      if (AdoptMatchBackend.isInitialized) {
+        try {
+          await AdoptMatchBackend.instance.signInWithGoogle(
+            idToken: idToken,
+            accessToken: authHeaders?.accessToken,
+          );
+          final profile = await AdoptMatchBackend.instance.myProfile();
+          Map<String, dynamic> sub = {};
+          try {
+            sub = await AdoptMatchBackend.instance.mySubscription();
+          } catch (_) {}
+          if (profile != null) {
+            userProfile = AuthRepository.userFromSupabase(profile, sub);
+            final created = Supabase.instance.client.auth.currentUser?.createdAt;
+            final updated = Supabase.instance.client.auth.currentUser?.updatedAt;
+            isNewUser = created != null && created == updated;
           }
-
-          if (u is Map) {
-            userProfile = UserProfile(
-              id: u['id']?.toString() ?? googleId,
-              name: u['name']?.toString() ?? userName,
-              email: u['email']?.toString() ?? userEmail,
-              phone: u['phone']?.toString() ?? '',
-              role: UserRole.fromCode(u['role']?.toString()),
-              avatarUrl: u['avatar']?.toString() ?? userPhoto,
-              googlePhotoUrl: userPhoto,
-              location: u['location']?.toString() ?? 'Dhaka, Bangladesh',
-              bio: u['bio']?.toString() ?? 'Animal advocate & pet rescuer',
-              preferredPetType: 'All Pets',
-              isVerified: true,
-            );
+          if (userProfile == null) {
+            backendError =
+                'Google verified your account, but the AdoptMatch server did not return a profile. Please try again.';
           }
+        } on AdoptMatchException catch (backendErr) {
+          backendError = backendErr.message;
+          debugPrint('[GoogleAuthService] Supabase sign-in notice: $backendErr');
+        } catch (backendErr) {
+          backendError = describeNetworkFailure(
+            backendErr,
+            fallback: 'The AdoptMatch server could not complete the sign-in. Please try again.',
+          );
+          debugPrint('[GoogleAuthService] Supabase sign-in failed: $backendErr');
         }
-        if (userProfile == null) {
-          backendError =
-              'Google verified your account, but the AdoptMatch server did not return a profile. Please try again.';
+      } else {
+        try {
+          // Bounded: the request below has its own 60s ceiling.
+          await serverWarmUp.timeout(const Duration(seconds: 30), onTimeout: () {});
+          final response = await _apiClient.dio.post('/auth/google', data: {
+            'id_token': idToken,
+            'idToken': idToken,
+            'device_name': 'flutter_google',
+          });
+
+          final data = response.data;
+          if (data is Map) {
+            isNewUser = data['is_new_user'] == true;
+            final u = data['user'] ?? data['data'];
+            final sanctumToken = data['access_token'] ??
+                data['token'] ??
+                (data['tokens'] != null ? data['tokens']['accessToken'] : null);
+
+            if (sanctumToken != null) {
+              await SecureStorageService.instance.saveAuthToken(
+                sanctumToken.toString(),
+              );
+              await ApiClient.saveToken(sanctumToken.toString());
+            }
+
+            if (u is Map) {
+              userProfile = UserProfile(
+                id: u['id']?.toString() ?? googleId,
+                name: u['name']?.toString() ?? userName,
+                email: u['email']?.toString() ?? userEmail,
+                phone: u['phone']?.toString() ?? '',
+                role: UserRole.fromCode(u['role']?.toString()),
+                avatarUrl: u['avatar']?.toString() ?? userPhoto,
+                googlePhotoUrl: userPhoto,
+                location: u['location']?.toString() ?? 'Dhaka, Bangladesh',
+                bio: u['bio']?.toString() ?? 'Animal advocate & pet rescuer',
+                preferredPetType: 'All Pets',
+                isVerified: true,
+              );
+            }
+          }
+          if (userProfile == null) {
+            backendError =
+                'Google verified your account, but the AdoptMatch server did not return a profile. Please try again.';
+          }
+        } on DioException catch (backendErr) {
+          backendError = describeNetworkFailure(
+            backendErr,
+            fallback: 'The AdoptMatch server rejected the sign-in. Please try again.',
+          );
+          debugPrint('[GoogleAuthService] Backend sync failed: $backendErr');
+        } catch (backendErr) {
+          backendError = describeNetworkFailure(
+            backendErr,
+            fallback: 'The AdoptMatch server could not complete the sign-in. Please try again.',
+          );
+          debugPrint('[GoogleAuthService] Backend sync failed: $backendErr');
         }
-      } on DioException catch (backendErr) {
-        backendError = describeNetworkFailure(
-          backendErr,
-          fallback: 'The AdoptMatch server rejected the sign-in. Please try again.',
-        );
-        debugPrint('[GoogleAuthService] Backend sync failed: $backendErr');
-      } catch (backendErr) {
-        backendError = describeNetworkFailure(
-          backendErr,
-          fallback: 'The AdoptMatch server could not complete the sign-in. Please try again.',
-        );
-        debugPrint('[GoogleAuthService] Backend sync failed: $backendErr');
       }
 
       // Fail closed: without a server-issued session there is no signed-in user.
@@ -219,6 +254,12 @@ class GoogleAuthService {
         onTimeout: () => null,
       );
     } catch (_) {}
+
+    if (AdoptMatchBackend.isInitialized) {
+      try {
+        await AdoptMatchBackend.instance.signOut();
+      } catch (_) {}
+    }
 
     try {
       await SecureStorageService.instance.clearSession();

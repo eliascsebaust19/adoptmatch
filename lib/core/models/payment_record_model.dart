@@ -52,25 +52,52 @@ class PaymentRecord extends Equatable {
 
   factory PaymentRecord.fromJson(Map<String, dynamic> json) {
     return PaymentRecord(
-      tranId: json['tranId'] as String? ?? 'TRAN-${DateTime.now().millisecondsSinceEpoch}',
-      userId: json['userId'] as String? ?? '',
-      userName: json['userName'] as String? ?? 'User',
-      userEmail: json['userEmail'] as String? ?? '',
-      planId: json['planId'] as String? ?? '',
-      planName: json['planName'] as String? ?? 'AdoptMatch Premium',
+      tranId:
+          (json['tranId'] ?? json['tran_id']) as String? ??
+          'TRAN-${DateTime.now().millisecondsSinceEpoch}',
+      userId: (json['userId'] ?? json['user_id']) as String? ?? '',
+      userName:
+          (json['userName'] ??
+                  json['user_name'] ??
+                  (json['user'] is Map ? json['user']['full_name'] : null))
+              as String? ??
+          'User',
+      userEmail:
+          (json['userEmail'] ??
+                  json['user_email'] ??
+                  (json['user'] is Map ? json['user']['email'] : null))
+              as String? ??
+          '',
+      planId: (json['planId'] ?? json['plan_id']) as String? ?? '',
+      planName:
+          (json['planName'] ??
+                  json['plan_name'] ??
+                  (json['plan'] is Map ? json['plan']['name'] : null))
+              as String? ??
+          'AdoptMatch Premium',
       amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
-      currency: json['currency'] as String? ?? 'BDT',
-      status: json['status'] as String? ?? 'PENDING',
-      paymentMethod: json['paymentMethod'] as String? ?? 'SSLCommerz',
-      valId: json['valId'] as String?,
-      bankTranId: json['bankTranId'] as String?,
-      cardType: json['cardType'] as String?,
-      senderPhone: json['senderPhone'] as String?,
-      trxId: json['trxId'] as String?,
-      createdAt: json['createdAt'] != null ? DateTime.tryParse(json['createdAt'] as String) ?? DateTime.now() : DateTime.now(),
-      verifiedAt: json['verifiedAt'] != null ? DateTime.tryParse(json['verifiedAt'] as String) : null,
-      approvedBy: json['approvedBy'] as String?,
-      adminNote: json['adminNote'] as String?,
+      currency: (json['currency'] as String?) ?? 'BDT',
+      status: (json['status'] as String? ?? 'PENDING').toUpperCase(),
+      paymentMethod:
+          (json['paymentMethod'] ?? json['method']) as String? ?? 'SSLCommerz',
+      valId: (json['valId'] ?? json['val_id']) as String?,
+      bankTranId: (json['bankTranId'] ?? json['bank_tran_id']) as String?,
+      cardType: (json['cardType'] ?? json['card_type']) as String?,
+      senderPhone: (json['senderPhone'] ?? json['sender_phone']) as String?,
+      trxId: (json['trxId'] ?? json['trx_id']) as String?,
+      createdAt: json['createdAt'] != null
+          ? (DateTime.tryParse(json['createdAt'] as String) ?? DateTime.now())
+          : (json['created_at'] != null
+                ? (DateTime.tryParse(json['created_at'] as String) ??
+                      DateTime.now())
+                : DateTime.now()),
+      verifiedAt: json['verifiedAt'] != null
+          ? DateTime.tryParse(json['verifiedAt'] as String)
+          : (json['verified_at'] != null
+                ? DateTime.tryParse(json['verified_at'] as String)
+                : null),
+      approvedBy: (json['approvedBy'] ?? json['verified_by']) as String?,
+      adminNote: (json['adminNote'] ?? json['failure_reason']) as String?,
     );
   }
 
@@ -101,4 +128,3 @@ class PaymentRecord extends Equatable {
   @override
   List<Object?> get props => [tranId, userId, planId, amount, status];
 }
-

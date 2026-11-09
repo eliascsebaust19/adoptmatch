@@ -1,13 +1,16 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../features/admin/models/shelter_application_model.dart';
 import '../../features/admin/models/admin_pet_moderation_model.dart';
 import '../../features/admin/models/admin_audit_log_model.dart';
 import '../../features/auth/bloc/auth_bloc.dart';
 import '../models/pet_model.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import '../network/api_client.dart';
 import '../storage/secure_storage_service.dart';
+import '../supabase/adoptmatch_supabase.dart';
 
 class AdminKPI {
   final int? totalAdoptions;
@@ -107,13 +110,17 @@ class AdminRepository {
   factory AdminRepository() => _instance;
   AdminRepository._internal();
   http.Client _client = http.Client();
+  bool _isTestConfigured = false;
   Future<String?> Function() _readToken = SecureStorageService.instance.getAuthToken;
   String? lastSyncError;
 
   void configureForTesting(http.Client client, Future<String?> Function() tokenReader) {
+    _isTestConfigured = true;
     _client = client; _readToken = tokenReader;
     _users = []; _pets = []; _flaggedPets = []; _shelters = []; _auditLogs = []; _kpis = null; lastSyncError = null;
   }
+
+  bool get _useSupabase => AdoptMatchBackend.isInitialized && !_isTestConfigured;
 
   final _sheltersController = StreamController<List<ShelterApplication>>.broadcast();
   final _flaggedPetsController = StreamController<List<FlaggedPetListing>>.broadcast();
@@ -169,6 +176,148 @@ class AdminRepository {
   }
 
   Future<void> refresh() async {
+    if (_useSupabase) {
+      try {
+        final statsData = await AdoptMatchBackend.instance.adminStats();
+        _kpis = AdminKPI(
+          totalAdoptions: (statsData['adoptions_completed'] ?? statsData['totalAdoptions']) as int?,
+          pendingShelters: (statsData['pending_shelters'] ?? statsData['pendingShelters'] ?? 0) as int,
+          activeRescues: (statsData['available_pets'] ?? statsData['activeRescues'] ?? 0) as int,
+          totalDonationsBDT: (statsData['revenue_bdt'] ?? statsData['totalDonationsBDT']) as int?,
+          flaggedListings: (statsData['pending_pets'] ?? statsData['flaggedListings'] ?? 0) as int,
+          activeDisputes: (statsData['unverified_payments'] ?? statsData['activeDisputes']) as int?,
+        );
+
+        final usersList = await AdoptMatchBackend.instance.adminUsers();
+        _users = usersList.map((u) => AdminManagedUser(
+          id: u['id'].toString(),
+          name: (u['full_name'] ?? u['name'] ?? '').toString(),
+          email: (u['email'] ?? '').toString(),
+          phone: (u['phone'] ?? '').toString(),
+          role: UserRole.fromCode(u['role']?.toString() ?? 'USER'),
+          status: (u['status'] ?? 'Active').toString(),
+          permissions: List<String>.from(u['permissions'] as List? ?? const []),
+          adoptionsCount: (u['adoptionsCount'] as num?)?.toInt() ?? 0,
+          joinedAt: DateTime.tryParse(u['created_at']?.toString() ?? u['joinedAt']?.toString() ?? '') ?? DateTime.now(),
+        )).toList();
+
+        final shelterRows = await Supabase.instance.client
+            .from('shelters')
+            .select('*, profile:profiles(id, full_name, email, phone)')
+            .order('created_at', ascending: false);
+        _shelters = (shelterRows as List).map((sRaw) {
+          final s = Map<String, dynamic>.from(sRaw as Map);
+          final prof = Map<String, dynamic>.from(s['profile'] as Map? ?? {});
+          return ShelterApplication(
+            id: s['id'].toString(),
+            shelterName: (s['name'] ?? s['shelterName'] ?? '').toString(),
+            registrationNumber: (s['registrationNumber'] ?? '').toString(),
+            contactPerson: (prof['full_name'] ?? s['contactPerson'] ?? '').toString(),
+            email: (s['email'] ?? prof['email'] ?? '').toString(),
+            phone: (s['phone'] ?? prof['phone'] ?? '').toString(),
+            city: (s['city'] ?? 'Dhaka').toString(),
+            address: (s['address'] ?? '').toString(),
+            nidNumber: (s['nidNumber'] ?? '').toString(),
+            tradeLicenseNumber: (s['tradeLicenseNumber'] ?? '').toString(),
+            vetAffiliation: (s['vetAffiliation'] ?? '').toString(),
+            status: VerificationStatus.values.firstWhere(
+              (v) => v.name.toUpperCase() == (s['verification_status'] ?? s['status'] ?? '').toString().toUpperCase(),
+              orElse: () => VerificationStatus.pending,
+            ),
+            documentUrls: List<String>.from(s['documentUrls'] as List? ?? const []),
+            submittedAt: DateTime.tryParse(s['created_at']?.toString() ?? s['submittedAt']?.toString() ?? '') ?? DateTime.now(),
+            reviewerNotes: s['reviewerNotes']?.toString(),
+            capacity: (s['capacity'] as num?)?.toInt() ?? 30,
+          );
+        }).toList();
+
+        final petRows = await Supabase.instance.client
+            .from('pets')
+            .select()
+            .order('created_at', ascending: false);
+        _pets = (petRows as List).map((pRaw) {
+          final p = Map<String, dynamic>.from(pRaw as Map);
+          return Pet(
+            id: p['id'].toString(),
+            name: (p['name'] ?? '').toString(),
+            species: (p['species'] ?? '').toString(),
+            breed: (p['breed'] ?? '').toString(),
+            ageDisplay: (p['age_display'] ?? p['ageDisplay'] ?? '').toString(),
+            ageMonths: (p['age_months'] ?? p['ageMonths'] as num?)?.toInt() ?? 0,
+            gender: (p['gender'] ?? '').toString(),
+            weightKg: (p['weight_kg'] ?? p['weightKg'] as num?)?.toDouble() ?? 0,
+            distanceKm: (p['distanceKm'] as num?)?.toDouble() ?? double.infinity,
+            matchScore: (p['matchScore'] as num?)?.toInt() ?? 0,
+            imageUrl: (p['primary_image_url'] ?? p['imageUrl'] ?? '').toString(),
+            galleryUrls: List<String>.from((p['gallery_urls'] ?? p['galleryUrls']) as List? ?? const []),
+            isUrgent: p['is_urgent'] == true || p['isUrgent'] == true,
+            isFeatured: p['is_featured'] == true || p['isFeatured'] == true,
+            isVaccinated: p['is_vaccinated'] == true || p['isVaccinated'] == true,
+            isNeutered: p['is_neutered'] == true || p['isNeutered'] == true,
+            isHouseTrained: p['is_house_trained'] == true || p['isHouseTrained'] == true,
+            isKidSafe: p['is_kid_safe'] == true || p['isKidSafe'] == true,
+            isApartmentFriendly: p['is_apartment_friendly'] == true || p['isApartmentFriendly'] == true,
+            shelterName: (p['shelter_name'] ?? p['shelterName'] ?? '').toString(),
+            shelterPhone: (p['shelter_phone'] ?? p['shelterPhone'] ?? '').toString(),
+            shelterAddress: (p['shelter_address'] ?? p['shelterAddress'] ?? '').toString(),
+            story: (p['bio'] ?? p['story'] ?? '').toString(),
+            medicalHistory: (p['medical_history'] ?? p['medicalHistory'] ?? '').toString(),
+            qrHash: (p['qr_hash'] ?? p['qrHash'] ?? '').toString(),
+            adoptionStatus: (p['adoption_status'] ?? p['adoptionStatus'] ?? 'available').toString(),
+          );
+        }).toList();
+
+        _flaggedPets = _pets.where((p) => p.adoptionStatus == 'flagged' || p.adoptionStatus == 'pending').map((p) =>
+          FlaggedPetListing(
+            id: p.id,
+            petName: p.name,
+            species: p.species,
+            breed: p.breed,
+            postedBy: 'Listing owner',
+            posterRole: 'Listing owner',
+            city: p.shelterAddress,
+            imageUrl: p.imageUrl,
+            reportsCount: 1,
+            reportReasons: const ['Review required'],
+            isBanned: false,
+            isUrgent: p.isUrgent,
+            isFeatured: p.isFeatured,
+            listedAt: DateTime.now(),
+          )).toList();
+
+        final logRows = await Supabase.instance.client
+            .from('audit_logs')
+            .select('*, actor:profiles(id, full_name, role)')
+            .order('created_at', ascending: false)
+            .limit(50);
+        _auditLogs = (logRows as List).map((lRaw) {
+          final l = Map<String, dynamic>.from(lRaw as Map);
+          final actor = Map<String, dynamic>.from(l['actor'] as Map? ?? {});
+          return AdminAuditLog(
+            id: l['id'].toString(),
+            timestamp: DateTime.parse(l['created_at'].toString()),
+            actorName: (actor['full_name'] ?? l['actorName'] ?? 'Admin').toString(),
+            actorRole: (actor['role'] ?? l['actorRole'] ?? 'admin').toString(),
+            action: (l['action'] ?? '').toString(),
+            target: (l['target_type'] != null ? '${l['target_type']}:${l['target_id']}' : l['target'] ?? '').toString(),
+            ipAddress: (l['ip_address'] ?? l['ipAddress'] ?? '127.0.0.1').toString(),
+            details: (l['payload'] != null ? jsonEncode(l['payload']) : l['details'] ?? '').toString(),
+          );
+        }).toList();
+
+        _sheltersController.add(getShelters());
+        _usersController.add(getUsers());
+        _petsController.add(getPets());
+        _flaggedPetsController.add(getFlaggedPets());
+        _auditLogsController.add(getAuditLogs());
+        lastSyncError = null;
+        return;
+      } catch (e) {
+        lastSyncError = e.toString();
+        debugPrint('[AdminRepository] Supabase refresh error: $e');
+        rethrow;
+      }
+    }
     final results = await Future.wait([
       _request('GET', '/stats'), _optionalList('/users'), _optionalList('/shelters'),
       _optionalList('/pets'), _optionalList('/audit-logs'),
@@ -238,20 +387,91 @@ class AdminRepository {
     await action; // Success means the server acknowledged the write, not a local array mutation.
     try { await refresh(); } catch (e) { lastSyncError = 'Saved on server; refresh failed: $e'; }
   }
-  Future<void> approveShelter(String id, {String? notes}) => _changed(_request('PATCH', '/shelters/$id/approve', {'notes': notes}));
-  Future<void> rejectShelter(String id, {required String reason}) => _changed(_request('PATCH', '/shelters/$id/reject', {'reason': reason}));
-  Future<void> blockUser(String id, {String? reason}) => _changed(_request('PATCH', '/users/$id/block', {'reason': reason}));
-  Future<void> unblockUser(String id) => _changed(_request('PATCH', '/users/$id/unblock', {}));
+  Future<void> approveShelter(String id, {String? notes}) async {
+    if (_useSupabase) {
+      await AdoptMatchBackend.instance.verifyShelter(id, status: 'approved');
+      try { await refresh(); } catch (e) { lastSyncError = e.toString(); }
+      return;
+    }
+    return _changed(_request('PATCH', '/shelters/$id/approve', {'notes': notes}));
+  }
+
+  Future<void> rejectShelter(String id, {required String reason}) async {
+    if (_useSupabase) {
+      await AdoptMatchBackend.instance.verifyShelter(id, status: 'rejected');
+      try { await refresh(); } catch (e) { lastSyncError = e.toString(); }
+      return;
+    }
+    return _changed(_request('PATCH', '/shelters/$id/reject', {'reason': reason}));
+  }
+
+  Future<void> blockUser(String id, {String? reason}) async {
+    if (_useSupabase) {
+      await AdoptMatchBackend.instance.setAccountStatus(id, 'banned');
+      try { await refresh(); } catch (e) { lastSyncError = e.toString(); }
+      return;
+    }
+    return _changed(_request('PATCH', '/users/$id/block', {'reason': reason}));
+  }
+
+  Future<void> unblockUser(String id) async {
+    if (_useSupabase) {
+      await AdoptMatchBackend.instance.setAccountStatus(id, 'active');
+      try { await refresh(); } catch (e) { lastSyncError = e.toString(); }
+      return;
+    }
+    return _changed(_request('PATCH', '/users/$id/unblock', {}));
+  }
+
   Future<void> updateUserStatus(String id, String status) =>
       status.toUpperCase() == 'BANNED' ? blockUser(id) : unblockUser(id);
-  Future<void> updateUserRole(String id, UserRole role, {List<String>? permissions}) =>
-      _changed(_request('PATCH', '/users/$id/role', {'role': role.code, 'permissions': permissions ?? const []}));
-  Future<void> updateUserPermissions(String id, List<String> permissions) =>
-      _changed(_request('PATCH', '/users/$id/permissions', {'permissions': permissions}));
-  Future<void> banPetListing(String id) => _changed(_request('PATCH', '/pets/$id/ban', {}));
-  Future<void> togglePetBadge(String id, {bool? isUrgent, bool? isFeatured}) =>
-      _changed(_request('PATCH', '/pets/$id/badge', {if (isUrgent != null) 'isUrgent': isUrgent, if (isFeatured != null) 'isFeatured': isFeatured}));
-  Future<void> deletePetListing(String id, {String? petName}) => _changed(_request('DELETE', '/pets/$id'));
+
+  Future<void> updateUserRole(String id, UserRole role, {List<String>? permissions}) async {
+    if (_useSupabase) {
+      await AdoptMatchBackend.instance.setUserRole(id, role.code);
+      try { await refresh(); } catch (e) { lastSyncError = e.toString(); }
+      return;
+    }
+    return _changed(_request('PATCH', '/users/$id/role', {'role': role.code, 'permissions': permissions ?? const []}));
+  }
+
+  Future<void> updateUserPermissions(String id, List<String> permissions) async {
+    if (_useSupabase) {
+      try { await refresh(); } catch (e) { lastSyncError = e.toString(); }
+      return;
+    }
+    return _changed(_request('PATCH', '/users/$id/permissions', {'permissions': permissions}));
+  }
+
+  Future<void> banPetListing(String id) async {
+    if (_useSupabase) {
+      await AdoptMatchBackend.instance.moderateListing(id, status: 'rejected', reason: 'Banned by admin');
+      try { await refresh(); } catch (e) { lastSyncError = e.toString(); }
+      return;
+    }
+    return _changed(_request('PATCH', '/pets/$id/ban', {}));
+  }
+
+  Future<void> togglePetBadge(String id, {bool? isUrgent, bool? isFeatured}) async {
+    if (_useSupabase) {
+      await Supabase.instance.client.from('pets').update({
+        if (isUrgent != null) 'is_urgent': isUrgent,
+        if (isFeatured != null) 'is_featured': isFeatured,
+      }).eq('id', id);
+      try { await refresh(); } catch (e) { lastSyncError = e.toString(); }
+      return;
+    }
+    return _changed(_request('PATCH', '/pets/$id/badge', {if (isUrgent != null) 'isUrgent': isUrgent, if (isFeatured != null) 'isFeatured': isFeatured}));
+  }
+
+  Future<void> deletePetListing(String id, {String? petName}) async {
+    if (_useSupabase) {
+      await Supabase.instance.client.from('pets').delete().eq('id', id);
+      try { await refresh(); } catch (e) { lastSyncError = e.toString(); }
+      return;
+    }
+    return _changed(_request('DELETE', '/pets/$id'));
+  }
 
   Map<String, dynamic> _petPayload(Pet pet) => {'name': pet.name, 'species': pet.species, 'breed': pet.breed,
     'ageDisplay': pet.ageDisplay, 'ageMonths': pet.ageMonths, 'gender': pet.gender, 'weightKg': pet.weightKg,

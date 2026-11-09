@@ -2,8 +2,17 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 
+/// User-facing wording for failures that reach the API.
+///
+/// The distinction matters. A timeout means the server never answered, a 401
+/// means the credentials are wrong, and a 422 carries Laravel's own reason
+/// ("The email has already been taken"). Reporting all three as "unreachable"
+/// sends people to fix their connection when their email is simply registered,
+/// and it leaks Dart internals such as "TimeoutException after 0:00:35.000000"
+/// into the dialog.
+
 const String serverTimeoutMessage =
-    'The AdoptMatch server did not respond in time. It may still be waking up - please try again in a few seconds.';
+    'The AdoptMatch server did not respond in time. It may still be waking up — please try again in a few seconds.';
 
 const String serverOfflineMessage =
     'No connection to the AdoptMatch server. Check your internet connection and try again.';
@@ -16,15 +25,21 @@ const String serverBusyMessage =
 bool isNetworkFailure(Object error) {
   if (error is TimeoutException) return true;
   if (error is DioException) {
-    final type = error.type;
-    if (type == DioExceptionType.connectionTimeout ||
-        type == DioExceptionType.sendTimeout ||
-        type == DioExceptionType.receiveTimeout ||
-        type == DioExceptionType.connectionError) {
-      return true;
+    switch (error.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+      case DioExceptionType.connectionError:
+        return true;
+      case DioExceptionType.badCertificate:
+      case DioExceptionType.badResponse:
+      case DioExceptionType.cancel:
+      case DioExceptionType.unknown:
+      default:
+        break;
     }
-    if (error.response?.statusCode == null) {
-      final text = error.toString().toLowerCase();
+    if (error.response == null) {
+      final text = error.message?.toLowerCase() ?? '';
       return text.contains('socketexception') ||
           text.contains('connection refused') ||
           text.contains('network is unreachable') ||
@@ -46,17 +61,22 @@ String describeNetworkFailure(
     final status = error.response?.statusCode;
     final serverMessage = _serverMessage(error.response?.data);
 
-    final type = error.type;
-    if (type == DioExceptionType.connectionTimeout ||
-        type == DioExceptionType.sendTimeout ||
-        type == DioExceptionType.receiveTimeout) {
-      return serverTimeoutMessage;
+    switch (error.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+        return serverTimeoutMessage;
+      case DioExceptionType.connectionError:
+        return serverOfflineMessage;
+      case DioExceptionType.badCertificate:
+        return 'A secure connection to the AdoptMatch server could not be established.';
+      case DioExceptionType.cancel:
+        return 'The request was cancelled.';
+      case DioExceptionType.badResponse:
+      case DioExceptionType.unknown:
+      default:
+        break;
     }
-    if (type == DioExceptionType.connectionError) return serverOfflineMessage;
-    if (type == DioExceptionType.badCertificate) {
-      return 'A secure connection to the AdoptMatch server could not be established.';
-    }
-    if (type == DioExceptionType.cancel) return 'The request was cancelled.';
 
     if (status == null) {
       return isNetworkFailure(error) ? serverOfflineMessage : fallback;

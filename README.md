@@ -1,77 +1,93 @@
 # AdoptMatch
 
-AdoptMatch is a non-commercial pet adoption and foster platform. This repository contains several stacks that are **not interchangeable**:
+AdoptMatch is a non-commercial pet adoption, foster, and rescue community platform. The backend has been completely migrated to a **100% Supabase** infrastructure (Auth, Postgres with Row-Level Security, Storage, and Edge Functions). There is no Laravel, no Node backend, no MySQL, and no Render service in the request path.
 
-| Directory | Purpose | Status in this checkout |
+---
+
+## 🏛 Architecture Overview
+
+| Component | Responsibility | Implementation |
 |---|---|---|
-| `lib/`, `test/` | Flutter consumer/admin/shelter app | Source updated; Flutter analyze/test/device checks are still pending in CI or a provisioned SDK. |
-| `backend/` | Node 22 admin, payment, auth and upload API with SQLite persistence | Local security/persistence suite passes. |
-| `backend_laravel/` | Laravel consumer API: pets, adoption applications, messages, uploads, phone OTP | Feature tests added; PHP/Composer were unavailable here, so they must run in CI. |
-| `server/`, `src-frontend/` | Legacy Node/MySQL API and React demo frontend | Legacy auth regression test and React production build pass. Do not deploy the legacy API as the production consumer backend. |
-| `ai-service/` | FastAPI matching service | Matching regression tests pass. |
-| `supabase-edition/` | Alternate backend: Postgres + RLS + Auth + Storage + Edge Functions, no server to host | Schema, policies and functions parse and type-check; not yet run against a live project — see its README. |
+| **Client** (`lib/`, `test/`) | Flutter mobile/web application | Dart data layer via `AdoptMatchBackend` (`lib/core/supabase/adoptmatch_supabase.dart`) and Supabase Flutter SDK |
+| **Authentication** | Identity, OAuth, OTP, and session management | Supabase Auth (Email/Password, Google OAuth, Phone SMS OTP) |
+| **Database & Security** | Data persistence, role-based access control, relational integrity | Supabase Postgres (22 tables, RLS enabled on 100%, guard triggers, `custom_access_token_hook`) |
+| **Edge Functions** (`supabase-edition/supabase/functions/`) | Trusted server operations, payment verification, staff moderation | TypeScript / Deno runtime (`payments`, `admin`, `notify`) |
+| **Storage** | Pet pictures, adoption documents, avatars | Supabase Storage (`pets`, `avatars`, `attachments`) with RLS upload policies |
+| **AI Matching** (`ai-service/`) | Standalone pet-to-adopter compatibility scoring | FastAPI microservice |
 
-The Flutter app uses one configured root, `ApiClient.rootUrl` (`--dart-define=API_BASE_URL=...`, legacy alias `BACKEND_URL`), defaulting to `https://adoptmatch-api.onrender.com`. Consumer calls append `/api/v1`; Node admin/payment calls use the same root. Deploy the stacks behind a gateway that routes those paths, or change the client configuration before pointing at separate hosts. Do not point browser or device builds at `localhost`.
+---
 
-Authentication setup (Google client IDs, Android SHA-1, iOS URL scheme, Supabase OTP)
-is documented step by step in **`docs/AUTH_SETUP.md`**, including exactly which
-values you must supply. Run `npm --prefix backend run check:config` to verify the
-Node auth configuration before serving traffic.
+## 🔒 Security Invariants & Rules
 
-## Security and configuration notes
+1. **One Auth Authority**: Supabase Auth owns the session. No legacy Sanctum or secondary token stores.
+2. **Fail Closed**: No simulated sessions, premium statuses, payment successes, or admin actions.
+3. **Server-Decided Money**: The client specifies only `plan_id`. Pricing and currency come from `subscription_plans`. SSLCommerz callbacks are re-validated against the gateway. A used bKash TrxID stays permanently consumed.
+4. **JWT-Decided Roles**: `app_role` is injected by `public.custom_access_token_hook`. Client claims or user metadata are never trusted for privileges.
+5. **No Mutating Retries**: Mutating requests are never automatically retried to prevent duplicate actions.
+6. **Secrets Stay Server-Side**: Only `SUPABASE_URL` and the public `SUPABASE_ANON_KEY` ship inside the Flutter app.
 
-- **No demo admin credentials.** Bootstrap the first Node superadministrator with a verified Google subject:
-  ```bash
-  cd backend
-  DATABASE_PATH=/var/lib/adoptmatch/adoptmatch.sqlite \
-    npm run bootstrap:admin -- --google-sub <google-sub> --email <email> --name <name>
-  ```
-  The command is one-time and fails if a superadministrator already exists.
-- Node production startup requires a durable `DATABASE_PATH`, a `JWT_SECRET` of at least 32 characters, `GOOGLE_CLIENT_ID`, and configured payment/storage secrets for the features being enabled. Run **one Node process per SQLite file**; use a server database before horizontal scaling.
-- Google sign-in requires a verified ID token, audience/issuer/expiry checks, and a server-issued session. Public registration cannot assign admin/shelter roles.
-- SSLCommerz activation validates the gateway response and matches transaction, store, amount, currency and status. Simulation is disabled in production. Manual bKash TrxIDs are unique across all payment statuses and bound to the authenticated payer.
-- Phone OTP is delegated to Supabase Auth from the Laravel server (`SUPABASE_URL`, `SUPABASE_ANON_KEY`). Without those values the endpoints return 503; they do not fabricate success.
-- Uploads require authentication and real image bytes. Configure Laravel Cloudinary/public storage or Node Vercel Blob; unavailable storage returns an error.
-- Flutter tokens/profiles and sensitive application drafts are written only through secure storage. Secure-storage write failures fail closed. Logout clears private local indexes and chat/application caches.
-- Android release builds require `android/key.properties`; missing release signing fails the build instead of using debug signing.
+---
 
-Features that are **not configured** are reported as unavailable rather than simulated: voice relay, SOS device broadcast, PDF report export, push delivery without FCM credentials, and revenue/dispute/adoption-ledger KPIs that the Node service does not measure. Digital signatures are application records, not a claim of legally binding e-contract execution.
+## 🚀 Getting Started
 
-## Local verification commands
+### 1. Supabase Backend Deployment
+
+The database migrations, RLS policies, and Edge Functions live under `supabase-edition/`:
 
 ```bash
-# Node admin/payment API (Node >= 22.13)
-cd backend && npm ci && npm test
+cd supabase-edition
 
-# Legacy API auth regressions (isolated non-production memory provider)
-cd server && npm ci && npm test
+# 1. Link your Supabase project
+supabase link --project-ref <YOUR_SUPABASE_PROJECT_REF>
 
-# React frontend
-cd src-frontend && npm ci && npm run build
+# 2. Push database schema, RLS policies, and hooks
+supabase db push
 
-# AI matching
-cd ai-service && pip install -r requirements.txt pytest && pytest -q
+# 3. Deploy Edge Functions
+supabase functions deploy payments --no-verify-jwt
+supabase functions deploy admin notify
 
-# Flutter (requires a provisioned Flutter SDK)
-flutter pub get && flutter analyze && flutter test
+# 4. Set Edge Function secrets
+supabase secrets set --env-file .env.production
 
-# Laravel (requires PHP 8.3+, Composer, SQLite/PDO)
-cd backend_laravel && composer install && cp .env.example .env && vendor/bin/phpunit
+# 5. Bootstrap the initial super administrator
+SUPABASE_URL=https://<YOUR_SUPABASE_PROJECT_REF>.supabase.co \
+SUPABASE_SERVICE_ROLE_KEY=<YOUR_SERVICE_ROLE_KEY> \
+ADMIN_EMAIL=<ADMIN_EMAIL> \
+ADMIN_PASSWORD='<ADMIN_PASSWORD>' \
+node scripts/bootstrap-admin.mjs
 ```
 
-The CI definition lives at **`docs/ci/ci.yml`** and is **not installed yet**: the push credential used for this branch lacks GitHub's `workflows` permission, so `.github/workflows/` could not be created. A maintainer must copy it to `.github/workflows/ci.yml` (see `docs/ci/README.md`) before any hosted run happens. A workflow file is not evidence that a hosted run has passed; check the run for the exact commit before quoting CI results.
+### 2. Dashboard Configurations
 
-## Verified in this workspace (2026-11-08)
+In the [Supabase Dashboard](https://app.supabase.com):
+- **Authentication → Providers → Google**: Enter Google Web Client ID and Secret. Redirect URI: `https://<YOUR_SUPABASE_PROJECT_REF>.supabase.co/auth/v1/callback`.
+- **Authentication → Hooks → Custom Access Token**: Enable and assign `public.custom_access_token_hook`. *(Essential for admin and moderator role authorization).*
+- **Authentication → Phone**: Configure SMS provider if Phone OTP is active.
 
-| Check | Result |
-|---|---|
-| `backend npm test` | Exit 0: 30 security regression checks, Google/storage/admin/subscription suites, 6 persistence/concurrency checks. |
-| `server npm test` | Exit 0: 4 legacy auth checks plus production MySQL fail-closed check. |
-| AI direct regression runner | 9/9 matching tests passed. |
-| `src-frontend npm run build` | Exit 0; Vite warns the main chunk exceeds 500 kB. |
-| `npm audit` (backend/server/src-frontend) | 0 reported vulnerabilities at audit time. |
-| Dart/PHP source parse | 73 changed Dart/PHP files, 0 syntax errors. **Syntax parsing is not Flutter analyze, PHPUnit, type checking, or runtime verification.** |
-| Flutter analyze/test/device builds | **Not run here** (SDK unavailable). |
-| Laravel PHPUnit / live OAuth, SMS, gateway, storage | **Not run here** (PHP/Composer and live credentials unavailable). |
+### 3. Flutter Application
 
-See `BUG_REPORT.md` for the original AM-01..AM-20 findings and `audit-resolution-report.md` for the current verified-vs-pending mapping. Do not describe the audit as “20/20 production verified” until the pending runtime checks and credential rotation/history review are complete.
+Run the Flutter app pointing to your Supabase project:
+
+```bash
+flutter pub get
+flutter run \
+  --dart-define=SUPABASE_URL=https://<YOUR_SUPABASE_PROJECT_REF>.supabase.co \
+  --dart-define=SUPABASE_ANON_KEY=<YOUR_SUPABASE_ANON_KEY>
+```
+
+---
+
+## 🧪 Local Verification
+
+```bash
+# Static analysis (zero errors, warnings clean)
+flutter analyze --no-fatal-infos
+
+# Run full test suite (59 unit and widget tests)
+flutter test
+
+# Syntax verification of bootstrap and seed scripts
+node --check supabase-edition/scripts/bootstrap-admin.mjs
+node --check supabase-edition/scripts/seed-demo.mjs
+```

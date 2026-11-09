@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/chat_message_model.dart';
 import '../models/pet_model.dart';
 import '../network/api_client.dart';
 import '../services/local_storage_service.dart';
 import '../storage/secure_storage_service.dart';
+import '../supabase/adoptmatch_supabase.dart';
 
 /// Server-backed messaging. No timed replies or fabricated delivery receipts.
 class ChatRepository {
@@ -15,6 +18,7 @@ class ChatRepository {
 
   final _storage = LocalStorageService.instance;
   http.Client _client = http.Client();
+  bool _isTestConfigured = false;
   Future<String?> Function() _readToken = SecureStorageService.instance.getAuthToken;
   Future<String?> Function() _readUserId = () async =>
       (await SecureStorageService.instance.getUserProfile())?.id;
@@ -23,11 +27,14 @@ class ChatRepository {
 
   void configureForTesting({required http.Client client,
       required Future<String?> Function() tokenReader, String userId = 'test-user'}) {
+    _isTestConfigured = true;
     _client = client;
     _readToken = tokenReader;
     _readUserId = () async => userId;
     resetForTesting();
   }
+
+  bool get _useSupabase => AdoptMatchBackend.isInitialized && !_isTestConfigured;
 
   final _conversationsStreamController = StreamController<List<ChatConversation>>.broadcast();
   final Map<String, StreamController<List<ChatMessage>>> _messageStreamControllers = {};
@@ -94,6 +101,90 @@ class ChatRepository {
   /// Fetch the inbox and real message history, including replies from the shelter.
   Future<void> refreshRemote() async {
     await _init();
+    if (_useSupabase) {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
+      _ownerId = user.id;
+
+      try {
+        final rows = await Supabase.instance.client
+            .from('conversations')
+            .select('''
+              id, pet_id, adopter_id, owner_id, last_message, last_message_at, created_at,
+              pets (id, name, species, breed, primary_image_url),
+              adopter:profiles!conversations_adopter_id_fkey(id, full_name, avatar_url),
+              owner:profiles!conversations_owner_id_fkey(id, full_name, avatar_url)
+            ''')
+            .or('adopter_id.eq.${user.id},owner_id.eq.${user.id}')
+            .order('last_message_at', ascending: false);
+
+        final refreshed = <ChatConversation>[];
+        for (final raw in (rows as List)) {
+          final item = Map<String, dynamic>.from(raw as Map);
+          final id = item['id'].toString();
+          final pet = Map<String, dynamic>.from(item['pets'] as Map? ?? {});
+          final adopter = Map<String, dynamic>.from(item['adopter'] as Map? ?? {});
+          final owner = Map<String, dynamic>.from(item['owner'] as Map? ?? {});
+
+          final isMeAdopter = item['adopter_id'] == user.id;
+          final other = isMeAdopter ? owner : adopter;
+          final otherId = (isMeAdopter ? item['owner_id'] : item['adopter_id'])?.toString();
+
+          final msgRows = await Supabase.instance.client
+              .from('messages')
+              .select('id, conversation_id, sender_id, body, attachment_url, read_at, created_at')
+              .eq('conversation_id', id)
+              .order('created_at', ascending: true);
+
+          final messages = (msgRows as List).map((mRaw) {
+            final m = Map<String, dynamic>.from(mRaw as Map);
+            final fromMe = m['sender_id'].toString() == user.id;
+            return ChatMessage(
+              id: m['id'].toString(),
+              conversationId: id,
+              senderId: m['sender_id'].toString(),
+              senderName: fromMe ? 'You' : (other['full_name'] ?? 'Shelter').toString(),
+              text: (m['body'] ?? '').toString(),
+              timestamp: DateTime.parse(m['created_at'].toString()),
+              isFromUser: fromMe,
+              deliveryStatus: !fromMe || m['read_at'] != null
+                  ? MessageDeliveryStatus.read
+                  : MessageDeliveryStatus.sent,
+              attachmentUrl: m['attachment_url']?.toString(),
+            );
+          }).toList();
+
+          refreshed.add(ChatConversation(
+            id: id,
+            petId: pet['id']?.toString() ?? item['pet_id']?.toString() ?? '',
+            petName: pet['name']?.toString() ?? 'General inquiry',
+            petBreed: (pet['breed'] ?? pet['species'] ?? '').toString(),
+            petImageUrl: pet['primary_image_url']?.toString() ?? '',
+            shelterName: (other['full_name'] ?? 'Shelter').toString(),
+            shelterUserId: otherId,
+            isOnline: false,
+            lastMessage: (item['last_message'] ?? '').toString(),
+            lastMessageTime: DateTime.parse(item['last_message_at'].toString()),
+            unreadCount: messages.where((m) => !m.isFromUser && !m.isRead).length,
+          ));
+
+          final failed = (_messages[id] ?? []).where((m) =>
+              m.deliveryStatus == MessageDeliveryStatus.failed).toList();
+          _messages[id] = [...messages, ...failed];
+          await _storage.saveMessages(id, _messages[id]!);
+          _notifyMessagesChanged(id);
+        }
+        _conversations = refreshed;
+        await _storage.saveConversations(_conversations);
+        _conversationsStreamController.add(List.unmodifiable(_conversations));
+        lastSyncError = null;
+        return;
+      } catch (e) {
+        lastSyncError = e.toString();
+        debugPrint('[ChatRepository] Supabase refreshRemote error: $e');
+        rethrow;
+      }
+    }
     final headers = await _headers();
     final currentOwner = await _readUserId();
     if (currentOwner != _ownerId) { await clearCache(); await _init(); }
@@ -169,6 +260,35 @@ class ChatRepository {
 
   Future<ChatConversation> getOrCreateConversationForPet(Pet pet) async {
     await _init();
+    if (_useSupabase) {
+      final recipient = pet.ownerId;
+      if (recipient == null || recipient.isEmpty || pet.id.isEmpty) {
+        throw Exception('Messaging is available only for published server listings.');
+      }
+      final convId = await AdoptMatchBackend.instance.startConversation(
+        petId: pet.id,
+        ownerId: recipient,
+      );
+      final existing = await getConversationById(convId);
+      if (existing != null) return existing;
+      final conv = ChatConversation(
+        id: convId,
+        petId: pet.id,
+        petName: pet.name,
+        petBreed: pet.breed,
+        petImageUrl: pet.imageUrl,
+        shelterName: pet.shelterName,
+        shelterUserId: recipient,
+        isOnline: false,
+        lastMessage: 'No messages yet. Start the conversation.',
+        lastMessageTime: DateTime.now(),
+      );
+      _conversations.insert(0, conv);
+      _messages[convId] = [];
+      await _storage.saveConversations(_conversations);
+      _conversationsStreamController.add(List.unmodifiable(_conversations));
+      return conv;
+    }
     final recipient = pet.ownerId;
     if (recipient == null || int.tryParse(recipient) == null || int.tryParse(pet.id) == null) {
       throw Exception('Messaging is available only for published server listings.');
@@ -191,6 +311,53 @@ class ChatRepository {
       {String? attachmentUrl, String? senderName}) async {
     await _init();
     final conv = await getConversationById(conversationId);
+    if (_useSupabase) {
+      if (text.trim().isEmpty || text.length > 1000) {
+        throw Exception('Messages must contain 1–1000 characters.');
+      }
+      final localId = 'local-${DateTime.now().microsecondsSinceEpoch}';
+      var message = ChatMessage(
+        id: localId,
+        conversationId: conversationId,
+        senderId: _ownerId ?? 'user',
+        senderName: senderName ?? 'You',
+        text: text,
+        timestamp: DateTime.now(),
+        isFromUser: true,
+        deliveryStatus: MessageDeliveryStatus.sending,
+        attachmentUrl: attachmentUrl,
+      );
+      _messages.putIfAbsent(conversationId, () => []).add(message);
+      _notifyMessagesChanged(conversationId);
+      String? failure;
+      try {
+        await AdoptMatchBackend.instance.sendMessage(
+          conversationId: conversationId,
+          body: text,
+          attachmentUrl: attachmentUrl,
+        );
+        message = message.copyWith(deliveryStatus: MessageDeliveryStatus.sent);
+      } catch (e) {
+        failure = e.toString();
+        message = message.copyWith(deliveryStatus: MessageDeliveryStatus.failed);
+      }
+      final messages = _messages[conversationId]!;
+      final index = messages.indexWhere((m) => m.id == localId);
+      if (index != -1) messages[index] = message;
+      final convIndex = _conversations.indexWhere((c) => c.id == conversationId);
+      if (convIndex != -1 && conv != null) {
+        _conversations[convIndex] = conv.copyWith(
+          lastMessage: text,
+          lastMessageTime: message.timestamp,
+        );
+      }
+      await _storage.saveMessages(conversationId, messages);
+      await _storage.saveConversations(_conversations);
+      _notifyMessagesChanged(conversationId);
+      _conversationsStreamController.add(List.unmodifiable(_conversations));
+      if (failure != null) throw Exception(failure);
+      return message;
+    }
     final recipient = int.tryParse(conv?.shelterUserId ?? '');
     if (conv == null || recipient == null) throw Exception('This conversation has no server recipient.');
     if (text.trim().isEmpty || text.length > 1000) throw Exception('Messages must contain 1–1000 characters.');
@@ -242,6 +409,24 @@ class ChatRepository {
   }
 
   Future<void> markConversationAsRead(String id) async {
+    if (_useSupabase) {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        try {
+          await Supabase.instance.client
+              .from('messages')
+              .update({'read_at': DateTime.now().toIso8601String()})
+              .eq('conversation_id', id)
+              .neq('sender_id', user.id)
+              .isFilter('read_at', null);
+        } catch (_) {}
+      }
+      final index = _conversations.indexWhere((c) => c.id == id);
+      if (index != -1) _conversations[index] = _conversations[index].copyWith(unreadCount: 0);
+      await _storage.saveConversations(_conversations);
+      _conversationsStreamController.add(List.unmodifiable(_conversations));
+      return;
+    }
     await getMessages(id); // The API marks incoming messages read while fetching history.
     final index = _conversations.indexWhere((c) => c.id == id);
     if (index != -1) _conversations[index] = _conversations[index].copyWith(unreadCount: 0);

@@ -1,8 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../network/api_client.dart';
 import '../models/pet_model.dart';
 import '../models/application_model.dart';
+import '../supabase/adoptmatch_supabase.dart';
 
 class LaravelPetService {
   final ApiClient _apiClient;
@@ -12,6 +14,27 @@ class LaravelPetService {
 
   /// Fetch public pet catalog
   Future<List<Pet>> getPets({String? species, String? search, int page = 1}) async {
+    if (AdoptMatchBackend.isInitialized) {
+      try {
+        final rows = await AdoptMatchBackend.instance.feed(
+          species: species == 'all' ? null : species,
+        );
+        var pets = rows.map((r) => _petFromJson(r)).toList();
+        if (search != null && search.trim().isNotEmpty) {
+          final q = search.trim().toLowerCase();
+          pets = pets
+              .where((p) =>
+                  p.name.toLowerCase().contains(q) ||
+                  p.breed.toLowerCase().contains(q) ||
+                  p.species.toLowerCase().contains(q))
+              .toList();
+        }
+        return pets;
+      } catch (e) {
+        debugPrint('[LaravelPetService] Supabase getPets error: $e');
+        rethrow;
+      }
+    }
     try {
       final response = await _apiClient.dio.get(
         '/pets',
@@ -40,6 +63,21 @@ class LaravelPetService {
   }
 
   Future<List<Pet>> getMyPets() async {
+    if (AdoptMatchBackend.isInitialized) {
+      try {
+        final user = Supabase.instance.client.auth.currentUser;
+        if (user == null) return [];
+        final rows = await Supabase.instance.client
+            .from('pets_feed')
+            .select()
+            .eq('owner_id', user.id)
+            .order('created_at', ascending: false);
+        return (rows as List).map((r) => _petFromJson(Map<String, dynamic>.from(r as Map))).toList();
+      } catch (e) {
+        debugPrint('[LaravelPetService] Supabase getMyPets error: $e');
+        rethrow;
+      }
+    }
     final response = await _apiClient.dio.get('/my-pets');
     final raw = response.data['data'];
     if (response.statusCode != 200 || response.data['status'] != 'success') {
@@ -50,6 +88,11 @@ class LaravelPetService {
   }
 
   Future<Pet> createPet(Map<String, dynamic> payload) async {
+    if (AdoptMatchBackend.isInitialized) {
+      final id = await AdoptMatchBackend.instance.createListing(payload);
+      final row = await Supabase.instance.client.from('pets_feed').select().eq('id', id).single();
+      return _petFromJson(Map<String, dynamic>.from(row as Map));
+    }
     final response = await _apiClient.dio.post('/pets', data: payload);
     if ((response.statusCode != 200 && response.statusCode != 201) ||
         response.data['status'] != 'success' || response.data['data'] == null) {
@@ -59,6 +102,10 @@ class LaravelPetService {
   }
 
   Future<void> updatePetStatus(String id, String status) async {
+    if (AdoptMatchBackend.isInitialized) {
+      await AdoptMatchBackend.instance.updateListing(id, {'adoption_status': status});
+      return;
+    }
     final response = await _apiClient.dio.put('/pets/$id', data: {'adoption_status': status});
     if (response.statusCode != 200 || response.data['status'] != 'success') {
       throw Exception('The server did not update the listing.');
@@ -66,6 +113,10 @@ class LaravelPetService {
   }
 
   Future<void> deletePet(String id) async {
+    if (AdoptMatchBackend.isInitialized) {
+      await Supabase.instance.client.from('pets').delete().eq('id', id);
+      return;
+    }
     final response = await _apiClient.dio.delete('/pets/$id');
     if (response.statusCode != 200 || response.data['status'] != 'success') {
       throw Exception('The server did not delete the listing.');
@@ -74,6 +125,20 @@ class LaravelPetService {
 
   /// Fetch detailed information for a single pet by ID
   Future<Pet?> getPetDetails(String id) async {
+    if (AdoptMatchBackend.isInitialized) {
+      try {
+        final row = await Supabase.instance.client
+            .from('pets_feed')
+            .select()
+            .eq('id', id)
+            .maybeSingle();
+        if (row == null) return null;
+        return _petFromJson(Map<String, dynamic>.from(row as Map));
+      } catch (e) {
+        debugPrint('[LaravelPetService] Supabase getPetDetails error: $e');
+        rethrow;
+      }
+    }
     try {
       final response = await _apiClient.dio.get('/pets/$id');
       if (response.statusCode == 200 &&
@@ -93,6 +158,33 @@ class LaravelPetService {
 
   /// Tinder-style swipe stack: fetches candidate pets excluding already swiped ones
   Future<List<Pet>> getSwipeStack() async {
+    if (AdoptMatchBackend.isInitialized) {
+      try {
+        final user = Supabase.instance.client.auth.currentUser;
+        List<String> swipedIds = [];
+        if (user != null) {
+          final swipes = await Supabase.instance.client
+              .from('swipes')
+              .select('pet_id')
+              .eq('user_id', user.id);
+          swipedIds =
+              (swipes as List).map((s) => s['pet_id'].toString()).toList();
+        }
+        final rows = await Supabase.instance.client
+            .from('pets_feed')
+            .select()
+            .eq('moderation_status', 'approved')
+            .order('created_at', ascending: false)
+            .limit(50);
+        final list = (rows as List)
+            .map((r) => _petFromJson(Map<String, dynamic>.from(r as Map)));
+        if (swipedIds.isEmpty) return list.toList();
+        return list.where((p) => !swipedIds.contains(p.id)).toList();
+      } catch (e) {
+        debugPrint('[LaravelPetService] Supabase getSwipeStack error: $e');
+        rethrow;
+      }
+    }
     try {
       final response = await _apiClient.dio.get('/pets/swipe-stack');
       if (response.statusCode == 200 &&
@@ -109,6 +201,15 @@ class LaravelPetService {
 
   /// Record user swipe decision ('like' or 'dislike')
   Future<bool> recordSwipe(String petId, {required bool isLike}) async {
+    if (AdoptMatchBackend.isInitialized) {
+      try {
+        await AdoptMatchBackend.instance.swipe(petId, like: isLike);
+        return true;
+      } catch (e) {
+        debugPrint('[LaravelPetService] Supabase recordSwipe error: $e');
+        return false;
+      }
+    }
     try {
       final response = await _apiClient.dio.post(
         '/pets/$petId/like',
@@ -127,6 +228,19 @@ class LaravelPetService {
     required double lng,
     double radiusKm = 50.0,
   }) async {
+    if (AdoptMatchBackend.isInitialized) {
+      try {
+        final rows = await AdoptMatchBackend.instance.nearby(
+          latitude: lat,
+          longitude: lng,
+          radiusKm: radiusKm,
+        );
+        return rows.map((r) => _petFromJson(r)).toList();
+      } catch (e) {
+        debugPrint('[LaravelPetService] Supabase getNearbyPets error: $e');
+        rethrow;
+      }
+    }
     try {
       final response = await _apiClient.dio.get('/pets/nearby', queryParameters: {
         'latitude': lat,
@@ -153,6 +267,19 @@ class LaravelPetService {
     required Map<String, dynamic> answersJson,
     required String signatureData,
   }) async {
+    if (AdoptMatchBackend.isInitialized) {
+      try {
+        final id = await AdoptMatchBackend.instance.submitApplication(
+          petId: petId,
+          dossier: answersJson,
+          signatureData: signatureData,
+        );
+        return {'id': id, 'reference_no': id};
+      } catch (e) {
+        debugPrint('[LaravelPetService] Supabase submitAdoptionRequest error: $e');
+        rethrow;
+      }
+    }
     try {
       final response = await _apiClient.dio.post('/adoption-requests', data: {
         'pet_id': int.tryParse(petId) ?? petId,
@@ -173,6 +300,44 @@ class LaravelPetService {
 
   /// Fetch user submitted adoption requests
   Future<List<AdoptionApplication>> getMyAdoptionRequests({bool received = false}) async {
+    if (AdoptMatchBackend.isInitialized) {
+      try {
+        final rows = received
+            ? await AdoptMatchBackend.instance.applicationsForMyListings()
+            : await AdoptMatchBackend.instance.myApplications();
+        return rows.map((json) {
+          final answers =
+              Map<String, dynamic>.from(json['applicant_data'] as Map? ?? {});
+          return AdoptionApplication.fromJson({
+            'id': json['id']?.toString() ?? '',
+            'serverId': json['id']?.toString(),
+            'petId': json['pet_id']?.toString() ?? '',
+            'petName': json['pets']?['name'] ?? 'Pet',
+            'petBreed': '',
+            'petImageUrl': '',
+            'shelterName': 'AdoptMatch Shelter',
+            'status': const {
+              'submitted': 'submitted',
+              'under_review': 'underReview',
+              'home_visit': 'homeVisitScheduled',
+              'foster_trial': 'fosterTrial',
+              'approved': 'approved',
+              'rejected': 'rejected',
+              'withdrawn': 'rejected',
+            }[json['status']] ?? 'submitted',
+            'reviewerNotes': json['reviewer_notes'],
+            'homeVisitDate': json['home_visit_date'],
+            'signatureData': json['signature_data'],
+            'isESigned': json['is_e_signed'] == true,
+            'submittedAt': json['created_at'] ?? DateTime.now().toIso8601String(),
+            ...answers,
+          });
+        }).toList();
+      } catch (e) {
+        debugPrint('[LaravelPetService] Supabase getMyAdoptionRequests error: $e');
+        rethrow;
+      }
+    }
     try {
       final response = await _apiClient.dio.get('/adoption-requests',
         queryParameters: {'type': received ? 'received' : 'submitted'});
@@ -211,6 +376,14 @@ class LaravelPetService {
 
   Future<void> updateAdoptionStatus(String serverId, ApplicationStatus status,
       {String? notes, DateTime? homeVisitDate}) async {
+    if (AdoptMatchBackend.isInitialized) {
+      await AdoptMatchBackend.instance.reviewApplication(
+        applicationId: serverId,
+        status: status.name,
+        notes: notes ?? '',
+      );
+      return;
+    }
     const names = {'submitted': 'submitted', 'underReview': 'under_review',
       'homeVisitScheduled': 'home_visit', 'fosterTrial': 'foster_trial',
       'approved': 'approved', 'rejected': 'rejected'};
@@ -224,6 +397,17 @@ class LaravelPetService {
   }
 
   Future<List<Pet>> getFavorites() async {
+    if (AdoptMatchBackend.isInitialized) {
+      final rows = await Supabase.instance.client
+          .from('pets_feed')
+          .select()
+          .eq('is_favorite', true);
+      return (rows as List)
+          .map((json) =>
+              _petFromJson(Map<String, dynamic>.from(json as Map))
+                  .copyWith(isFavorite: true))
+          .toList();
+    }
     final response = await _apiClient.dio.get('/favorites');
     final data = response.data['data'];
     if (response.statusCode != 200 || data is! List) {
@@ -234,6 +418,17 @@ class LaravelPetService {
   }
 
   Future<bool> getFavoriteStatus(String petId) async {
+    if (AdoptMatchBackend.isInitialized) {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return false;
+      final row = await Supabase.instance.client
+          .from('favorites')
+          .select('pet_id')
+          .eq('pet_id', petId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+      return row != null;
+    }
     final response = await _apiClient.dio.get('/pets/$petId/favorite');
     final data = response.data['data'];
     if (response.statusCode != 200 || data is! Map || data['is_favorite'] is! bool) {
@@ -243,6 +438,10 @@ class LaravelPetService {
   }
 
   Future<bool> setFavorite(String petId, bool favorite) async {
+    if (AdoptMatchBackend.isInitialized) {
+      await AdoptMatchBackend.instance.toggleFavorite(petId, favorite: favorite);
+      return favorite;
+    }
     final response = await _apiClient.dio.request(
       '/pets/$petId/favorite',
       options: Options(method: favorite ? 'PUT' : 'DELETE'),
