@@ -22,8 +22,8 @@ class ApiClient {
     dio = Dio(
       BaseOptions(
         baseUrl: baseUrl ?? defaultBaseUrl,
-        connectTimeout: const Duration(seconds: 15), // Responsive timeout
-        receiveTimeout: const Duration(seconds: 15),
+        connectTimeout: const Duration(seconds: 60), // Tolerant of Render free-tier cold starts
+        receiveTimeout: const Duration(seconds: 60),
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
@@ -70,7 +70,8 @@ class ApiClient {
     return status == 502 ||
         status == 503 ||
         status == 504 ||
-        error.type == DioExceptionType.connectionTimeout;
+        error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.receiveTimeout;
   }
 
   static Future<void> saveToken(String token) async {

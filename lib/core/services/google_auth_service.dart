@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -128,7 +129,7 @@ class GoogleAuthService {
                 'device_name': 'flutter_google',
               }),
             )
-            .timeout(const Duration(seconds: 35));
+            .timeout(const Duration(seconds: 60));
 
         if (res.statusCode == 200) {
           final data = jsonDecode(res.body);
@@ -161,9 +162,18 @@ class GoogleAuthService {
             );
           }
         } else {
-          backendError =
+          String? serverMsg;
+          try {
+            final parsed = jsonDecode(res.body);
+            serverMsg = parsed['message']?.toString();
+          } catch (_) {}
+          backendError = serverMsg ??
               'AdoptMatch server rejected the sign-in (HTTP ${res.statusCode}).';
         }
+      } on TimeoutException {
+        backendError =
+            'The AdoptMatch server took too long to respond. The free-tier server is waking up — please try again in a few moments.';
+        debugPrint('[GoogleAuthService] Backend request timed out.');
       } catch (backendErr) {
         backendError = 'Could not reach the AdoptMatch server: $backendErr';
         debugPrint('[GoogleAuthService] Backend sync failed: $backendErr');

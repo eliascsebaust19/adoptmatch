@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
@@ -519,6 +520,33 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         }
       } catch (laravelErr) {
         debugPrint('[AuthBloc] Laravel register notice: $laravelErr');
+        String errMsg = 'Could not create your account. Please try again.';
+        if (laravelErr is DioException) {
+          if (laravelErr.type == DioExceptionType.connectionTimeout ||
+              laravelErr.type == DioExceptionType.receiveTimeout) {
+            errMsg =
+                'The authentication server is waking up from sleep. Please try again in a few moments.';
+          } else if (laravelErr.response?.data is Map) {
+            final data = laravelErr.response!.data as Map;
+            if (data['errors'] is Map) {
+              final errorsMap = data['errors'] as Map;
+              final firstField = errorsMap.values.firstOrNull;
+              if (firstField is List && firstField.isNotEmpty) {
+                errMsg = firstField.first.toString();
+              }
+            } else if (data['message'] != null) {
+              errMsg = data['message'].toString();
+            }
+          }
+        } else if (laravelErr is Exception) {
+          final clean =
+              laravelErr.toString().replaceFirst('Exception: ', '').trim();
+          if (clean.isNotEmpty) {
+            errMsg = clean;
+          }
+        }
+        emit(AuthFailure(errMsg));
+        return;
       }
 
       // Fail closed: an account only exists once a server has created it.
@@ -549,9 +577,27 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         return;
       } catch (laravelErr) {
         debugPrint('[AuthBloc] Laravel login failed: $laravelErr');
+        String errMsg =
+            'Invalid credentials or authentication server is currently unreachable.';
+        if (laravelErr is DioException) {
+          if (laravelErr.type == DioExceptionType.connectionTimeout ||
+              laravelErr.type == DioExceptionType.receiveTimeout) {
+            errMsg =
+                'The authentication server is waking up from sleep. Please try again in a few moments.';
+          } else if (laravelErr.response?.data is Map &&
+              laravelErr.response!.data['message'] != null) {
+            errMsg = laravelErr.response!.data['message'].toString();
+          }
+        } else if (laravelErr is Exception) {
+          final clean =
+              laravelErr.toString().replaceFirst('Exception: ', '').trim();
+          if (clean.isNotEmpty) {
+            errMsg = clean;
+          }
+        }
+        emit(AuthFailure(errMsg));
+        return;
       }
-
-      emit(const AuthFailure('Invalid credentials or authentication server is currently unreachable.'));
     } catch (e) {
       emit(AuthFailure(e.toString()));
     }
@@ -585,14 +631,18 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         return;
       } catch (laravelErr) {
         debugPrint('[AuthBloc] Admin Laravel login: $laravelErr');
+        String errMsg =
+            '403 Forbidden: Access Denied. Invalid administrative credentials or server unreachable.';
+        if (laravelErr is Exception) {
+          final clean =
+              laravelErr.toString().replaceFirst('Exception: ', '').trim();
+          if (clean.isNotEmpty && clean.contains('Access Denied')) {
+            errMsg = clean;
+          }
+        }
+        emit(AuthFailure(errMsg));
+        return;
       }
-
-
-      emit(
-        const AuthFailure(
-          '403 Forbidden: Access Denied. Invalid administrative credentials or server unreachable.',
-        ),
-      );
     } catch (e) {
       emit(AuthFailure(e.toString()));
     }
