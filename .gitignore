@@ -59,6 +59,7 @@ key.properties
 !.env.example
 *.env
 !*.env.example
+client_secret_*.json
 backend/.env
 backend_laravel/.env
 
