@@ -81,3 +81,22 @@ flutter run --dart-define=GOOGLE_CLIENT_ID=<web-client-id> \
 | `flutter analyze` / `flutter test` after this change | **Not run here** (no Flutter SDK) — CI runs them |
 | Real Google account sign-in on Android/iOS/web | **Not done** — needs items 1–3 above |
 | Real SMS OTP delivery | **Not done** — needs item 4 above |
+
+## 6. When sign-in fails: what each dialog means
+
+The app used to answer every failure with "the server is unreachable", including a duplicate email and a wrong password. That hid the real cause. The messages now follow the actual response.
+
+| Dialog text | Cause | Fix |
+|---|---|---|
+| "The AdoptMatch server did not respond in time. It may still be waking up…" | The request got no response. On the free Render plan the container stops when idle and takes 40–60s to boot. | Wait a few seconds and retry. The app now pings `/up` on the login screen and allows 60s for a response, so the retry usually succeeds. Persisting? Keep the instance warm or move it to a paid plan. |
+| "No connection to the AdoptMatch server. Check your internet connection…" | DNS/socket failure — device offline, wrong `API_BASE_URL`, or the service is suspended. | Check the network, then `curl https://adoptmatch-api.onrender.com/up`. |
+| "The email has already been taken." / other Laravel validation text | The server rejected the payload with a 422. | Sign in instead, or fix the field the server named. |
+| "Invalid email or password." | 401 from `POST /api/v1/auth/login`. | Correct the credentials. |
+| "Google did not return an ID token…" | Google Sign-In registration problem (SHA-1, bundle ID, URL scheme, wrong client type). | Items 1–4 in section 1. |
+
+### Timeouts and the cold start
+
+- `ApiClient` uses a 20s connect, 30s send and 60s receive timeout. The old 15s ceiling fired before a sleeping instance finished booting.
+- `ApiClient.warmUp()` calls `GET /up` (deduplicated, and skipped if a probe succeeded in the last two minutes). The login and admin-login screens start it on mount; the Google flow starts it before the account picker and awaits it before the token exchange.
+- The Google token exchange now goes through `ApiClient` like every other call. It previously used a separate `http.post` with its own 35s cap, no warm-up, and raw `TimeoutException after 0:00:35.000000` text in the dialog.
+- Mutating requests are still never retried automatically. Waking the instance and waiting is safe; replaying a register or payment call is not.

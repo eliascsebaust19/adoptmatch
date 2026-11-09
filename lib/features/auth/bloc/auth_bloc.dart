@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import '../../../core/models/user_subscription_model.dart';
+import '../../../core/network/network_error.dart';
 import '../../../core/repositories/subscription_repository.dart';
 import '../../../core/services/google_auth_service.dart';
 import '../../../core/services/laravel_auth_service.dart';
@@ -517,44 +518,33 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
             emit(Authenticated(user, isNewUser: true));
             return;
           }
+          // Fail closed: the server created nothing usable for this device.
+          emit(const AuthFailure(
+            'Your account could not be confirmed. Please sign in instead.',
+          ));
+          return;
         }
+
+
+        // A parsed 200 that is not a success carries the server's own reason.
+        emit(AuthFailure(describeNetworkFailure(
+          Exception(res['message']?.toString() ?? ''),
+          fallback: 'Could not create your account. Please try again.',
+        )));
+        return;
       } catch (laravelErr) {
-        debugPrint('[AuthBloc] Laravel register notice: $laravelErr');
-        String errMsg = 'Could not create your account. Please try again.';
-        if (laravelErr is DioException) {
-          if (laravelErr.type == DioExceptionType.connectionTimeout ||
-              laravelErr.type == DioExceptionType.receiveTimeout) {
-            errMsg =
-                'The authentication server is waking up from sleep. Please try again in a few moments.';
-          } else if (laravelErr.response?.data is Map) {
-            final data = laravelErr.response!.data as Map;
-            if (data['errors'] is Map) {
-              final errorsMap = data['errors'] as Map;
-              final firstField = errorsMap.values.firstOrNull;
-              if (firstField is List && firstField.isNotEmpty) {
-                errMsg = firstField.first.toString();
-              }
-            } else if (data['message'] != null) {
-              errMsg = data['message'].toString();
-            }
-          }
-        } else if (laravelErr is Exception) {
-          final clean =
-              laravelErr.toString().replaceFirst('Exception: ', '').trim();
-          if (clean.isNotEmpty) {
-            errMsg = clean;
-          }
-        }
-        emit(AuthFailure(errMsg));
+        debugPrint('[AuthBloc] Laravel register failed: $laravelErr');
+        // Fail closed: an account only exists once a server has created it.
+        // The message stays accurate: a 422 duplicate email is not "unreachable".
+        emit(AuthFailure(describeNetworkFailure(
+          laravelErr,
+          fallback:
+              'Could not create your account. The authentication server is unreachable — please try again.',
+        )));
         return;
       }
-
-      // Fail closed: an account only exists once a server has created it.
-      emit(const AuthFailure(
-        'Could not create your account. The authentication server is unreachable — please try again.',
-      ));
     } catch (e) {
-      emit(AuthFailure(e.toString()));
+      emit(AuthFailure(describeNetworkFailure(e)));
     }
   }
 
@@ -577,29 +567,14 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         return;
       } catch (laravelErr) {
         debugPrint('[AuthBloc] Laravel login failed: $laravelErr');
-        String errMsg =
-            'Invalid credentials or authentication server is currently unreachable.';
-        if (laravelErr is DioException) {
-          if (laravelErr.type == DioExceptionType.connectionTimeout ||
-              laravelErr.type == DioExceptionType.receiveTimeout) {
-            errMsg =
-                'The authentication server is waking up from sleep. Please try again in a few moments.';
-          } else if (laravelErr.response?.data is Map &&
-              laravelErr.response!.data['message'] != null) {
-            errMsg = laravelErr.response!.data['message'].toString();
-          }
-        } else if (laravelErr is Exception) {
-          final clean =
-              laravelErr.toString().replaceFirst('Exception: ', '').trim();
-          if (clean.isNotEmpty) {
-            errMsg = clean;
-          }
-        }
-        emit(AuthFailure(errMsg));
+        emit(AuthFailure(describeNetworkFailure(
+          laravelErr,
+          fallback: 'Sign-in failed. Check your email and password, then try again.',
+        )));
         return;
       }
     } catch (e) {
-      emit(AuthFailure(e.toString()));
+      emit(AuthFailure(describeNetworkFailure(e)));
     }
   }
 
@@ -608,6 +583,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) async {
     emit(AuthLoading());
+    Object? adminError;
     try {
       final emailLower = event.email.trim().toLowerCase();
 
@@ -631,20 +607,17 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         return;
       } catch (laravelErr) {
         debugPrint('[AuthBloc] Admin Laravel login: $laravelErr');
-        String errMsg =
-            '403 Forbidden: Access Denied. Invalid administrative credentials or server unreachable.';
-        if (laravelErr is Exception) {
-          final clean =
-              laravelErr.toString().replaceFirst('Exception: ', '').trim();
-          if (clean.isNotEmpty && clean.contains('Access Denied')) {
-            errMsg = clean;
-          }
-        }
-        emit(AuthFailure(errMsg));
-        return;
+        adminError = laravelErr;
       }
+
+
+      emit(AuthFailure(describeNetworkFailure(
+        adminError ?? Exception('Admin sign-in failed.'),
+        fallback:
+            '403 Forbidden: Access Denied. Invalid administrative credentials or server unreachable.',
+      )));
     } catch (e) {
-      emit(AuthFailure(e.toString()));
+      emit(AuthFailure(describeNetworkFailure(e)));
     }
   }
 
@@ -655,7 +628,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await _laravelAuthService.requestPhoneOtp(phone);
       emit(AuthOtpSent(phone));
     } catch (e) {
-      emit(AuthFailure('OTP request failed: $e'));
+      emit(AuthFailure(describeNetworkFailure(e,
+          fallback: 'OTP request failed. Please try again.')));
     }
   }
 
@@ -676,7 +650,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       _currentUser = user;
       emit(Authenticated(user));
     } catch (e) {
-      emit(AuthFailure('OTP verification failed: $e'));
+      emit(AuthFailure(describeNetworkFailure(e,
+          fallback: 'OTP verification failed. Please try again.')));
     }
   }
 
@@ -703,7 +678,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       }
       emit(const AuthFailure('Authentication provider unavailable.'));
     } catch (e) {
-      emit(AuthFailure(e.toString()));
+      emit(AuthFailure(describeNetworkFailure(e,
+          fallback: 'Google sign-in failed. Please try again.')));
     }
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/network/api_client.dart';
 import '../../../core/services/local_storage_service.dart';
 import '../../../core/storage/secure_storage_service.dart';
 import '../../../shared/widgets/paw_logo.dart';
@@ -72,7 +73,11 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     // 3. Verify Token with Backend API (GET /api/v1/auth/me)
     try {
       final authRepo = AuthRepository();
-      final user = await authRepo.verifyCurrentSession();
+      // Bounded: a sleeping API must not hold the splash for a full minute.
+      // A timeout takes the same cached-profile path as a failed session check.
+      final user = await authRepo
+          .verifyCurrentSession()
+          .timeout(ApiClient.connectTimeout, onTimeout: () => null);
 
       if (!mounted) return;
 

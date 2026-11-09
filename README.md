@@ -9,6 +9,7 @@ AdoptMatch is a non-commercial pet adoption and foster platform. This repository
 | `backend_laravel/` | Laravel consumer API: pets, adoption applications, messages, uploads, phone OTP | Feature tests added; PHP/Composer were unavailable here, so they must run in CI. |
 | `server/`, `src-frontend/` | Legacy Node/MySQL API and React demo frontend | Legacy auth regression test and React production build pass. Do not deploy the legacy API as the production consumer backend. |
 | `ai-service/` | FastAPI matching service | Matching regression tests pass. |
+| `supabase-edition/` | Alternate backend: Postgres + RLS + Auth + Storage + Edge Functions, no server to host | Schema, policies and functions parse and type-check; not yet run against a live project — see its README. |
 
 The Flutter app uses one configured root, `ApiClient.rootUrl` (`--dart-define=API_BASE_URL=...`, legacy alias `BACKEND_URL`), defaulting to `https://adoptmatch-api.onrender.com`. Consumer calls append `/api/v1`; Node admin/payment calls use the same root. Deploy the stacks behind a gateway that routes those paths, or change the client configuration before pointing at separate hosts. Do not point browser or device builds at `localhost`.
 

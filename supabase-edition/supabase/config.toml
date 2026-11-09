@@ -1,0 +1,82 @@
+# Supabase CLI configuration for the AdoptMatch Supabase edition.
+# `supabase start` reads this file; `supabase link` and `supabase db push` use it
+# for the hosted project.
+
+project_id = "adoptmatch"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[studio]
+enabled = true
+port = 54323
+
+[inbucket]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = [
+  "http://localhost:3000",
+  "adoptmatch://auth-callback",
+  "com.adoptmatch.adoptmatch://auth-callback",
+]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+enable_signup = true
+
+# Custom access token hook: injects `app_role` / `shelter_id` into the JWT.
+[auth.hook.custom_access_token]
+enabled = true
+uri = "pg-functions://postgres/public/custom_access_token_hook"
+
+[auth.email]
+enable_signup = true
+# Local development leaves confirmation off; turn it on for the hosted project
+# once SMTP is configured, otherwise anyone can sign up with an unverified inbox.
+enable_confirmations = false
+
+[auth.sms]
+enable_signup = true
+enable_confirmations = true
+
+[auth.external.google]
+enabled = true
+client_id = "env(SUPABASE_AUTH_GOOGLE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_GOOGLE_CLIENT_SECRET)"
+redirect_uri = "http://localhost:54321/auth/v1/callback"
+
+[edge_runtime]
+enabled = true
+policy = "per_worker"
+
+# Gateway callbacks arrive without a Supabase session, so JWT verification is off
+# for `payments`; the function validates the gateway payload itself.
+[functions.payments]
+verify_jwt = false
+
+[functions.admin]
+verify_jwt = true
+
+[functions.notify]
+verify_jwt = true

@@ -1,0 +1,7 @@
+.env
+.env.production
+.env.local
+supabase/.branches/
+supabase/.temp/
+.DS_Store
+node_modules/
