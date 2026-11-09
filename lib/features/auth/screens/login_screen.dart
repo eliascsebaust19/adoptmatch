@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../bloc/auth_bloc.dart';
+import '../../../core/network/api_client.dart';
 import '../../../shared/widgets/shared_widgets.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -17,6 +20,14 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isSignUp = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // The API host sleeps when idle. Waking it while the user types keeps the
+    // first sign-in from waiting on a container that has not started yet.
+    unawaited(ApiClient.warmUp());
+  }
 
   @override
   void dispose() {

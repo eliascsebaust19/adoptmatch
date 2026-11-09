@@ -1,13 +1,12 @@
-import 'dart:convert';
-
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../features/auth/bloc/auth_bloc.dart';
 import '../config/auth_config.dart';
 import '../network/api_client.dart';
+import '../network/network_error.dart';
 import '../storage/secure_storage_service.dart';
 
 class GoogleAuthResult {
@@ -32,6 +31,10 @@ class GoogleAuthService {
 
   static String get backendBaseUrl => ApiClient.rootUrl;
 
+  /// Shared client for the token exchange: same timeouts and headers as every
+  /// other API call.
+  static final ApiClient _apiClient = ApiClient();
+
   static final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email', 'profile'],
     clientId: kIsWeb ? webClientId : null,
@@ -51,6 +54,8 @@ class GoogleAuthService {
         errorMessage: AuthConfig.notConfiguredMessage,
       );
     }
+    // Start waking the API while the account picker is open.
+    final serverWarmUp = ApiClient.warmUp();
     try {
       debugPrint('[GoogleAuthService] Initiating Google Sign-In flow...');
 
@@ -113,25 +118,21 @@ class GoogleAuthService {
       bool isNewUser = false;
       String? backendError;
 
-      // Sync with Laravel 11 Backend API
+      // Exchange the Google ID token with the Laravel API. This goes through
+      // ApiClient rather than a one-off http.post: it used to carry its own 35s
+      // ceiling, skip the warm-up probe and print raw TimeoutException text in
+      // the dialog while every other endpoint used different timeouts.
       try {
-        final res = await http
-            .post(
-              Uri.parse('$backendBaseUrl/api/v1/auth/google'),
-              headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-              },
-              body: jsonEncode({
-                'id_token': idToken,
-                'idToken': idToken,
-                'device_name': 'flutter_google',
-              }),
-            )
-            .timeout(const Duration(seconds: 35));
+        // Bounded: the request below has its own 60s ceiling.
+        await serverWarmUp.timeout(const Duration(seconds: 30), onTimeout: () {});
+        final response = await _apiClient.dio.post('/auth/google', data: {
+          'id_token': idToken,
+          'idToken': idToken,
+          'device_name': 'flutter_google',
+        });
 
-        if (res.statusCode == 200) {
-          final data = jsonDecode(res.body);
+        final data = response.data;
+        if (data is Map) {
           isNewUser = data['is_new_user'] == true;
           final u = data['user'] ?? data['data'];
           final sanctumToken = data['access_token'] ??
@@ -145,14 +146,14 @@ class GoogleAuthService {
             await ApiClient.saveToken(sanctumToken.toString());
           }
 
-          if (u != null) {
+          if (u is Map) {
             userProfile = UserProfile(
               id: u['id']?.toString() ?? googleId,
-              name: u['name'] ?? userName,
-              email: u['email'] ?? userEmail,
-              phone: u['phone'] ?? '',
+              name: u['name']?.toString() ?? userName,
+              email: u['email']?.toString() ?? userEmail,
+              phone: u['phone']?.toString() ?? '',
               role: UserRole.fromCode(u['role']?.toString()),
-              avatarUrl: u['avatar'] ?? userPhoto,
+              avatarUrl: u['avatar']?.toString() ?? userPhoto,
               googlePhotoUrl: userPhoto,
               location: u['location']?.toString() ?? 'Dhaka, Bangladesh',
               bio: u['bio']?.toString() ?? 'Animal advocate & pet rescuer',
@@ -160,12 +161,22 @@ class GoogleAuthService {
               isVerified: true,
             );
           }
-        } else {
-          backendError =
-              'AdoptMatch server rejected the sign-in (HTTP ${res.statusCode}).';
         }
+        if (userProfile == null) {
+          backendError =
+              'Google verified your account, but the AdoptMatch server did not return a profile. Please try again.';
+        }
+      } on DioException catch (backendErr) {
+        backendError = describeNetworkFailure(
+          backendErr,
+          fallback: 'The AdoptMatch server rejected the sign-in. Please try again.',
+        );
+        debugPrint('[GoogleAuthService] Backend sync failed: $backendErr');
       } catch (backendErr) {
-        backendError = 'Could not reach the AdoptMatch server: $backendErr';
+        backendError = describeNetworkFailure(
+          backendErr,
+          fallback: 'The AdoptMatch server could not complete the sign-in. Please try again.',
+        );
         debugPrint('[GoogleAuthService] Backend sync failed: $backendErr');
       }
 

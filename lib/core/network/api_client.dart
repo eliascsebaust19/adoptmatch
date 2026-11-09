@@ -16,14 +16,28 @@ class ApiClient {
   );
   static String get defaultBaseUrl => '${rootUrl.replaceAll(RegExp(r'/+$'), '')}/api/v1';
 
+  /// Host only (no `/api/v1`), used for the health probe.
+  static String get originUrl => rootUrl.replaceAll(RegExp(r'/+$'), '');
+
+  /// How long a response may take before it counts as a failure.
+  ///
+  /// The API runs on a free Render instance that stops when idle. The first
+  /// request after a quiet period waits for the container to boot, which
+  /// routinely takes 40-60 seconds. A 15s ceiling turned every cold sign-in
+  /// into a timeout while the instance was still starting.
+  static const Duration connectTimeout = Duration(seconds: 20);
+  static const Duration receiveTimeout = Duration(seconds: 60);
+  static const Duration sendTimeout = Duration(seconds: 30);
+
   late final Dio dio;
 
   ApiClient({String? baseUrl}) {
     dio = Dio(
       BaseOptions(
         baseUrl: baseUrl ?? defaultBaseUrl,
-        connectTimeout: const Duration(seconds: 15), // Responsive timeout
-        receiveTimeout: const Duration(seconds: 15),
+        connectTimeout: connectTimeout,
+        receiveTimeout: receiveTimeout,
+        sendTimeout: sendTimeout,
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
@@ -63,6 +77,59 @@ class ApiClient {
         },
       ),
     );
+  }
+
+  static DateTime? _lastHealthyPing;
+  static Future<void>? _warmUpInFlight;
+
+  /// Wakes the API before a request the user is waiting on.
+  ///
+  /// The free Render instance stops when idle, so the first call after a quiet
+  /// period waits for a container boot. Pinging `/up` while the user is still
+  /// typing, or while the Google account picker is open, hides most of that
+  /// latency. Concurrent callers share one probe, and a probe that succeeded
+  /// within [freshness] is not repeated. Failures are swallowed on purpose: the
+  /// real request reports whatever is actually wrong.
+  static Future<void> warmUp({
+    Duration freshness = const Duration(minutes: 2),
+  }) {
+    final last = _lastHealthyPing;
+    if (last != null && DateTime.now().difference(last) < freshness) {
+      return Future<void>.value();
+    }
+    return _warmUpInFlight ??= _probeHealth().whenComplete(() {
+      _warmUpInFlight = null;
+    });
+  }
+
+  /// Awaits the probe, but never longer than [limit].
+  ///
+  /// A request runs after this, and an unbounded wait would stack the probe's
+  /// 75s window in front of the request's own 60s timeout on a dead host.
+  static Future<void> awaitWarmUp({
+    Duration limit = const Duration(seconds: 30),
+  }) {
+    return warmUp().timeout(limit, onTimeout: () {});
+  }
+
+  static Future<void> _probeHealth() async {
+    final probe = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 75),
+        headers: {'Accept': 'application/json'},
+      ),
+    );
+    try {
+      final response = await probe.get('$originUrl/up');
+      if ((response.statusCode ?? 500) < 500) {
+        _lastHealthyPing = DateTime.now();
+      }
+    } catch (e) {
+      debugPrint('[ApiClient] Warm-up probe failed: $e');
+    } finally {
+      probe.close(force: true);
+    }
   }
 
   bool _isColdStartError(DioException error) {

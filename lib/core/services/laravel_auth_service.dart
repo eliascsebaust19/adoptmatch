@@ -20,6 +20,8 @@ class LaravelAuthService {
   /// Sign in with Google: Obtains the real Google idToken and exchanges it
   /// with Laravel 11 for a Sanctum Personal Access Token without Firebase.
   Future<Map<String, dynamic>?> signInWithGoogle() async {
+    // The account picker gives the instance a head start on booting.
+    final warmUp = ApiClient.warmUp();
     try {
       final googleUser = await _googleSignIn.signIn();
       if (googleUser == null) return null; // Cancelled
@@ -31,6 +33,7 @@ class LaravelAuthService {
         throw Exception('Failed to obtain Google ID Token.');
       }
 
+      await warmUp;
       final response = await _apiClient.dio.post('/auth/google', data: {
         'id_token': idToken,
       });
@@ -84,6 +87,9 @@ class LaravelAuthService {
     required String email,
     required String password,
   }) async {
+    // Wake the instance first so the 60s receive timeout covers a cold start
+    // instead of the request racing a container that has not booted yet.
+    await ApiClient.awaitWarmUp();
     final response = await _apiClient.dio.post('/auth/login', data: {
       'email': email,
       'password': password,
@@ -104,6 +110,7 @@ class LaravelAuthService {
     required String role,
     String? phone,
   }) async {
+    await ApiClient.awaitWarmUp();
     final response = await _apiClient.dio.post('/auth/register', data: {
       'name': name,
       'email': email,

@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:bloc_test/bloc_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -49,6 +50,29 @@ void main() {
     act: (bloc) => bloc.add(const SignUpWithEmailEvent(fullName: 'Nadia',
       email: 'nadia@example.test', password: 'password123')),
     expect: () => [isA<AuthLoading>(), isA<AuthFailure>()],
+  );
+
+  blocTest<AuthBloc, AuthState>(
+    'signup reports the server reason for a rejected registration',
+    build: () {
+      final options = RequestOptions(path: '/auth/register');
+      when(() => laravel.register(name: any(named: 'name'), email: any(named: 'email'),
+        password: any(named: 'password'), role: any(named: 'role'), phone: any(named: 'phone')))
+        .thenThrow(DioException(
+          requestOptions: options,
+          type: DioExceptionType.badResponse,
+          response: Response(
+            requestOptions: options,
+            statusCode: 422,
+            data: {'message': 'The email has already been taken.'},
+          ),
+        ));
+      return AuthBloc(authRepository: auth, laravelAuthService: laravel);
+    },
+    act: (bloc) => bloc.add(const SignUpWithEmailEvent(fullName: 'Elias Ahmad',
+      email: 'elias@example.test', password: 'password123')),
+    expect: () => [isA<AuthLoading>(), isA<AuthFailure>()
+      .having((s) => s.errorMessage, 'message', contains('already been taken'))],
   );
 
   blocTest<AuthBloc, AuthState>(

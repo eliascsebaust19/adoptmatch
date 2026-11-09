@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/network/network_error.dart';
 import '../../../core/services/local_storage_service.dart';
 import '../../../core/storage/secure_storage_service.dart';
 import '../../../core/repositories/chat_repository.dart';
@@ -51,11 +52,12 @@ class AuthRepository {
 
       return user;
     } on DioException catch (e) {
-      final msg = e.response?.data?['message']?.toString() ??
-          (e.response?.statusCode == 401
-              ? 'Invalid email or password.'
-              : 'Unable to connect to authentication server. Please check your internet.');
-      throw Exception(msg);
+      // Keep the server's reason (bad password, unverified email) separate from
+      // a transport failure, so the login screen can say which one happened.
+      throw Exception(describeNetworkFailure(
+        e,
+        fallback: 'Unable to reach the authentication server. Please try again.',
+      ));
     } catch (e) {
       rethrow;
     }
@@ -96,9 +98,10 @@ class AuthRepository {
 
       return user;
     } on DioException catch (e) {
-      final msg = e.response?.data?['message']?.toString() ??
-          'Registration failed. Please verify your details.';
-      throw Exception(msg);
+      throw Exception(describeNetworkFailure(
+        e,
+        fallback: 'Registration failed. Please verify your details.',
+      ));
     }
   }
 
