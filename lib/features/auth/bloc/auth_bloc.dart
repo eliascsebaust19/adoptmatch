@@ -1,4 +1,3 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
@@ -10,6 +9,7 @@ import '../../../core/services/google_auth_service.dart';
 import '../../../core/services/laravel_auth_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/storage/secure_storage_service.dart';
+import '../../../core/supabase/adoptmatch_supabase.dart';
 import '../repositories/auth_repository.dart';
 
 // --- Roles & Profile Models ---
@@ -475,8 +475,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   }
 
-  // Sessions are issued only by the AdoptMatch API. Supabase auth events must
-  // not mint app sessions: its JWT is not accepted by the Laravel/Node APIs.
+  // Supabase Auth is the single auth authority. The app session and app_role JWT hook own the identity.
 
   Future<void> _onCheckSession(
     CheckSessionEvent event,
@@ -612,7 +611,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
 
       emit(AuthFailure(describeNetworkFailure(
-        adminError ?? Exception('Admin sign-in failed.'),
+        adminError,
         fallback:
             '403 Forbidden: Access Denied. Invalid administrative credentials or server unreachable.',
       )));
@@ -747,7 +746,18 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     _currentUser = updated;
     await SecureStorageService.instance.saveUserProfile(updated);
 
-    if (SupabaseService.isInitialized &&
+    if (AdoptMatchBackend.isInitialized &&
+        AdoptMatchBackend.instance.currentUser != null) {
+      try {
+        await AdoptMatchBackend.instance.updateProfile(
+          fullName: updated.name,
+          phone: updated.phone,
+          avatarUrl: updated.avatarUrl,
+          location: updated.location,
+          bio: updated.bio,
+        );
+      } catch (_) {}
+    } else if (SupabaseService.isInitialized &&
         SupabaseService.auth.currentUser != null) {
       try {
         await SupabaseService.auth.updateUser(

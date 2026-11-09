@@ -1,10 +1,13 @@
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../features/auth/bloc/auth_bloc.dart';
 
-/// Session tokens and profiles are kept only in platform secure storage.
+/// Session identity is owned by Supabase Auth.
 /// Writes fail closed; ordinary preferences are used solely to purge old plaintext copies.
 class SecureStorageService {
   SecureStorageService._internal();
@@ -19,12 +22,28 @@ class SecureStorageService {
     iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
   );
 
+  /// Deprecated: Supabase Auth owns session tokens. Bearer writes are stopped.
   Future<void> saveAuthToken(String token) async {
-    if (token.trim().isEmpty) throw Exception('Refusing to store an empty session token.');
+    // Stop writing bearer tokens; session is maintained by Supabase GoTrueClient.
+    // In test environments without Supabase, we keep the storage write for mocks.
+    try {
+      if (Supabase.instance.client.auth.currentSession != null) {
+        return;
+      }
+    } catch (_) {}
+    if (token.trim().isEmpty)
+      throw Exception('Refusing to store an empty session token.');
     await _storage.write(key: _keyAuthToken, value: token);
   }
 
   Future<String?> getAuthToken() async {
+    try {
+      final supabaseToken =
+          Supabase.instance.client.auth.currentSession?.accessToken;
+      if (supabaseToken != null && supabaseToken.isNotEmpty) {
+        return supabaseToken;
+      }
+    } catch (_) {}
     try {
       final token = await _storage.read(key: _keyAuthToken);
       return token == null || token.isEmpty ? null : token;
@@ -35,7 +54,10 @@ class SecureStorageService {
   }
 
   Future<void> saveUserProfile(UserProfile user) async {
-    await _storage.write(key: _keyUserProfile, value: jsonEncode(user.toJson()));
+    await _storage.write(
+      key: _keyUserProfile,
+      value: jsonEncode(user.toJson()),
+    );
   }
 
   Future<UserProfile?> getUserProfile() async {
@@ -60,19 +82,33 @@ class SecureStorageService {
     await purgeLegacyPlaintextCopies();
   }
 
+  Future<void> clearAllTokens() => clearSession();
+
   /// Removes plaintext copies left behind by older builds on every platform.
   Future<void> purgeLegacyPlaintextCopies() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      for (final key in [_keyAuthToken, _keyUserProfile, _keyRefreshToken,
-        'cached_user_id', 'cached_user_email', 'cached_user_name',
-        'cached_user_photo', 'cached_user_role']) {
+      for (final key in [
+        _keyAuthToken,
+        _keyUserProfile,
+        _keyRefreshToken,
+        'cached_user_id',
+        'cached_user_email',
+        'cached_user_name',
+        'cached_user_photo',
+        'cached_user_role',
+      ]) {
         await prefs.remove(key);
       }
     } catch (_) {}
   }
 
   Future<bool> hasValidToken() async {
+    try {
+      if (Supabase.instance.client.auth.currentSession != null) {
+        return true;
+      }
+    } catch (_) {}
     final token = await getAuthToken();
     return token != null && token.isNotEmpty;
   }

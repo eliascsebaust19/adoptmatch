@@ -1,7 +1,9 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../network/api_client.dart';
+import '../supabase/adoptmatch_supabase.dart';
 import 'google_auth_service.dart';
 
 class LaravelAuthService {
@@ -63,6 +65,14 @@ class LaravelAuthService {
   }
 
   Future<void> requestPhoneOtp(String phone) async {
+    if (AdoptMatchBackend.isInitialized) {
+      try {
+        await AdoptMatchBackend.instance.requestPhoneOtp(normalizePhone(phone));
+        return;
+      } on AdoptMatchException catch (e) {
+        throw Exception(e.message);
+      }
+    }
     final response = await _apiClient.dio.post('/auth/phone/request',
       data: {'phone': normalizePhone(phone)});
     if (response.statusCode != 200 || response.data['status'] != 'success') {
@@ -71,6 +81,27 @@ class LaravelAuthService {
   }
 
   Future<Map<String, dynamic>> verifyPhoneOtp(String phone, String token) async {
+    if (AdoptMatchBackend.isInitialized) {
+      try {
+        final normalized = normalizePhone(phone);
+        await AdoptMatchBackend.instance.verifyPhoneOtp(phone: normalized, token: token);
+        final profile = await AdoptMatchBackend.instance.myProfile() ?? {};
+        final access = Supabase.instance.client.auth.currentSession?.accessToken ?? '';
+        return {
+          'status': 'success',
+          'access_token': access,
+          'user': {
+            'id': profile['id'],
+            'name': profile['full_name'] ?? 'Pet Lover',
+            'email': profile['email'] ?? '',
+            'phone': normalized,
+            'role': profile['role'] ?? 'adopter',
+          }
+        };
+      } on AdoptMatchException catch (e) {
+        throw Exception(e.message);
+      }
+    }
     final response = await _apiClient.dio.post('/auth/phone/verify', data: {
       'phone': normalizePhone(phone), 'token': token, 'device_name': 'mobile_otp',
     });
@@ -87,6 +118,25 @@ class LaravelAuthService {
     required String email,
     required String password,
   }) async {
+    if (AdoptMatchBackend.isInitialized) {
+      try {
+        await AdoptMatchBackend.instance.signInWithEmail(email: email, password: password);
+        final profile = await AdoptMatchBackend.instance.myProfile() ?? {};
+        final access = Supabase.instance.client.auth.currentSession?.accessToken ?? '';
+        return {
+          'status': 'success',
+          'access_token': access,
+          'user': {
+            'id': profile['id'],
+            'name': profile['full_name'] ?? 'Pet Lover',
+            'email': profile['email'] ?? email,
+            'role': profile['role'] ?? 'adopter',
+          }
+        };
+      } on AdoptMatchException catch (e) {
+        throw Exception(e.message);
+      }
+    }
     // Wake the instance first so the 60s receive timeout covers a cold start
     // instead of the request racing a container that has not booted yet.
     await ApiClient.awaitWarmUp();
@@ -110,6 +160,29 @@ class LaravelAuthService {
     required String role,
     String? phone,
   }) async {
+    if (AdoptMatchBackend.isInitialized) {
+      try {
+        await AdoptMatchBackend.instance.signUpWithEmail(
+          email: email,
+          password: password,
+          fullName: name,
+        );
+        final profile = await AdoptMatchBackend.instance.myProfile() ?? {};
+        final access = Supabase.instance.client.auth.currentSession?.accessToken ?? '';
+        return {
+          'status': 'success',
+          'access_token': access,
+          'user': {
+            'id': profile['id'],
+            'name': profile['full_name'] ?? name,
+            'email': profile['email'] ?? email,
+            'role': profile['role'] ?? 'adopter',
+          }
+        };
+      } on AdoptMatchException catch (e) {
+        throw Exception(e.message);
+      }
+    }
     await ApiClient.awaitWarmUp();
     final response = await _apiClient.dio.post('/auth/register', data: {
       'name': name,
@@ -131,6 +204,14 @@ class LaravelAuthService {
     required String currentPassword,
     required String newPassword,
   }) async {
+    if (AdoptMatchBackend.isInitialized) {
+      try {
+        await Supabase.instance.client.auth.updateUser(UserAttributes(password: newPassword));
+        return;
+      } on AuthException catch (e) {
+        throw Exception(e.message);
+      }
+    }
     final response = await _apiClient.dio.post('/auth/password', data: {
       'current_password': currentPassword,
       'password': newPassword,

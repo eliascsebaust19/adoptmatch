@@ -24,13 +24,17 @@ class UserSubscription extends Equatable {
 
   factory UserSubscription.fromJson(Map<String, dynamic> json) {
     return UserSubscription(
-      userId: json['userId'] as String? ?? '',
-      isPremium: json['isPremium'] as bool? ?? false,
-      planId: json['premiumPlanId'] as String? ?? json['planId'] as String?,
-      status: json['subscriptionStatus'] as String? ?? 'NONE',
-      startedAt: json['subscriptionStartedAt'] != null ? DateTime.tryParse(json['subscriptionStartedAt'] as String) : null,
-      expiresAt: json['subscriptionExpiresAt'] != null ? DateTime.tryParse(json['subscriptionExpiresAt'] as String) : null,
-      remainingDays: (json['remainingDays'] as num?)?.toInt() ?? 0,
+      userId: (json['userId'] ?? json['user_id']) as String? ?? '',
+      isPremium: (json['isPremium'] ?? json['is_premium']) as bool? ?? false,
+      planId: (json['premiumPlanId'] ?? json['planId'] ?? json['plan_id']) as String?,
+      status: ((json['subscriptionStatus'] ?? json['status']) as String? ?? 'NONE').toUpperCase(),
+      startedAt: json['subscriptionStartedAt'] != null
+          ? DateTime.tryParse(json['subscriptionStartedAt'] as String)
+          : (json['started_at'] != null ? DateTime.tryParse(json['started_at'] as String) : null),
+      expiresAt: json['subscriptionExpiresAt'] != null
+          ? DateTime.tryParse(json['subscriptionExpiresAt'] as String)
+          : (json['expires_at'] != null ? DateTime.tryParse(json['expires_at'] as String) : null),
+      remainingDays: (json['remainingDays'] ?? json['remaining_days'] as num?)?.toInt() ?? 0,
     );
   }
 

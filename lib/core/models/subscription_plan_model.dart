@@ -47,15 +47,15 @@ class SubscriptionPlan extends Equatable {
     return SubscriptionPlan(
       id: json['id'] as String? ?? 'plan-monthly',
       name: json['name'] as String? ?? 'Supporter Plan',
-      nameBn: json['nameBn'] as String? ?? 'সাপোর্টার প্ল্যান',
+      nameBn: (json['nameBn'] ?? json['name_bn']) as String? ?? 'সাপোর্টার প্ল্যান',
       price: (json['price'] as num?)?.toDouble() ?? 90.0,
       currency: json['currency'] as String? ?? 'BDT',
-      durationDays: (json['durationDays'] as num?)?.toInt() ?? 30,
+      durationDays: (json['durationDays'] ?? json['duration_days'] as num?)?.toInt() ?? 30,
       tag: json['tag'] as String? ?? 'Starter',
-      isBestValue: json['isBestValue'] as bool? ?? false,
-      isActive: json['isActive'] as bool? ?? true,
+      isBestValue: (json['isBestValue'] ?? json['is_best_value']) as bool? ?? false,
+      isActive: (json['isActive'] ?? json['is_active']) as bool? ?? true,
       features: (json['features'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
-      featuresBn: (json['featuresBn'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      featuresBn: (json['featuresBn'] ?? json['features_bn'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
     );
   }
 

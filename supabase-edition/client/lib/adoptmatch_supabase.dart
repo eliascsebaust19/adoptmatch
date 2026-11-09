@@ -20,7 +20,10 @@ class SupabaseConfig {
   final String url;
   final String anonKey;
 
-  static Future<void> initialize({required String url, required String anonKey}) {
+  static Future<void> initialize({
+    required String url,
+    required String anonKey,
+  }) {
     return Supabase.initialize(url: url, anonKey: anonKey);
   }
 }
@@ -37,7 +40,8 @@ class AdoptMatchException implements Exception {
 }
 
 class AdoptMatchBackend {
-  AdoptMatchBackend({SupabaseClient? client}) : _db = client ?? Supabase.instance.client;
+  AdoptMatchBackend({SupabaseClient? client})
+    : _db = client ?? Supabase.instance.client;
 
   final SupabaseClient _db;
 
@@ -52,7 +56,10 @@ class AdoptMatchBackend {
 
   /// Google Sign-In: the native picker returns an ID token, Supabase verifies it
   /// against the project's Google client. No server round-trip of our own.
-  Future<void> signInWithGoogle({required String idToken, String? accessToken}) async {
+  Future<void> signInWithGoogle({
+    required String idToken,
+    String? accessToken,
+  }) async {
     try {
       await _db.auth.signInWithIdToken(
         provider: OAuthProvider.google,
@@ -86,9 +93,15 @@ class AdoptMatchBackend {
     }
   }
 
-  Future<void> signInWithEmail({required String email, required String password}) async {
+  Future<void> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
     try {
-      await _db.auth.signInWithPassword(email: email.trim().toLowerCase(), password: password);
+      await _db.auth.signInWithPassword(
+        email: email.trim().toLowerCase(),
+        password: password,
+      );
     } on AuthException catch (error) {
       throw AdoptMatchException(
         error.message.toLowerCase().contains('invalid')
@@ -109,11 +122,17 @@ class AdoptMatchBackend {
     }
   }
 
-  Future<void> verifyPhoneOtp({required String phone, required String token}) async {
+  Future<void> verifyPhoneOtp({
+    required String phone,
+    required String token,
+  }) async {
     try {
       await _db.auth.verifyOTP(phone: phone, token: token, type: OtpType.sms);
-    } on AuthException catch (error) {
-      throw AdoptMatchException('Invalid or expired OTP.', code: 'OTP_VERIFY_FAILED');
+    } on AuthException {
+      throw AdoptMatchException(
+        'Invalid or expired OTP.',
+        code: 'OTP_VERIFY_FAILED',
+      );
     }
   }
 
@@ -132,7 +151,10 @@ class AdoptMatchBackend {
     // not claim deletion that did not happen.
     final response = await _db.functions.invoke('delete-account');
     if (response.status != 200) {
-      throw AdoptMatchException('Account deletion failed. Contact support.', code: 'DELETE_FAILED');
+      throw AdoptMatchException(
+        'Account deletion failed. Contact support.',
+        code: 'DELETE_FAILED',
+      );
     }
     await _db.auth.signOut();
   }
@@ -147,8 +169,12 @@ class AdoptMatchBackend {
     bool urgentOnly = false,
     int limit = 50,
   }) async {
-    var query = _db.from('pets_feed').select().eq('moderation_status', 'approved');
-    if (species != null && species.isNotEmpty) query = query.eq('species', species);
+    var query = _db
+        .from('pets_feed')
+        .select()
+        .eq('moderation_status', 'approved');
+    if (species != null && species.isNotEmpty)
+      query = query.eq('species', species);
     if (city != null && city.isNotEmpty) query = query.eq('city', city);
     if (urgentOnly) query = query.eq('is_urgent', true);
     final rows = await query.order('created_at', ascending: false).limit(limit);
@@ -161,12 +187,15 @@ class AdoptMatchBackend {
     double radiusKm = 25,
     int limit = 50,
   }) async {
-    final rows = await _db.rpc('pets_nearby', params: {
-      'p_lat': latitude,
-      'p_lng': longitude,
-      'p_radius_km': radiusKm,
-      'p_limit': limit,
-    });
+    final rows = await _db.rpc(
+      'pets_nearby',
+      params: {
+        'p_lat': latitude,
+        'p_lng': longitude,
+        'p_radius_km': radiusKm,
+        'p_limit': limit,
+      },
+    );
     return List<Map<String, dynamic>>.from(rows as List);
   }
 
@@ -175,7 +204,11 @@ class AdoptMatchBackend {
     if (favorite) {
       await _db.from('favorites').upsert({'user_id': user.id, 'pet_id': petId});
     } else {
-      await _db.from('favorites').delete().eq('user_id', user.id).eq('pet_id', petId);
+      await _db
+          .from('favorites')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('pet_id', petId);
     }
   }
 
@@ -204,10 +237,17 @@ class AdoptMatchBackend {
 
   /// Uploads go straight to Storage. The path must start with the user id; the
   /// bucket policy rejects anything else.
-  Future<String> uploadPetImage(String petId, List<int> bytes, String extension) async {
+  Future<String> uploadPetImage(
+    String petId,
+    List<int> bytes,
+    String extension,
+  ) async {
     final user = _requireUser();
-    final path = '${user.id}/$petId/${DateTime.now().millisecondsSinceEpoch}.$extension';
-    await _db.storage.from('pet-images').uploadBinary(path, Uint8List.fromList(bytes));
+    final path =
+        '${user.id}/$petId/${DateTime.now().millisecondsSinceEpoch}.$extension';
+    await _db.storage
+        .from('pet-images')
+        .uploadBinary(path, Uint8List.fromList(bytes));
     return _db.storage.from('pet-images').getPublicUrl(path);
   }
 
@@ -221,13 +261,17 @@ class AdoptMatchBackend {
     required String signatureData,
   }) async {
     final user = _requireUser();
-    final row = await _db.from('adoption_requests').insert({
-      'pet_id': petId,
-      'applicant_id': user.id,
-      'applicant_data': dossier,
-      'signature_data': signatureData,
-      'is_e_signed': true,
-    }).select('id').single();
+    final row = await _db
+        .from('adoption_requests')
+        .insert({
+          'pet_id': petId,
+          'applicant_id': user.id,
+          'applicant_data': dossier,
+          'signature_data': signatureData,
+          'is_e_signed': true,
+        })
+        .select('id')
+        .single();
     return row['id'] as String;
   }
 
@@ -250,7 +294,10 @@ class AdoptMatchBackend {
   }
 
   Future<void> withdrawApplication(String applicationId) async {
-    await _db.from('adoption_requests').update({'status': 'withdrawn'}).eq('id', applicationId);
+    await _db
+        .from('adoption_requests')
+        .update({'status': 'withdrawn'})
+        .eq('id', applicationId);
   }
 
   Future<void> reviewApplication({
@@ -258,10 +305,10 @@ class AdoptMatchBackend {
     required String status,
     required String notes,
   }) async {
-    await _db.from('adoption_requests').update({
-      'status': status,
-      'reviewer_notes': notes,
-    }).eq('id', applicationId);
+    await _db
+        .from('adoption_requests')
+        .update({'status': status, 'reviewer_notes': notes})
+        .eq('id', applicationId);
   }
 
   // ---------------------------------------------------------------------------
@@ -278,7 +325,10 @@ class AdoptMatchBackend {
     return List<Map<String, dynamic>>.from(rows as List);
   }
 
-  Future<String> startConversation({required String petId, required String ownerId}) async {
+  Future<String> startConversation({
+    required String petId,
+    required String ownerId,
+  }) async {
     final user = _requireUser();
     final existing = await _db
         .from('conversations')
@@ -288,11 +338,11 @@ class AdoptMatchBackend {
         .maybeSingle();
     if (existing != null) return existing['id'] as String;
 
-    final row = await _db.from('conversations').insert({
-      'pet_id': petId,
-      'adopter_id': user.id,
-      'owner_id': ownerId,
-    }).select('id').single();
+    final row = await _db
+        .from('conversations')
+        .insert({'pet_id': petId, 'adopter_id': user.id, 'owner_id': ownerId})
+        .select('id')
+        .single();
     return row['id'] as String;
   }
 
@@ -347,10 +397,13 @@ class AdoptMatchBackend {
     String? email,
     String? phone,
   }) async {
-    final response = await _db.functions.invoke('payments/initiate-sslcommerz', body: {
-      'plan_id': planId,
-      'customer': {'name': name, 'email': email, 'phone': phone},
-    });
+    final response = await _db.functions.invoke(
+      'payments/initiate-sslcommerz',
+      body: {
+        'plan_id': planId,
+        'customer': {'name': name, 'email': email, 'phone': phone},
+      },
+    );
     return _unwrap(response);
   }
 
@@ -359,11 +412,10 @@ class AdoptMatchBackend {
     required String trxId,
     required String senderPhone,
   }) async {
-    final response = await _db.functions.invoke('payments/manual-bkash', body: {
-      'plan_id': planId,
-      'trx_id': trxId,
-      'sender_phone': senderPhone,
-    });
+    final response = await _db.functions.invoke(
+      'payments/manual-bkash',
+      body: {'plan_id': planId, 'trx_id': trxId, 'sender_phone': senderPhone},
+    );
     return _unwrap(response);
   }
 
@@ -381,11 +433,16 @@ class AdoptMatchBackend {
     return _unwrap(response);
   }
 
-  Future<List<Map<String, dynamic>>> adminUsers({String? query, String? role}) async {
+  Future<List<Map<String, dynamic>>> adminUsers({
+    String? query,
+    String? role,
+  }) async {
     final params = <String, String>{'limit': '50'};
     if (query != null && query.isNotEmpty) params['q'] = query;
     if (role != null && role.isNotEmpty) params['role'] = role;
-    final response = await _db.functions.invoke('admin/users?${_query(params)}');
+    final response = await _db.functions.invoke(
+      'admin/users?${_query(params)}',
+    );
     final data = _unwrap(response);
     return List<Map<String, dynamic>>.from(data['data'] as List? ?? const []);
   }
@@ -398,17 +455,22 @@ class AdoptMatchBackend {
     await _db.functions.invoke('admin/users/$userId', body: {'status': status});
   }
 
-  Future<void> moderateListing(String petId, {required String status, String? reason}) async {
-    await _db.functions.invoke('admin/pets/$petId', body: {
-      'moderation_status': status,
-      'reason': reason,
-    });
+  Future<void> moderateListing(
+    String petId, {
+    required String status,
+    String? reason,
+  }) async {
+    await _db.functions.invoke(
+      'admin/pets/$petId',
+      body: {'moderation_status': status, 'reason': reason},
+    );
   }
 
   Future<void> verifyShelter(String shelterId, {required String status}) async {
-    await _db.functions.invoke('admin/shelters/$shelterId', body: {
-      'verification_status': status,
-    });
+    await _db.functions.invoke(
+      'admin/shelters/$shelterId',
+      body: {'verification_status': status},
+    );
   }
 
   Future<void> approvePayment(String tranId) async {
@@ -416,7 +478,10 @@ class AdoptMatchBackend {
   }
 
   Future<void> rejectPayment(String tranId, String reason) async {
-    await _db.functions.invoke('admin/payments/$tranId/reject', body: {'reason': reason});
+    await _db.functions.invoke(
+      'admin/payments/$tranId/reject',
+      body: {'reason': reason},
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -434,7 +499,9 @@ class AdoptMatchBackend {
   Map<String, dynamic> _unwrap(FunctionResponse response) {
     final data = response.data;
     if (response.status < 200 || response.status >= 300) {
-      final message = data is Map ? (data['message'] ?? 'Request failed.') : 'Request failed.';
+      final message = data is Map
+          ? (data['message'] ?? 'Request failed.')
+          : 'Request failed.';
       throw AdoptMatchException(message.toString(), code: 'FUNCTION_FAILED');
     }
     if (data is Map && data['status'] == 'error') {
@@ -451,7 +518,10 @@ class AdoptMatchBackend {
 
   String _query(Map<String, String> params) {
     return params.entries
-        .map((entry) => '${Uri.encodeQueryComponent(entry.key)}=${Uri.encodeQueryComponent(entry.value)}')
+        .map(
+          (entry) =>
+              '${Uri.encodeQueryComponent(entry.key)}=${Uri.encodeQueryComponent(entry.value)}',
+        )
         .join('&');
   }
 }

@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/network_error.dart';
 import '../../../core/services/local_storage_service.dart';
@@ -7,6 +8,7 @@ import '../../../core/storage/secure_storage_service.dart';
 import '../../../core/repositories/chat_repository.dart';
 import '../../../core/repositories/application_repository.dart';
 import '../../../core/repositories/pet_repository.dart';
+import '../../../core/supabase/adoptmatch_supabase.dart';
 import '../bloc/auth_bloc.dart';
 
 class AuthRepository {
@@ -22,11 +24,68 @@ class AuthRepository {
         _secureStorage = secureStorage ?? SecureStorageService.instance,
         _localStorage = localStorage ?? LocalStorageService.instance;
 
-  /// Authenticate user via Laravel API (POST /auth/login)
+  static UserProfile userFromSupabase(
+    Map<String, dynamic> profile, [
+    Map<String, dynamic>? subData,
+  ]) {
+    final sub = subData?['subscription'] is Map
+        ? (subData!['subscription'] as Map)
+        : null;
+    final isPremium = sub?['is_premium'] == true;
+    final expiryStr = sub?['expires_at']?.toString();
+    final expiry = expiryStr != null ? DateTime.tryParse(expiryStr) : null;
+    final planId = sub?['plan_id']?.toString();
+    final roleStr = profile['role']?.toString() ?? 'adopter';
+
+    return UserProfile(
+      id: profile['id']?.toString() ?? '',
+      name: profile['full_name']?.toString() ??
+          profile['name']?.toString() ??
+          'Pet Lover',
+      email: profile['email']?.toString() ?? '',
+      phone: profile['phone']?.toString() ?? '',
+      role: UserRole.fromCode(roleStr),
+      isVerified: profile['is_verified'] == true,
+      avatarUrl: profile['avatar_url']?.toString() ?? '',
+      bio: profile['bio']?.toString() ?? '',
+      location: profile['location']?.toString() ?? 'Dhaka, Bangladesh',
+      preferredPetType: profile['preferred_pet_type']?.toString() ?? 'All Pets',
+      isPremium: isPremium,
+      premiumPlanId: planId,
+      premiumExpiresAt: expiry,
+      subscriptionStatus: isPremium ? 'ACTIVE' : 'INACTIVE',
+    );
+  }
+
+  /// Authenticate user via Supabase Auth (or legacy mock/api client in unit tests)
   Future<UserProfile> loginWithEmail({
     required String email,
     required String password,
   }) async {
+    if (AdoptMatchBackend.isInitialized) {
+      try {
+        await AdoptMatchBackend.instance.signInWithEmail(
+          email: email,
+          password: password,
+        );
+        final profile = await AdoptMatchBackend.instance.myProfile();
+        if (profile == null) {
+          throw Exception('Unable to load user profile from authentication server.');
+        }
+        Map<String, dynamic> sub = {};
+        try {
+          sub = await AdoptMatchBackend.instance.mySubscription();
+        } catch (_) {}
+        final user = userFromSupabase(profile, sub);
+        await _secureStorage.saveUserProfile(user);
+        return user;
+      } on AdoptMatchException catch (e) {
+        throw Exception(e.message);
+      } catch (e) {
+        rethrow;
+      }
+    }
+
     try {
       final response = await _apiClient.dio.post(
         '/auth/login',
@@ -52,8 +111,6 @@ class AuthRepository {
 
       return user;
     } on DioException catch (e) {
-      // Keep the server's reason (bad password, unverified email) separate from
-      // a transport failure, so the login screen can say which one happened.
       throw Exception(describeNetworkFailure(
         e,
         fallback: 'Unable to reach the authentication server. Please try again.',
@@ -63,7 +120,7 @@ class AuthRepository {
     }
   }
 
-  /// Register new adopter account via Laravel API (POST /auth/register)
+  /// Register new adopter account via Supabase Auth
   Future<UserProfile> register({
     required String name,
     required String email,
@@ -71,6 +128,27 @@ class AuthRepository {
     String? phone,
     String role = 'adopter',
   }) async {
+    if (AdoptMatchBackend.isInitialized) {
+      try {
+        await AdoptMatchBackend.instance.signUpWithEmail(
+          email: email,
+          password: password,
+          fullName: name,
+        );
+        final profile = await AdoptMatchBackend.instance.myProfile();
+        if (profile == null) {
+          throw Exception('Check your email to confirm the account, then sign in.');
+        }
+        final user = userFromSupabase(profile, {});
+        await _secureStorage.saveUserProfile(user);
+        return user;
+      } on AdoptMatchException catch (e) {
+        throw Exception(e.message);
+      } catch (e) {
+        rethrow;
+      }
+    }
+
     try {
       final response = await _apiClient.dio.post(
         '/auth/register',
@@ -105,8 +183,27 @@ class AuthRepository {
     }
   }
 
-  /// Checks if a valid persistent session exists and verifies with GET /auth/me
+  /// Checks if a valid persistent session exists
   Future<UserProfile?> verifyCurrentSession() async {
+    if (AdoptMatchBackend.isInitialized) {
+      final session = Supabase.instance.client.auth.currentSession;
+      if (session == null) return null;
+      try {
+        final profile = await AdoptMatchBackend.instance.myProfile();
+        if (profile == null) return null;
+        Map<String, dynamic> sub = {};
+        try {
+          sub = await AdoptMatchBackend.instance.mySubscription();
+        } catch (_) {}
+        final user = userFromSupabase(profile, sub);
+        await _secureStorage.saveUserProfile(user);
+        return user;
+      } catch (e) {
+        debugPrint('[AuthRepository] Error verifying Supabase session: $e');
+        return null;
+      }
+    }
+
     final token = await _secureStorage.getAuthToken();
     if (token == null || token.isEmpty) {
       return null;
@@ -128,8 +225,6 @@ class AuthRepository {
         await _secureStorage.clearSession();
         return null;
       }
-      // Fail closed: a cached profile is not proof that a revoked/banned
-      // account still has a valid server session.
       return null;
     } catch (e) {
       debugPrint('[AuthRepository] Error verifying session: $e');
@@ -140,10 +235,18 @@ class AuthRepository {
 
   /// Complete Logout: Revoke server token, clear secure storage & wipe user cache
   Future<void> logout() async {
+    if (AdoptMatchBackend.isInitialized) {
+      try {
+        await AdoptMatchBackend.instance.signOut();
+      } catch (e) {
+        debugPrint('[AuthRepository] Supabase signOut notice: $e');
+      }
+    }
+
     try {
       await _apiClient.dio.post('/auth/logout').timeout(const Duration(seconds: 4));
     } catch (e) {
-      debugPrint('[AuthRepository] Server logout notice (token may already be invalidated): $e');
+      debugPrint('[AuthRepository] Server logout notice: $e');
     } finally {
       await ChatRepository().clearCache();
       await ApplicationRepository().clearCache();
