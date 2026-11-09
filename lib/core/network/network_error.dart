@@ -35,6 +35,7 @@ bool isNetworkFailure(Object error) {
       case DioExceptionType.badResponse:
       case DioExceptionType.cancel:
       case DioExceptionType.unknown:
+      default:
         break;
     }
     if (error.response == null) {
@@ -73,6 +74,7 @@ String describeNetworkFailure(
         return 'The request was cancelled.';
       case DioExceptionType.badResponse:
       case DioExceptionType.unknown:
+      default:
         break;
     }
 

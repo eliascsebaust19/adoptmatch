@@ -1,10 +1,5 @@
-<<<<<<< HEAD
 import 'dart:async';
-import 'dart:convert';
-
-=======
 import 'package:dio/dio.dart';
->>>>>>> origin/arena/9fbd2711-adoptmatch
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
