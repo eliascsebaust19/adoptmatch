@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../../core/network/api_client.dart';
 import '../../../core/network/network_error.dart';
 import '../../../core/services/local_storage_service.dart';
@@ -20,9 +21,9 @@ class AuthRepository {
     ApiClient? apiClient,
     SecureStorageService? secureStorage,
     LocalStorageService? localStorage,
-  })  : _apiClient = apiClient ?? ApiClient(),
-        _secureStorage = secureStorage ?? SecureStorageService.instance,
-        _localStorage = localStorage ?? LocalStorageService.instance;
+  }) : _apiClient = apiClient ?? ApiClient(),
+       _secureStorage = secureStorage ?? SecureStorageService.instance,
+       _localStorage = localStorage ?? LocalStorageService.instance;
 
   static UserProfile userFromSupabase(
     Map<String, dynamic> profile, [
@@ -39,7 +40,8 @@ class AuthRepository {
 
     return UserProfile(
       id: profile['id']?.toString() ?? '',
-      name: profile['full_name']?.toString() ??
+      name:
+          profile['full_name']?.toString() ??
           profile['name']?.toString() ??
           'Pet Lover',
       email: profile['email']?.toString() ?? '',
@@ -70,7 +72,9 @@ class AuthRepository {
         );
         final profile = await AdoptMatchBackend.instance.myProfile();
         if (profile == null) {
-          throw Exception('Unable to load user profile from authentication server.');
+          throw Exception(
+            'Unable to load user profile from authentication server.',
+          );
         }
         Map<String, dynamic> sub = {};
         try {
@@ -89,10 +93,7 @@ class AuthRepository {
     try {
       final response = await _apiClient.dio.post(
         '/auth/login',
-        data: {
-          'email': email.trim().toLowerCase(),
-          'password': password,
-        },
+        data: {'email': email.trim().toLowerCase(), 'password': password},
       );
 
       final data = response.data as Map<String, dynamic>;
@@ -111,10 +112,13 @@ class AuthRepository {
 
       return user;
     } on DioException catch (e) {
-      throw Exception(describeNetworkFailure(
-        e,
-        fallback: 'Unable to reach the authentication server. Please try again.',
-      ));
+      throw Exception(
+        describeNetworkFailure(
+          e,
+          fallback:
+              'Unable to reach the authentication server. Please try again.',
+        ),
+      );
     } catch (e) {
       rethrow;
     }
@@ -137,7 +141,9 @@ class AuthRepository {
         );
         final profile = await AdoptMatchBackend.instance.myProfile();
         if (profile == null) {
-          throw Exception('Check your email to confirm the account, then sign in.');
+          throw Exception(
+            'Check your email to confirm the account, then sign in.',
+          );
         }
         final user = userFromSupabase(profile, {});
         await _secureStorage.saveUserProfile(user);
@@ -166,7 +172,9 @@ class AuthRepository {
       final userMap = data['user'] as Map<String, dynamic>?;
 
       if (token == null || userMap == null) {
-        throw Exception('Registration succeeded but session token was missing.');
+        throw Exception(
+          'Registration succeeded but session token was missing.',
+        );
       }
 
       final user = UserProfile.fromJson(userMap);
@@ -176,10 +184,12 @@ class AuthRepository {
 
       return user;
     } on DioException catch (e) {
-      throw Exception(describeNetworkFailure(
-        e,
-        fallback: 'Registration failed. Please verify your details.',
-      ));
+      throw Exception(
+        describeNetworkFailure(
+          e,
+          fallback: 'Registration failed. Please verify your details.',
+        ),
+      );
     }
   }
 
@@ -206,15 +216,17 @@ class AuthRepository {
 
         // Resilient fallback: build user profile from verified Supabase session
         final sbUser = session.user;
-        final rawName = (sbUser.userMetadata?['full_name'] ??
-                sbUser.userMetadata?['name'] ??
-                sbUser.email?.split('@').first ??
-                'Adopter')
-            .toString();
-        final avatar = (sbUser.userMetadata?['avatar_url'] ??
-                sbUser.userMetadata?['picture'] ??
-                '')
-            .toString();
+        final rawName =
+            (sbUser.userMetadata?['full_name'] ??
+                    sbUser.userMetadata?['name'] ??
+                    sbUser.email?.split('@').first ??
+                    'Adopter')
+                .toString();
+        final avatar =
+            (sbUser.userMetadata?['avatar_url'] ??
+                    sbUser.userMetadata?['picture'] ??
+                    '')
+                .toString();
 
         final user = UserProfile(
           id: sbUser.id,
@@ -254,7 +266,9 @@ class AuthRepository {
       }
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
-        debugPrint('[AuthRepository] Session token expired or revoked. Clearing local session.');
+        debugPrint(
+          '[AuthRepository] Session token expired or revoked. Clearing local session.',
+        );
         await _secureStorage.clearSession();
         return null;
       }
@@ -277,7 +291,9 @@ class AuthRepository {
     }
 
     try {
-      await _apiClient.dio.post('/auth/logout').timeout(const Duration(seconds: 4));
+      await _apiClient.dio
+          .post('/auth/logout')
+          .timeout(const Duration(seconds: 4));
     } catch (e) {
       debugPrint('[AuthRepository] Server logout notice: $e');
     } finally {
@@ -289,4 +305,3 @@ class AuthRepository {
     }
   }
 }
-
