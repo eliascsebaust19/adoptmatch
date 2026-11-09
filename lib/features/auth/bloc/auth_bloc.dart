@@ -581,41 +581,32 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) async {
     emit(AuthLoading());
-    Object? adminError;
     try {
       final emailLower = event.email.trim().toLowerCase();
+      final user = await _authRepository.loginWithEmail(
+        email: emailLower,
+        password: event.password,
+      );
 
-      // 1. Primary: Authenticate via Laravel API
-      try {
-        final user = await _authRepository.loginWithEmail(
-          email: emailLower,
-          password: event.password,
+      if (!user.role.hasAdminAccess) {
+        await _authRepository.logout();
+        emit(
+          const AuthFailure(
+            '403 Forbidden: Access Denied. Administrator or Shelter Manager privileges required.',
+          ),
         );
-        if (!user.role.hasAdminAccess) {
-          await _authRepository.logout();
-          emit(
-            const AuthFailure(
-              '403 Forbidden: Access Denied. Administrator or Shelter Manager privileges required.',
-            ),
-          );
-          return;
-        }
-        _currentUser = user;
-        emit(Authenticated(user));
         return;
-      } catch (laravelErr) {
-        debugPrint('[AuthBloc] Admin Laravel login: $laravelErr');
-        adminError = laravelErr;
       }
 
-
+      _currentUser = user;
+      emit(Authenticated(user));
+    } catch (laravelErr) {
+      debugPrint('[AuthBloc] Admin Laravel login: $laravelErr');
       emit(AuthFailure(describeNetworkFailure(
-        adminError ?? Exception('Admin sign-in failed.'),
+        laravelErr,
         fallback:
             '403 Forbidden: Access Denied. Invalid administrative credentials or server unreachable.',
       )));
-    } catch (e) {
-      emit(AuthFailure(describeNetworkFailure(e)));
     }
   }
 
