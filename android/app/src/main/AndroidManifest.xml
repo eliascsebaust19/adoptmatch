@@ -3,6 +3,12 @@
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
+    <!-- app_links (used by supabase_flutter) owns deep-link delivery. Keep
+         Flutter's own deep-link handler off so `adoptmatch://auth-callback`
+         is not consumed twice and the PKCE verifier lookup stays in sync. -->
+    <meta-data
+        android:name="flutter_deeplinking_enabled"
+        android:value="false" />
     <application
         android:label="AdoptMatch"
         android:name="${applicationName}"

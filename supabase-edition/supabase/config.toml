@@ -34,10 +34,22 @@ file_size_limit = "50MiB"
 
 [auth]
 enabled = true
-site_url = "http://localhost:3000"
+# `site_url` is the fallback when a request has no `redirect_to`. The Flutter
+# app always sends one, so the list below has to contain every origin and deep
+# link the client can produce (see AuthConfig.oauthRedirectUrl and
+# AuthConfig.passwordResetRedirectUrl). A value missing here comes back as
+# "requested path is invalid" and the user is stuck on the sign-in screen.
+site_url = "http://localhost:5000"
 additional_redirect_urls = [
-  "http://localhost:3000",
+  # Local development. flutter run -d chrome --web-port=5000
+  "http://localhost:5000",
+  "http://localhost:5000/auth-callback",
+  "http://localhost:5000/auth/reset-password",
+  "http://localhost:8080/auth-callback",
+  "http://localhost:8080/auth/reset-password",
+  # Mobile deep links (Android manifest + iOS CFBundleURLSchemes)
   "adoptmatch://auth-callback",
+  "adoptmatch://auth-callback?type=recovery",
   "com.adoptmatch.adoptmatch://auth-callback",
 ]
 jwt_expiry = 3600

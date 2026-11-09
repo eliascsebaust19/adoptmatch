@@ -20,12 +20,17 @@ class GoogleAuthResult {
   final bool wasCancelled;
   final bool isNewUser;
 
+  /// True when the browser is being sent to Google. There is no user yet:
+  /// the OAuth callback screen finishes the sign-in after the redirect.
+  final bool isRedirecting;
+
   const GoogleAuthResult({
     required this.success,
     this.user,
     this.errorMessage,
     this.wasCancelled = false,
     this.isNewUser = false,
+    this.isRedirecting = false,
   });
 }
 
@@ -50,12 +55,15 @@ class GoogleAuthService {
     serverClientId: webClientId,
   );
 
-  /// Performs Google Sign-In with resilience:
-  /// 1. Tries Native GoogleSignIn (Android/iOS Account Picker or Web OAuth)
-  /// 2. If Google Sign-In succeeds, uses the real Google ID Token & profile
-  /// 3. If running on Web Localhost and origin is unregistered in Google Cloud Console,
-  ///    gracefully falls back to direct Laravel 11 backend sync so dev/testing is never blocked.
-  /// 4. Syncs with Supabase Auth or Laravel 11 Backend (/auth/google) for Bearer token.
+  /// Performs Google Sign-In.
+  ///
+  /// Android/iOS: the native account picker returns a Google ID token, which is
+  /// verified by Supabase (`signInWithIdToken`) and the resulting session is the
+  /// only proof of identity. There is no local fallback.
+  ///
+  /// Web: if the GIS popup cannot produce a token (blocked popup, cookie
+  /// policy, unregistered origin), the flow switches to Supabase's OAuth
+  /// redirect. The browser navigates away and `/auth-callback` finishes it.
   static Future<GoogleAuthResult> signIn() async {
     if (!AuthConfig.isGoogleConfigured) {
       return const GoogleAuthResult(
@@ -86,11 +94,12 @@ class GoogleAuthService {
               debugPrint('[GoogleAuthService] Web native popup failed ($nativeError). Falling back to Supabase browser OAuth redirect...');
               final redirected = await Supabase.instance.client.auth.signInWithOAuth(
                 OAuthProvider.google,
+                redirectTo: AuthConfig.oauthRedirectUrl,
               );
               if (redirected) {
                 return const GoogleAuthResult(
                   success: true,
-                  wasCancelled: false,
+                  isRedirecting: true,
                 );
               }
             } catch (oauthErr) {
@@ -102,9 +111,11 @@ class GoogleAuthService {
           if (nativeError.contains('ApiException: 10') ||
               nativeError.contains('DEVELOPER_ERROR')) {
             userFriendlyMsg =
-                'Google Sign-In configuration error (ApiException 10). Register this '
-                'build\'s SHA-1 (88:60:0E:C9:44:D9:F7:FE:5B:DC:53:74:3C:BA:B1:25:32:0C:09:7B) '
-                'for package com.adoptmatch.adoptmatch in Google Cloud Console. See docs/AUTH_SETUP.md.';
+                'Google Sign-In configuration error (ApiException 10). The Android '
+                'OAuth client for com.adoptmatch.adoptmatch does not accept this '
+                'build\'s signing certificate. Debug builds use '
+                '${AuthConfig.debugAndroidSha1}; a release build needs the SHA-1 of '
+                'your upload key registered as a separate Android client. See docs/AUTH_SETUP.md.';
           } else if (nativeError.contains('ApiException: 12500')) {
             userFriendlyMsg =
                 'Google Sign-In configuration error (ApiException 12500). Please check '
@@ -148,17 +159,18 @@ class GoogleAuthService {
       }
 
       if (idToken == null || idToken.isEmpty) {
-        // On Web with Supabase initialized: seamlessly trigger browser OAuth redirect flow
+        // On web with Supabase initialized: use the browser OAuth redirect.
         if (kIsWeb && AdoptMatchBackend.isInitialized) {
           try {
             debugPrint('[GoogleAuthService] Web fallback to Supabase signInWithOAuth');
             final redirected = await Supabase.instance.client.auth.signInWithOAuth(
               OAuthProvider.google,
+              redirectTo: AuthConfig.oauthRedirectUrl,
             );
             if (redirected) {
               return const GoogleAuthResult(
                 success: true,
-                wasCancelled: false,
+                isRedirecting: true,
               );
             }
           } catch (oauthErr) {
@@ -172,7 +184,9 @@ class GoogleAuthService {
 
         final platformDetail = kIsWeb
             ? 'Web origin is not authorized in Google Cloud Console, or the browser blocked cookies/popups.'
-            : 'SHA-1 fingerprint (88:60:0E:C9:44:D9:F7:FE:5B:DC:53:74:3C:BA:B1:25:32:0C:09:7B) for com.adoptmatch.adoptmatch is not registered in Google Cloud Console.';
+            : 'The signing certificate for com.adoptmatch.adoptmatch is not registered '
+                'in Google Cloud Console. Debug builds need ${AuthConfig.debugAndroidSha1}; '
+                'release builds need the SHA-1 of the upload key.';
         return GoogleAuthResult(
           success: false,
           errorMessage: 'Google did not return an ID token. $platformDetail See docs/AUTH_SETUP.md.',

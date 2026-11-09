@@ -18,7 +18,30 @@ class SupabaseService {
   static String get googleClientId => AuthConfig.googleWebClientId;
 
   static bool _isInitialized = false;
-  static bool get isInitialized => _isInitialized;
+
+  /// `?code=` can only be redeemed once. Without this, a refresh of the
+  /// callback URL replays a used code and shows a scary "invalid link" error
+  /// even though the session is fine.
+  static bool _redirectConsumed = false;
+
+  /// Set once the user has finished the recovery flow, so later `Authenticated`
+  /// emissions cannot bounce them back onto the password screen.
+  static bool _recoveryHandled = false;
+
+  static void markRecoveryHandled() => _recoveryHandled = true;
+
+  /// True once a Supabase client exists. `main()` initializes the client, so
+  /// this must not depend on [initialize] having been called: that method is
+  /// only an optional convenience for tests and alternate entry points.
+  static bool get isInitialized {
+    if (_isInitialized) return true;
+    try {
+      Supabase.instance.client;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 
   static Future<void> initialize() async {
     if (_isInitialized) return;
@@ -39,7 +62,7 @@ class SupabaseService {
   }
 
   static SupabaseClient get client {
-    if (!_isInitialized) {
+    if (!isInitialized) {
       throw StateError('Supabase has not been initialized. Call SupabaseService.initialize() first.');
     }
     return Supabase.instance.client;
@@ -52,14 +75,14 @@ class SupabaseService {
     required String email,
     required String password,
     required String fullName,
-    String emailRedirectTo = 'adoptmatch://auth-callback',
+    String? emailRedirectTo,
   }) async {
     try {
       final response = await auth.signUp(
         email: email,
         password: password,
         data: {'full_name': fullName},
-        emailRedirectTo: emailRedirectTo,
+        emailRedirectTo: emailRedirectTo ?? AuthConfig.emailRedirectUrl,
       );
 
       // Do NOT automatically log them into dashboard
@@ -107,13 +130,11 @@ class SupabaseService {
   }
 
   /// Sign in via Google OAuth
-  static Future<bool> signInWithGoogle({
-    String redirectTo = 'adoptmatch://auth-callback',
-  }) async {
+  static Future<bool> signInWithGoogle({String? redirectTo}) async {
     try {
       return await auth.signInWithOAuth(
         OAuthProvider.google,
-        redirectTo: redirectTo,
+        redirectTo: redirectTo ?? AuthConfig.oauthRedirectUrl,
         authScreenLaunchMode: LaunchMode.externalApplication,
       );
     } on AuthException {
@@ -126,7 +147,7 @@ class SupabaseService {
   /// Update user password
   static Future<UserResponse?> updatePassword(String newPassword) async {
     try {
-      if (_isInitialized && auth.currentUser != null) {
+      if (isInitialized && auth.currentUser != null) {
         return await auth.updateUser(UserAttributes(password: newPassword));
       }
       return null;
@@ -137,10 +158,69 @@ class SupabaseService {
     }
   }
 
+  /// Completes a web OAuth / email-link round-trip.
+  ///
+  /// Supabase returns `?code=...` (PKCE) or `#access_token=...` on the redirect
+  /// URL. Desktop and mobile are handled by the plugin; the web build is not,
+  /// and a code that is never exchanged leaves the user signed out with a URL
+  /// that looks successful. Returns the resulting session, or null when there
+  /// is nothing to redeem.
+  static Future<Session?> completeWebRedirect() async {
+    if (!kIsWeb || !isInitialized) return null;
+    try {
+      final uri = Uri.base;
+      // Two shapes exist: `origin/auth-callback?code=...` with the path URL
+      // strategy, and `origin/#/auth-callback?code=...` with the default hash
+      // strategy. Read the query string from both.
+      final fragment = uri.fragment;
+      final fragmentQuery = fragment.contains('?')
+          ? fragment.substring(fragment.indexOf('?') + 1)
+          : (fragment.contains('=') ? fragment : '');
+      final params = <String, String>{
+        ...uri.queryParameters,
+        ...Uri.splitQueryString(fragmentQuery),
+      };
+
+      if (params['error_description'] != null || params['error'] != null) {
+        throw AuthException(
+          params['error_description'] ?? params['error'] ?? 'Sign-in failed.',
+        );
+      }
+
+      if (params.containsKey('code') && !_redirectConsumed) {
+        // The SDK reads the same URL, stores the verifier and redeems the code.
+        await auth.getSessionFromUrl(uri);
+        _redirectConsumed = true;
+      } else if (params['access_token'] != null &&
+          params['refresh_token'] != null) {
+        await auth.setSession(params['refresh_token']!);
+      } else {
+        return auth.currentSession;
+      }
+
+      return auth.currentSession;
+    } on AuthException catch (e) {
+      debugPrint('[SupabaseService] Redirect exchange failed: ${e.message}');
+      rethrow;
+    } catch (e) {
+      debugPrint('[SupabaseService] Redirect exchange error: $e');
+      return null;
+    }
+  }
+
+  /// Turns a `?type=recovery` / `#type=recovery` deep link into the route the
+  /// app should open. Null when the link is an ordinary sign-in.
+  static String? get pendingRecoveryRoute {
+    if (_recoveryHandled) return null;
+    final fragment = Uri.base.fragment;
+    final location = fragment.isNotEmpty ? fragment : Uri.base.query;
+    return location.contains('type=recovery') ? '/auth/reset-password' : null;
+  }
+
   /// Sign out
   static Future<void> signOut() async {
     try {
-      if (_isInitialized) {
+      if (isInitialized) {
         await auth.signOut();
       }
     } catch (e) {

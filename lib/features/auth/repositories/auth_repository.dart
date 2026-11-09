@@ -134,15 +134,23 @@ class AuthRepository {
   }) async {
     if (AdoptMatchBackend.isInitialized) {
       try {
-        await AdoptMatchBackend.instance.signUpWithEmail(
+        final needsConfirmation =
+            await AdoptMatchBackend.instance.signUpWithEmail(
           email: email,
           password: password,
           fullName: name,
         );
+        if (needsConfirmation) {
+          // Not an error: the account exists, the user just has to confirm.
+          throw Exception(
+            'Account created. Check $email for the confirmation link, then '
+            'sign in.',
+          );
+        }
         final profile = await AdoptMatchBackend.instance.myProfile();
         if (profile == null) {
           throw Exception(
-            'Check your email to confirm the account, then sign in.',
+            'Your account was created. Please sign in to continue.',
           );
         }
         final user = userFromSupabase(profile, {});

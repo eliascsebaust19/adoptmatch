@@ -36,6 +36,26 @@ void main() {
       expect(url, 'https://cdn.example.test/confirmed.png');
     });
 
+    test('profile upload still fails closed without a Supabase session', () async {
+      // The avatars bucket only accepts objects under `{auth.uid()}/...`.
+      // With no session the upload must fall through to the REST backend and
+      // then fail, rather than returning a URL nothing was written to.
+      final api = ApiClient(baseUrl: 'https://api.example.test/api/v1')
+        ..dio.httpClientAdapter =
+            FakeDioAdapter((_) async => (500, {'status': 'error'}));
+      StorageService.apiClientFactoryForTesting = () => api;
+      addTearDown(() => StorageService.apiClientFactoryForTesting = null);
+
+      await expectLater(
+        StorageService.uploadProfileImage(
+          bytes: Uint8List.fromList([1, 2, 3]),
+          fileName: 'avatar.png',
+          userId: 'u-test',
+        ),
+        throwsException,
+      );
+    });
+
     test('getDirectGooglePhotoUrl safely handles uninitialized or unauthenticated state', () {
       final googlePhoto = StorageService.getDirectGooglePhotoUrl();
       // Should safely return null without throwing exceptions

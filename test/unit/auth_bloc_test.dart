@@ -76,6 +76,100 @@ void main() {
   );
 
   blocTest<AuthBloc, AuthState>(
+    'signup awaiting email confirmation is reported as pending, not a failure',
+    build: () {
+      when(() => laravel.register(
+            name: any(named: 'name'),
+            email: any(named: 'email'),
+            password: any(named: 'password'),
+            role: any(named: 'role'),
+            phone: any(named: 'phone'),
+          )).thenAnswer((_) async => {
+            'status': 'pending_confirmation',
+            'email': 'nadia@example.test',
+            'message': 'Account created. Check your inbox.',
+          });
+      return AuthBloc(authRepository: auth, laravelAuthService: laravel);
+    },
+    act: (bloc) => bloc.add(const SignUpWithEmailEvent(
+      fullName: 'Nadia',
+      email: 'nadia@example.test',
+      password: 'password123',
+    )),
+    expect: () => [
+      isA<AuthLoading>(),
+      isA<AuthSignUpConfirmationPending>()
+          .having((s) => s.email, 'email', 'nadia@example.test'),
+    ],
+  );
+
+  blocTest<AuthBloc, AuthState>(
+    'signup without a usable server session never authenticates',
+    build: () {
+      when(() => laravel.register(
+            name: any(named: 'name'),
+            email: any(named: 'email'),
+            password: any(named: 'password'),
+            role: any(named: 'role'),
+            phone: any(named: 'phone'),
+          )).thenAnswer((_) async => {
+            'status': 'success',
+            'access_token': '',
+          });
+      return AuthBloc(authRepository: auth, laravelAuthService: laravel);
+    },
+    act: (bloc) => bloc.add(const SignUpWithEmailEvent(
+      fullName: 'Nadia',
+      email: 'nadia@example.test',
+      password: 'password123',
+    )),
+    expect: () => [isA<AuthLoading>(), isA<AuthFailure>()],
+  );
+
+  blocTest<AuthBloc, AuthState>(
+    'password reset requires a real email address before calling the server',
+    build: () => AuthBloc(authRepository: auth, laravelAuthService: laravel),
+    act: (bloc) => bloc.add(const RequestPasswordResetEvent('  ')),
+    expect: () => [
+      isA<AuthFailure>()
+          .having((s) => s.errorMessage, 'message', contains('email address')),
+    ],
+    verify: (_) => verifyNever(() => laravel.requestPasswordReset(any())),
+  );
+
+  blocTest<AuthBloc, AuthState>(
+    'password reset reports the dispatch, not a fabricated success',
+    build: () {
+      when(() => laravel.requestPasswordReset(any())).thenAnswer((_) async {});
+      return AuthBloc(authRepository: auth, laravelAuthService: laravel);
+    },
+    act: (bloc) => bloc.add(const RequestPasswordResetEvent('Nadia@Example.test')),
+    expect: () => [
+      isA<AuthLoading>(),
+      isA<AuthEmailDispatched>()
+          .having((s) => s.email, 'email', 'nadia@example.test'),
+    ],
+  );
+
+  blocTest<AuthBloc, AuthState>(
+    'password reset failure is surfaced, never hidden behind a success toast',
+    build: () {
+      when(() => laravel.requestPasswordReset(any()))
+          .thenThrow(Exception('Email rate limit exceeded'));
+      return AuthBloc(authRepository: auth, laravelAuthService: laravel);
+    },
+    act: (bloc) => bloc.add(const RequestPasswordResetEvent('nadia@example.test')),
+    expect: () => [
+      isA<AuthLoading>(),
+      isA<AuthFailure>().having(
+        (s) => s.errorMessage,
+        'message',
+        contains('rate limit'),
+      ),
+    ],
+  );
+
+  blocTest<AuthBloc, AuthState>(
     'admin login rejects a non-privileged server account',
     build: () {
       when(() => auth.loginWithEmail(email: any(named: 'email'), password: any(named: 'password')))
