@@ -269,7 +269,9 @@ abstract class AuthEvent extends Equatable {
   List<Object?> get props => [];
 }
 
-class CheckSessionEvent extends AuthEvent {}
+class CheckSessionEvent extends AuthEvent {
+  const CheckSessionEvent();
+}
 
 class SignUpWithEmailEvent extends AuthEvent {
   final String fullName;
@@ -396,6 +398,20 @@ class ActivateSubscriptionEvent extends AuthEvent {
   List<Object?> get props => [planId, durationDays];
 }
 
+class RequestPasswordResetEvent extends AuthEvent {
+  final String email;
+  const RequestPasswordResetEvent(this.email);
+  @override
+  List<Object?> get props => [email];
+}
+
+class ResendConfirmationEvent extends AuthEvent {
+  final String email;
+  const ResendConfirmationEvent(this.email);
+  @override
+  List<Object?> get props => [email];
+}
+
 class LogoutEvent extends AuthEvent {}
 
 // --- States ---
@@ -419,9 +435,19 @@ class AuthOtpSent extends AuthState {
 class Authenticated extends AuthState {
   final UserProfile user;
   final bool isNewUser;
-  const Authenticated(this.user, {this.isNewUser = false});
+
+  /// Where the UI should go after signing in, when the user did not ask for the
+  /// home screen (a password-recovery deep link, for example).
+  final String? pendingRoute;
+
+  const Authenticated(
+    this.user, {
+    this.isNewUser = false,
+    this.pendingRoute,
+  });
+
   @override
-  List<Object?> get props => [user, isNewUser];
+  List<Object?> get props => [user, isNewUser, pendingRoute];
 }
 
 class AuthSignUpConfirmationPending extends AuthState {
@@ -436,6 +462,15 @@ class AuthSignUpConfirmationPending extends AuthState {
 }
 
 class AuthPasswordChanged extends AuthState {}
+
+/// A recovery / confirmation email was accepted by the server.
+class AuthEmailDispatched extends AuthState {
+  final String email;
+  final String message;
+  const AuthEmailDispatched({required this.email, required this.message});
+  @override
+  List<Object?> get props => [email, message];
+}
 
 class AuthUnauthenticated extends AuthState {}
 
@@ -471,6 +506,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<UpdateUserProfileEvent>(_onUpdateUserProfile);
     on<ChangePasswordEvent>(_onChangePassword);
     on<ActivateSubscriptionEvent>(_onActivateSubscription);
+    on<RequestPasswordResetEvent>(_onRequestPasswordReset);
+    on<ResendConfirmationEvent>(_onResendConfirmation);
     on<LogoutEvent>(_onLogout);
 
   }
@@ -484,7 +521,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     final user = await _authRepository.verifyCurrentSession();
     if (user != null) {
       _currentUser = user;
-      emit(Authenticated(user));
+      emit(Authenticated(
+        user,
+        // A recovery deep link must land on the password form, not the app.
+        pendingRoute: SupabaseService.pendingRecoveryRoute,
+      ));
     } else {
       _currentUser = null;
       emit(AuthUnauthenticated());
@@ -498,50 +539,61 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(AuthLoading());
     try {
       final emailLower = event.email.trim().toLowerCase();
-
+      final Map<String, dynamic> res;
       try {
-        final res = await _laravelAuthService.register(
+        res = await _laravelAuthService.register(
           name: event.fullName.trim(),
           email: emailLower,
           password: event.password,
           role: 'adopter',
         );
-        if (res['status'] == 'success' || res['success'] == true) {
-          final token = (res['access_token'] ?? res['token'])?.toString();
-          final userMap = res['user'] as Map<String, dynamic>?;
-          if (token != null && userMap != null) {
-            final user = UserProfile.fromJson(userMap);
-            await SecureStorageService.instance.saveAuthToken(token);
-            await SecureStorageService.instance.saveUserProfile(user);
-            _currentUser = user;
-            emit(Authenticated(user, isNewUser: true));
-            return;
-          }
-          // Fail closed: the server created nothing usable for this device.
-          emit(const AuthFailure(
-            'Your account could not be confirmed. Please sign in instead.',
-          ));
-          return;
-        }
-
-
-        // A parsed 200 that is not a success carries the server's own reason.
+      } catch (registerErr) {
+        debugPrint('[AuthBloc] register failed: $registerErr');
         emit(AuthFailure(describeNetworkFailure(
-          Exception(res['message']?.toString() ?? ''),
-          fallback: 'Could not create your account. Please try again.',
-        )));
-        return;
-      } catch (laravelErr) {
-        debugPrint('[AuthBloc] Laravel register failed: $laravelErr');
-        // Fail closed: an account only exists once a server has created it.
-        // The message stays accurate: a 422 duplicate email is not "unreachable".
-        emit(AuthFailure(describeNetworkFailure(
-          laravelErr,
+          registerErr,
           fallback:
-              'Could not create your account. The authentication server is unreachable — please try again.',
+              'Could not create your account. Please check your details and try again.',
         )));
         return;
       }
+
+      // Supabase created the account but the user must confirm the email
+      // first. That is not a failure: say so and let them sign in afterwards.
+      if (res['status'] == 'pending_confirmation') {
+        emit(AuthSignUpConfirmationPending(
+          email: res['email']?.toString() ?? emailLower,
+          message: res['message']?.toString() ??
+              'Account created. Check your inbox for the confirmation link, '
+                  'then sign in.',
+        ));
+        return;
+      }
+
+      if (res['status'] == 'success' || res['success'] == true) {
+        final token = (res['access_token'] ?? res['token'])?.toString();
+        final userMap = res['user'];
+        if (token != null && token.isNotEmpty && userMap is Map) {
+          final user = UserProfile.fromJson(
+            Map<String, dynamic>.from(userMap),
+          );
+          await SecureStorageService.instance.saveAuthToken(token);
+          await SecureStorageService.instance.saveUserProfile(user);
+          _currentUser = user;
+          emit(Authenticated(user, isNewUser: true));
+          return;
+        }
+        // Fail closed: no server-issued session means nobody is signed in.
+        emit(const AuthFailure(
+          'Your account could not be confirmed. Please sign in instead.',
+        ));
+        return;
+      }
+
+      // A parsed 200 that is not a success carries the server's own reason.
+      emit(AuthFailure(describeNetworkFailure(
+        Exception(res['message']?.toString() ?? ''),
+        fallback: 'Could not create your account. Please try again.',
+      )));
     } catch (e) {
       emit(AuthFailure(describeNetworkFailure(e)));
     }
@@ -662,6 +714,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       if (event.provider == 'google') {
         final result = await GoogleAuthService.signIn();
+        if (result.isRedirecting) {
+          // The browser is on its way to Google. Keep the loading state until
+          // the callback route emits the authenticated user.
+          return;
+        }
         if (result.success && result.user != null) {
           _currentUser = result.user!;
           await SecureStorageService.instance.saveUserProfile(_currentUser!);
@@ -707,6 +764,56 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   void _onSwitchRole(SwitchRoleEvent event, Emitter<AuthState> emit) {
     emit(const AuthFailure('Role changes must be granted by the server. Local role elevation is disabled.'));
+  }
+
+  Future<void> _onRequestPasswordReset(
+    RequestPasswordResetEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    final email = event.email.trim().toLowerCase();
+    if (email.isEmpty || !email.contains('@')) {
+      emit(const AuthFailure('Enter your email address first.'));
+      return;
+    }
+    emit(AuthLoading());
+    try {
+      await _laravelAuthService.requestPasswordReset(email);
+      emit(AuthEmailDispatched(
+        email: email,
+        message:
+            'If an account exists for $email, a password reset link is on its '
+            'way. Open it on this device to set a new password.',
+      ));
+    } catch (e) {
+      emit(AuthFailure(describeNetworkFailure(
+        e,
+        fallback: 'Could not send the password reset email. Please try again.',
+      )));
+    }
+  }
+
+  Future<void> _onResendConfirmation(
+    ResendConfirmationEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    final email = event.email.trim().toLowerCase();
+    if (email.isEmpty || !email.contains('@')) {
+      emit(const AuthFailure('Enter your email address first.'));
+      return;
+    }
+    emit(AuthLoading());
+    try {
+      await _laravelAuthService.resendConfirmationEmail(email);
+      emit(AuthEmailDispatched(
+        email: email,
+        message: 'Confirmation email sent to $email. Check your inbox and spam.',
+      ));
+    } catch (e) {
+      emit(AuthFailure(describeNetworkFailure(
+        e,
+        fallback: 'Could not resend the confirmation email. Please try again.',
+      )));
+    }
   }
 
   Future<void> _onLogout(LogoutEvent event, Emitter<AuthState> emit) async {

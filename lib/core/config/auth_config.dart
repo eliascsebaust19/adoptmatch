@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 /// Single source of truth for authentication configuration.
 ///
 /// Every layer (Google Sign-In, Supabase, Laravel/Node token exchange) must use
@@ -25,6 +27,37 @@ class AuthConfig {
   );
 
   static bool get isGoogleConfigured => googleWebClientId.trim().isNotEmpty;
+
+  /// Deep link scheme registered by the Android manifest and the iOS
+  /// `CFBundleURLSchemes` entry.
+  static const String appUrlScheme = 'adoptmatch';
+
+  /// Where Supabase sends the user back after a Google OAuth round-trip or a
+  /// confirmation / recovery email.
+  ///
+  /// On web this must be the origin the app is actually served from, not a
+  /// hardcoded localhost port: a mismatch sends the browser to a dead page and
+  /// the PKCE code is never exchanged. Every value produced here has to be
+  /// listed in Supabase → Authentication → URL Configuration → Redirect URLs.
+  static String get oauthRedirectUrl => kIsWeb
+      ? '${Uri.base.origin}/auth-callback'
+      : '$appUrlScheme://auth-callback';
+
+  /// Same target, named for email templates (`emailRedirectTo`).
+  static String get emailRedirectUrl => oauthRedirectUrl;
+
+  /// Recovery links land on a dedicated screen so the user can actually set a
+  /// new password. Supabase matches redirect URLs against the allowlist, so
+  /// this value must be listed in the dashboard as well.
+  static String get passwordResetRedirectUrl => kIsWeb
+      ? '${Uri.base.origin}/auth/reset-password'
+      : '$appUrlScheme://auth-callback?type=recovery';
+
+  /// The debug keystore fingerprint. Release builds are signed with a different
+  /// key and need their own Android OAuth client, so this value only describes
+  /// development builds.
+  static const String debugAndroidSha1 =
+      '88:60:0E:C9:44:D9:F7:FE:5B:DC:53:74:3C:BA:B1:25:32:0C:09:7B';
 
   /// Actionable message when Google did not return an ID token. This is almost
   /// always a platform registration problem, not a server problem.

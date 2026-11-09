@@ -14,6 +14,8 @@ import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../config/auth_config.dart';
+
 class SupabaseConfig {
   const SupabaseConfig({required this.url, required this.anonKey});
 
@@ -45,14 +47,31 @@ class AdoptMatchBackend {
 
   static bool get isInitialized {
     try {
-      return Supabase.instance.client.auth.currentSession != null || true;
+      // Touching `Supabase.instance` throws when initialize() has not run.
+      // Do not short-circuit on the session: a signed-out client is still a
+      // working client, and callers use this to choose Supabase over REST.
+      Supabase.instance.client;
+      return true;
     } catch (_) {
       return false;
     }
   }
 
-  AdoptMatchBackend({SupabaseClient? client})
-    : _db = client ?? Supabase.instance.client;
+  /// [client] is required for tests; production code uses the singleton
+  /// client created by `Supabase.initialize()`.
+  AdoptMatchBackend({SupabaseClient? client}) : _db = client ?? _requireClient();
+
+  static SupabaseClient _requireClient() {
+    try {
+      return Supabase.instance.client;
+    } catch (_) {
+      throw AdoptMatchException(
+        'Supabase has not been initialized. Call Supabase.initialize() before '
+        'using the Supabase backend.',
+        code: 'NOT_INITIALIZED',
+      );
+    }
+  }
 
   final SupabaseClient _db;
 
@@ -95,7 +114,9 @@ class AdoptMatchBackend {
     }
   }
 
-  Future<void> signUpWithEmail({
+  /// Returns `true` when Supabase created the account but requires the user to
+  /// click the confirmation link before a session exists.
+  Future<bool> signUpWithEmail({
     required String email,
     required String password,
     required String fullName,
@@ -105,13 +126,9 @@ class AdoptMatchBackend {
         email: email.trim().toLowerCase(),
         password: password,
         data: {'full_name': fullName.trim()},
+        emailRedirectTo: AuthConfig.emailRedirectUrl,
       );
-      if (response.session == null) {
-        throw AdoptMatchException(
-          'Check your email to confirm the account, then sign in.',
-          code: 'EMAIL_CONFIRMATION_REQUIRED',
-        );
-      }
+      return response.session == null;
     } on AuthException catch (error) {
       throw AdoptMatchException(error.message, code: 'SIGN_UP_FAILED');
     }
@@ -162,6 +179,41 @@ class AdoptMatchBackend {
 
   Future<void> signOut() async {
     await _db.auth.signOut();
+  }
+
+  /// Sends the password-recovery email. The link returns to
+  /// [AuthConfig.emailRedirectUrl], where the PKCE code is exchanged for a
+  /// short-lived session that [updatePassword] can use.
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      await _db.auth.resetPasswordForEmail(
+        email.trim().toLowerCase(),
+        redirectTo: AuthConfig.passwordResetRedirectUrl,
+      );
+    } on AuthException catch (error) {
+      throw AdoptMatchException(
+        error.message,
+        code: 'PASSWORD_RESET_FAILED',
+      );
+    }
+  }
+
+  /// Re-sends the sign-up confirmation email for an account that is not yet
+  /// verified. Supabase reports the same result for unknown addresses, which is
+  /// intentional: it does not leak whether an account exists.
+  Future<void> resendConfirmationEmail(String email) async {
+    try {
+      await _db.auth.resend(
+        type: OtpType.signup,
+        email: email.trim().toLowerCase(),
+        emailRedirectTo: AuthConfig.emailRedirectUrl,
+      );
+    } on AuthException catch (error) {
+      throw AdoptMatchException(
+        error.message,
+        code: 'CONFIRMATION_RESEND_FAILED',
+      );
+    }
   }
 
   Future<Map<String, dynamic>?> myProfile() async {

@@ -59,19 +59,30 @@ class StorageService {
   }
 
   /// Uploads a user profile photo through Supabase or the authenticated backend.
+  ///
+  /// Objects must live under `{auth.uid()}/...`: the `avatars` bucket policy in
+  /// 20261109091200_storage_buckets.sql rejects any other prefix, so a path
+  /// like `profiles/...` always failed and every upload quietly fell through to
+  /// the REST backend.
+  ///
   /// Throws when no provider accepts the bytes; never returns a fabricated URL.
   static Future<String> uploadProfileImage({
     required Uint8List bytes,
     required String fileName,
     String? userId,
   }) async {
-    final sanitizedFileName = fileName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
-    final uniquePath = 'profiles/${userId ?? "usr"}_${DateTime.now().millisecondsSinceEpoch}_$sanitizedFileName';
+    final sanitizedFileName =
+        fileName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
 
-    // 1. Primary: Upload via Supabase Storage if initialized
-    if (SupabaseService.isInitialized) {
+    final owner = SupabaseService.isInitialized
+        ? (SupabaseService.auth.currentUser?.id ?? userId)
+        : userId;
+
+    if (SupabaseService.isInitialized && owner != null && owner.isNotEmpty) {
       try {
         final storage = SupabaseService.client.storage.from('avatars');
+        final uniquePath =
+            '$owner/avatar_${DateTime.now().millisecondsSinceEpoch}_$sanitizedFileName';
         await storage.uploadBinary(
           uniquePath,
           bytes,
@@ -83,15 +94,18 @@ class StorageService {
 
         final publicUrl = storage.getPublicUrl(uniquePath);
         if (publicUrl.isNotEmpty) {
-          debugPrint('[StorageService] Uploaded successfully to Supabase Storage: $publicUrl');
+          debugPrint(
+              '[StorageService] Uploaded to Supabase Storage: $publicUrl');
           return publicUrl;
         }
+      } on StorageException catch (e) {
+        debugPrint('[StorageService] Supabase upload rejected: ${e.message}');
       } catch (e) {
         debugPrint('[StorageService] Supabase upload notice: $e');
       }
     }
 
-    // 3. Tertiary: Upload to Laravel 11 Backend & Cloudinary CDN
+    // Fallback: the REST backend, when its upload endpoint is configured.
     try {
       final backendUrl = await uploadToCloudinaryOrBackend(
         bytes: bytes,

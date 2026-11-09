@@ -9,6 +9,7 @@ import '../../features/auth/bloc/auth_bloc.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/otp_screen.dart';
 import '../../features/auth/screens/auth_callback_screen.dart';
+import '../../features/auth/screens/reset_password_screen.dart';
 
 // Consumer Screens
 import '../../features/main_navigation/screens/main_nav_screen.dart';
@@ -92,7 +93,10 @@ class AppRouter {
       redirect: (context, state) {
         final authState = authBloc.state;
         final isAuthenticated = authState is Authenticated;
-        final user = isAuthenticated ? authState.user : null;
+        // Read through the promoted local: `authState` is only widened by the
+        // bool above, so `.user` / `.pendingRoute` need the explicit cast.
+        final authenticated = authState is Authenticated ? authState : null;
+        final user = authenticated?.user;
         final role = user?.role ?? UserRole.adopter;
         final hasAdminAccess = role.hasAdminAccess;
 
@@ -102,6 +106,9 @@ class AppRouter {
         final hasSeenOnboarding = LocalStorageService.instance.hasSeenOnboarding;
         final isOnboardingPath = path == '/onboarding';
         final isSplashPath = path == '/splash';
+        final isAuthCallback = path == '/auth-callback' ||
+            path == '/auth/callback' ||
+            path == '/auth/reset-password';
 
         // 0. Splash screen has priority to verify session & route
         if (isSplashPath) {
@@ -110,8 +117,19 @@ class AppRouter {
 
         // 1. Authenticated users:
         if (isAuthenticated) {
+          // The callback screen still has to hand the session to the bloc and
+          // show its confirmation. Redirecting out from under it loses the
+          // "new user" welcome and, on web, the URL cleanup.
+          if (isAuthCallback) {
+            return null;
+          }
+          // A recovery deep link asks for the password form, not the app.
+          if (path == '/login') {
+            return authenticated?.pendingRoute ??
+                (hasAdminAccess ? '/admin/dashboard' : '/home');
+          }
           // If on auth or onboarding screens, redirect to destination
-          if (isOnboardingPath || path == '/login' || path == '/register') {
+          if (isOnboardingPath || path == '/register') {
             return hasAdminAccess ? '/admin/dashboard' : '/home';
           }
           // Guard admin vs consumer
@@ -128,7 +146,11 @@ class AppRouter {
         }
 
         // 2. Unauthenticated first-time visitors:
-        if (!hasSeenOnboarding && !isAdminPath && path != '/login' && path != '/register' && path != '/auth-callback') {
+        if (!hasSeenOnboarding &&
+            !isAdminPath &&
+            !isAuthCallback &&
+            path != '/login' &&
+            path != '/register') {
           if (!isOnboardingPath) {
             return '/onboarding';
           }
@@ -146,7 +168,10 @@ class AppRouter {
         }
 
         // 5. Unauthenticated users attempting to access account-restricted screens
-        if (!isAdminPath && path != '/login' && path != '/onboarding' && path != '/auth-callback') {
+        if (!isAdminPath &&
+            !isAuthCallback &&
+            path != '/login' &&
+            path != '/onboarding') {
           if (path.startsWith('/profile') || path.startsWith('/chat') || path.startsWith('/applications')) {
             return '/login';
           }
@@ -304,12 +329,17 @@ class AppRouter {
         GoRoute(
           parentNavigatorKey: rootNavigatorKey,
           path: '/auth/callback',
-          builder: (context, state) => const AuthCallbackScreen(),
+          builder: (context, state) => _authRedirectTarget(state),
         ),
         GoRoute(
           parentNavigatorKey: rootNavigatorKey,
           path: '/auth-callback',
-          builder: (context, state) => const AuthCallbackScreen(),
+          builder: (context, state) => _authRedirectTarget(state),
+        ),
+        GoRoute(
+          parentNavigatorKey: rootNavigatorKey,
+          path: '/auth/reset-password',
+          builder: (context, state) => const ResetPasswordScreen(),
         ),
         GoRoute(
           parentNavigatorKey: rootNavigatorKey,
@@ -504,6 +534,15 @@ class AppRouter {
         ),
       ),
     );
+  }
+
+  /// A recovery link carries `?type=recovery`; everything else is a normal
+  /// sign-in or confirmation callback.
+  static Widget _authRedirectTarget(GoRouterState state) {
+    if (state.uri.queryParameters['type'] == 'recovery') {
+      return const ResetPasswordScreen();
+    }
+    return const AuthCallbackScreen();
   }
 
   static final GoRouter router = createRouter();

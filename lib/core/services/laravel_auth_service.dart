@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../config/auth_config.dart';
 import '../network/api_client.dart';
 import '../supabase/adoptmatch_supabase.dart';
 import 'google_auth_service.dart';
@@ -19,20 +20,44 @@ class LaravelAuthService {
               serverClientId: kIsWeb ? null : GoogleAuthService.webClientId,
             );
 
-  /// Sign in with Google: Obtains the real Google idToken and exchanges it
-  /// with Laravel 11 for a Sanctum Personal Access Token without Firebase.
+  /// Sign in with Google.
+  ///
+  /// Two paths, and the right one depends on the platform:
+  /// * Android/iOS get a Google ID token from the native picker and exchange it
+  ///   with the server that verifies it.
+  /// * Web has no ID token to hand out reliably (popups get blocked, origins
+  ///   get rejected), so it uses Supabase's OAuth redirect, which returns a
+  ///   real Supabase session through the `/auth-callback` route.
   Future<Map<String, dynamic>?> signInWithGoogle() async {
     // The account picker gives the instance a head start on booting.
     final warmUp = ApiClient.warmUp();
     try {
+      if (kIsWeb) {
+        if (!AdoptMatchBackend.isInitialized) {
+          throw Exception(
+            'Google sign-in on web requires the Supabase project. '
+            'Set SUPABASE_URL and SUPABASE_ANON_KEY.',
+          );
+        }
+        final redirected = await Supabase.instance.client.auth.signInWithOAuth(
+          OAuthProvider.google,
+          redirectTo: AuthConfig.oauthRedirectUrl,
+        );
+        // The browser is leaving the page; the callback route finishes the job.
+        return redirected ? {'status': 'redirecting'} : null;
+      }
+
       final googleUser = await _googleSignIn.signIn();
       if (googleUser == null) return null; // Cancelled
 
       final googleAuth = await googleUser.authentication;
       final idToken = googleAuth.idToken;
 
-      if (idToken == null) {
-        throw Exception('Failed to obtain Google ID Token.');
+      if (idToken == null || idToken.isEmpty) {
+        throw Exception(
+          'Google did not return an ID token. Check the Android client SHA-1 '
+          'and the Web client ID. See docs/AUTH_SETUP.md.',
+        );
       }
 
       await warmUp;
@@ -153,6 +178,11 @@ class LaravelAuthService {
   }
 
   /// Register new user with Role (adopter, pet_owner, shelter)
+  ///
+  /// Returns `{'status': 'pending_confirmation', 'email': ...}` when Supabase
+  /// created the account but the user still has to click the confirmation
+  /// link. That is a success, not a failure: reporting it as one is what made
+  /// sign-up look broken on a project with email confirmations enabled.
   Future<Map<String, dynamic>> register({
     required String name,
     required String email,
@@ -161,27 +191,44 @@ class LaravelAuthService {
     String? phone,
   }) async {
     if (AdoptMatchBackend.isInitialized) {
+      final bool needsConfirmation;
       try {
-        await AdoptMatchBackend.instance.signUpWithEmail(
+        needsConfirmation = await AdoptMatchBackend.instance.signUpWithEmail(
           email: email,
           password: password,
           fullName: name,
         );
-        final profile = await AdoptMatchBackend.instance.myProfile() ?? {};
-        final access = Supabase.instance.client.auth.currentSession?.accessToken ?? '';
-        return {
-          'status': 'success',
-          'access_token': access,
-          'user': {
-            'id': profile['id'],
-            'name': profile['full_name'] ?? name,
-            'email': profile['email'] ?? email,
-            'role': profile['role'] ?? 'adopter',
-          }
-        };
       } on AdoptMatchException catch (e) {
         throw Exception(e.message);
       }
+
+      if (needsConfirmation) {
+        return {
+          'status': 'pending_confirmation',
+          'email': email.trim().toLowerCase(),
+          'message':
+              'Account created. Check $email for the confirmation link, then sign in.',
+        };
+      }
+
+      final profile = await AdoptMatchBackend.instance.myProfile() ?? {};
+      final access = Supabase.instance.client.auth.currentSession?.accessToken ?? '';
+      if (access.isEmpty) {
+        throw Exception(
+          'Account created, but no session was issued. Please sign in.',
+        );
+      }
+      return {
+        'status': 'success',
+        'access_token': access,
+        'user': {
+          'id': profile['id'],
+          'name': profile['full_name'] ?? name,
+          'email': profile['email'] ?? email,
+          'phone': profile['phone'] ?? phone ?? '',
+          'role': profile['role'] ?? 'adopter',
+        }
+      };
     }
     await ApiClient.awaitWarmUp();
     final response = await _apiClient.dio.post('/auth/register', data: {
@@ -197,6 +244,32 @@ class LaravelAuthService {
       await ApiClient.saveToken(token);
     }
     return response.data;
+  }
+
+  /// Sends the password-recovery email through Supabase Auth.
+  Future<void> requestPasswordReset(String email) async {
+    if (!AdoptMatchBackend.isInitialized) {
+      throw Exception(
+        'Password recovery requires the Supabase project to be configured.',
+      );
+    }
+    try {
+      await AdoptMatchBackend.instance.sendPasswordResetEmail(email);
+    } on AdoptMatchException catch (e) {
+      throw Exception(e.message);
+    }
+  }
+
+  /// Re-sends the sign-up confirmation email.
+  Future<void> resendConfirmationEmail(String email) async {
+    if (!AdoptMatchBackend.isInitialized) {
+      throw Exception('Email confirmation requires the Supabase project.');
+    }
+    try {
+      await AdoptMatchBackend.instance.resendConfirmationEmail(email);
+    } on AdoptMatchException catch (e) {
+      throw Exception(e.message);
+    }
   }
 
   /// Change the password on the server. Throws unless the server confirms it.

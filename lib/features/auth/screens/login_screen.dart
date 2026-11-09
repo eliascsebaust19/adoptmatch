@@ -85,19 +85,26 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  void _showEmailConfirmationDialog(String email, String message) {
+  void _showEmailConfirmationDialog(
+    String email,
+    String message, {
+    String title = 'Verify Your Email',
+    bool showResend = true,
+  }) {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
-          children: const [
-            Icon(Icons.mark_email_read_rounded, color: Color(0xFFE05626), size: 26),
-            SizedBox(width: 10),
-            Text(
-              'Verify Your Email',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)),
+          children: [
+            const Icon(Icons.mark_email_read_rounded, color: Color(0xFFE05626), size: 26),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                title,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)),
+              ),
             ),
           ],
         ),
@@ -135,6 +142,20 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
         ),
         actions: [
+          if (showResend)
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                context.read<AuthBloc>().add(ResendConfirmationEvent(email));
+              },
+              child: const Text(
+                'Resend email',
+                style: TextStyle(
+                  color: Color(0xFFE05626),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFE05626),
@@ -148,7 +169,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 _isSignUp = false; // Switch to Sign In mode
               });
             },
-            child: const Text('Understood, I will check Gmail'),
+            child: const Text('I will check my inbox'),
           ),
         ],
       ),
@@ -182,6 +203,20 @@ class _LoginScreenState extends State<LoginScreen> {
           style: const TextStyle(fontSize: 13, color: Color(0xFF475569), height: 1.4),
         ),
         actions: [
+          if (isUnverified)
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                final email = _emailController.text.trim();
+                if (email.isNotEmpty) {
+                  context.read<AuthBloc>().add(ResendConfirmationEvent(email));
+                }
+              },
+              child: const Text(
+                'Resend link',
+                style: TextStyle(color: Color(0xFFE05626), fontWeight: FontWeight.bold),
+              ),
+            ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('OK', style: TextStyle(color: Color(0xFFE05626), fontWeight: FontWeight.bold)),
@@ -208,6 +243,15 @@ class _LoginScreenState extends State<LoginScreen> {
             }
           } else if (state is AuthSignUpConfirmationPending) {
             _showEmailConfirmationDialog(state.email, state.message);
+          } else if (state is AuthEmailDispatched) {
+            // Password recovery: resending the confirmation mail would be the
+            // wrong action, so only the acknowledge button is offered.
+            _showEmailConfirmationDialog(
+              state.email,
+              state.message,
+              title: 'Email Sent',
+              showResend: false,
+            );
           } else if (state is AuthFailure) {
             _showErrorDialog(state.errorMessage);
           }
@@ -293,7 +337,16 @@ class _LoginScreenState extends State<LoginScreen> {
                             if (!_isSignUp)
                               GestureDetector(
                                 onTap: () {
-                                  _showToast('Password reset link has been dispatched to email.');
+                                  final email = _emailController.text.trim();
+                                  if (email.isEmpty || !email.contains('@')) {
+                                    _showToast(
+                                      'Enter your email address, then tap Forgot Password.',
+                                    );
+                                    return;
+                                  }
+                                  context
+                                      .read<AuthBloc>()
+                                      .add(RequestPasswordResetEvent(email));
                                 },
                                 child: const Text(
                                   'Forgot Password?',

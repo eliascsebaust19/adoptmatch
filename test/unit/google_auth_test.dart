@@ -63,6 +63,17 @@ void main() {
       expect(msg, contains('docs/AUTH_SETUP.md'));
     });
 
+    test('redirect targets are the ones registered in the Supabase allowlist', () {
+      // Mobile builds must use the scheme declared in AndroidManifest.xml and
+      // Info.plist; a mismatch means the link never reaches the app.
+      expect(AuthConfig.oauthRedirectUrl, startsWith('${AuthConfig.appUrlScheme}://'));
+      expect(AuthConfig.oauthRedirectUrl, contains('auth-callback'));
+      expect(AuthConfig.passwordResetRedirectUrl, isNot(isEmpty));
+      // Recovery must be distinguishable from a normal sign-in on the callback
+      // screen, otherwise it silently logs the user in instead.
+      expect(AuthConfig.passwordResetRedirectUrl, contains('recovery'));
+    });
+
     test('GoogleAuthService.signIn() returns wasCancelled when user closes dialog', () async {
       when(() => mockSignIn.signIn()).thenAnswer((_) async => null);
 

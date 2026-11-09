@@ -71,3 +71,29 @@ Follow-up change set on top of the verified results above:
 | Preflight | `npm --prefix backend run check:config` reports missing auth config and exits 1 | Verified locally: unset -> exit 1, configured -> exit 0 | Run in the deployment pipeline |
 
 See `docs/AUTH_SETUP.md` for the values the operator must provide.
+
+## Auth flow repair pass (redirect, confirmation, recovery)
+
+The previous pass removed the fake local fallbacks, but the flows that depend on
+a redirect were never finished. A sign-in that leaves the page and comes back
+had no code to complete it, so Google on web and every email link ended on a
+screen that could not sign anyone in.
+
+| Area | Problem | Change | Verified |
+|---|---|---|---|
+| Web OAuth callback | Supabase returns `?code=`, nothing exchanged it; the callback screen only listened for a session that never arrived | `SupabaseService.completeWebRedirect()` redeems the PKCE code (`getSessionFromUrl`, plus implicit-flow `setSession`); called from `/auth-callback` before any navigation | Reviewed; needs a real OAuth round-trip |
+| Redirect URL | Web sent either no `redirect_to` or a hardcoded `adoptmatch://` value; `signInWithOAuth` on web had no fallback at all | `AuthConfig.oauthRedirectUrl` / `passwordResetRedirectUrl` derive from `Uri.base.origin` on web; `config.toml` and the docs list the allowlist | Static review |
+| Web URL strategy | Default hash strategy would deliver the code as `/#/auth-callback?code=` | `configureUrlStrategyForBrowser()` (path strategy) runs in `main()` before `runApp`, behind a conditional import so native builds are untouched | Static review; needs `flutter analyze` |
+| Sign-up with confirmations on | `signUpWithEmail` threw "check your email" as an error, so a successful registration showed a failure | Returns `needsConfirmation`; the bloc emits `AuthSignUpConfirmationPending` and the dialog offers a real resend | 2 new bloc tests |
+| Forgot password | Button showed a success toast without calling anything | `RequestPasswordResetEvent` -> `resetPasswordForEmail`; `AuthEmailDispatched` state; errors are surfaced | 3 new bloc tests |
+| Password recovery landing | Link signed the user in and dropped them in the app with no way to set a password | New `/auth/reset-password` screen + route; `?type=recovery` links route there on web and mobile (`AuthChangeEvent.passwordRecovery`) | Reviewed |
+| Mobile OAuth deep link | Only the callback screen listened to Supabase auth, so a `adoptmatch://` return never reached the bloc | `main()` bridges `onAuthStateChange` into `CheckSessionEvent`, guarded against racing an in-flight sign-in | Reviewed |
+| Router guards | `/auth-callback` was missing from the first-time-user guard, and an authenticated user was redirected away from the callback before it could finish | Callback/recovery paths exempted in both guards; `Authenticated.pendingRoute` keeps recovery routing | Reviewed |
+| Deep-link ownership | Both Flutter and `app_links` were eligible to consume the auth URL | `flutter_deeplinking_enabled` (Android) and `FlutterDeepLinkingEnabled` (iOS) set to false | Static review |
+| Avatar upload | Objects were written to `profiles/...`, which the `avatars` policy rejects, so every upload silently fell back | Uploads use `{auth.uid()}/...`; the owner id comes from the session | 1 new test |
+| Initialization flags | `AdoptMatchBackend.isInitialized` returned `true` unconditionally; `SupabaseService.isInitialized` was false after `main()` initialized the client | Both now probe the real client; the backend constructor throws a plain message instead of `LateInitializationError` | Static review |
+| Release signing | The only documented SHA-1 belongs to the debug keystore, so release builds fail Google sign-in with `ApiException 10` | Docs call out the required second Android client; the error text no longer claims one fingerprint fits every build | Static review |
+
+Not executed here: the sandbox has no Flutter/Dart SDK and cannot reach the SDK
+archive. `flutter analyze` and `flutter test` still need to run in CI, and the
+OAuth/recovery round-trips need a real Supabase project.

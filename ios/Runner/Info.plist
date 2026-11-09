@@ -66,6 +66,10 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- app_links handles `adoptmatch://auth-callback`; the implicit Flutter
+	     handler would otherwise also try to route it. -->
+	<key>FlutterDeepLinkingEnabled</key>
+	<false/>
 	<key>GIDClientID</key>
 	<string>$(GOOGLE_IOS_CLIENT_ID)</string>
 	<key>GIDServerClientID</key>

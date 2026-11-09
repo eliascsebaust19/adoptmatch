@@ -34,6 +34,11 @@ AdoptMatch operates without legacy Laravel, Node backend, or MySQL in the reques
    - Client ID: `<YOUR_GOOGLE_CLIENT_ID>`
    - Client Secret: `<YOUR_GOOGLE_CLIENT_SECRET>`
    - Authorized Redirect URI: `https://<PROJECT_REF>.supabase.co/auth/v1/callback`
+   - Then, in Supabase → Authentication → URL Configuration, allowlist the URLs
+     the app redirects back to (web: `<origin>/auth-callback` and
+     `<origin>/auth/reset-password`; mobile: `adoptmatch://auth-callback`).
+     Without them the dashboard returns `requested path is invalid` and the
+     user is dropped back on the sign-in screen.
 3. **Authentication → Settings**:
    - Ensure **Email Confirmations** are configured with your custom SMTP (or auto-confirm for sandbox testing).
 

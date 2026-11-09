@@ -67,6 +67,23 @@ Then, in the dashboard:
 1. **Authentication → Providers → Google** — paste the Web client ID and secret.
    Authorised redirect: `https://<ref>.supabase.co/auth/v1/callback`. Add the
    same origin to Google Cloud Console.
+1a. **Authentication → URL Configuration** — this one is easy to skip and it
+   breaks sign-in on every platform. The Flutter client always sends an
+   explicit `redirect_to` (`<origin>/auth-callback` on web,
+   `adoptmatch://auth-callback` on mobile), and Supabase rejects any value that
+   is not allowlisted. Add:
+
+   ```
+   http://localhost:5000/auth-callback
+   http://localhost:5000/auth/reset-password
+   https://<your-web-origin>/auth-callback
+   https://<your-web-origin>/auth/reset-password
+   adoptmatch://auth-callback
+   adoptmatch://auth-callback?type=recovery
+   ```
+
+   Set the Site URL to the production web origin. See docs/AUTH_SETUP.md for the
+   full matrix and the matching Google Cloud Console entries.
 2. **Authentication → Hooks → Custom access token** — choose
    `public.custom_access_token_hook`. Without this, `app_role` never reaches the
    JWT and every staff policy denies.
