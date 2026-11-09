@@ -77,8 +77,12 @@ export function tail(pathname: string): string {
 /** Path without the function prefix, e.g. `admin/users/abc` → `users/abc`. */
 export function routeOf(req: Request, functionName: string): string {
   const url = new URL(req.url);
-  const marker = `/functions/v1/${functionName}`;
-  const index = url.pathname.indexOf(marker);
-  const rest = index >= 0 ? url.pathname.slice(index + marker.length) : url.pathname;
-  return rest.replace(/^\/+/, '');
+  let path = url.pathname;
+  const longMarker = `/functions/v1/${functionName}`;
+  if (path.startsWith(longMarker)) {
+    path = path.slice(longMarker.length);
+  } else if (path.startsWith(`/${functionName}`)) {
+    path = path.slice(functionName.length + 1);
+  }
+  return path.replace(/^\/+/, '');
 }

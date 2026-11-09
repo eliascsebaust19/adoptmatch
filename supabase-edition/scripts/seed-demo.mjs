@@ -114,11 +114,13 @@ async function ensurePets(ownerId, shelterId) {
     is_active: true,
   }));
 
-  await api('/rest/v1/pets', {
-    method: 'POST',
-    headers: { ...headers, Prefer: 'return=minimal' },
-    body: JSON.stringify(pets),
-  });
+  for (const pet of pets) {
+    await api('/rest/v1/pets', {
+      method: 'POST',
+      headers: { ...headers, Prefer: 'return=minimal' },
+      body: JSON.stringify(pet),
+    });
+  }
 
   console.log(`✔ Inserted ${pets.length} demo listings.`);
 }

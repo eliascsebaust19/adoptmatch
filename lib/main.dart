@@ -16,11 +16,11 @@ Future<void> main() async {
   await Supabase.initialize(
     url: const String.fromEnvironment(
       'SUPABASE_URL',
-      defaultValue: 'https://haxrxmcggaspjhdltfvk.supabase.co',
+      defaultValue: 'https://wgztdhabgedhkaippkpd.supabase.co',
     ),
     anonKey: const String.fromEnvironment(
       'SUPABASE_ANON_KEY',
-      defaultValue: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhheHJ4bWNnZ2FzcGpoZGx0ZnZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyNDc2MDAsImV4cCI6MjEwNzgyMzYwMH0.7tKIlhHcS6ZJQ_2H9VrRDn5dgE4YSMRfGeYt2SA7zYc',
+      defaultValue: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndnenRkaGFiZ2VkaGthaXBwa3BkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3ODAzMTksImV4cCI6MjEwODM1NjMxOX0.KolY1dw6NuDxZAt14bCcJz0NLLmMa05HHixz4TFtZMM',
     ),
   );
   await LocalStorageService.instance.init();

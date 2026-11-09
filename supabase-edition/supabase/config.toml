@@ -24,7 +24,7 @@ sql_paths = ["./seed.sql"]
 enabled = true
 port = 54323
 
-[inbucket]
+[local_smtp]
 enabled = true
 port = 54324
 
@@ -51,13 +51,13 @@ enabled = true
 uri = "pg-functions://postgres/public/custom_access_token_hook"
 
 [auth.email]
-enable_signup = true
+enabled = true
 # Local development leaves confirmation off; turn it on for the hosted project
 # once SMTP is configured, otherwise anyone can sign up with an unverified inbox.
 enable_confirmations = false
 
 [auth.sms]
-enable_signup = true
+enabled = true
 enable_confirmations = true
 
 [auth.external.google]
