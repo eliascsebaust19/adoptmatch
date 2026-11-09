@@ -97,17 +97,9 @@ class ApiClient {
     if (last != null && DateTime.now().difference(last) < freshness) {
       return Future<void>.value();
     }
-
-    final inFlight = _warmUpInFlight;
-    if (inFlight != null) return inFlight;
-
-    // `a ??= b` keeps the nullable static type of `a`, which cannot be returned
-    // from a `Future<void>` function; assign first, then return the value.
-    final probe = _probeHealth().whenComplete(() {
+    return _warmUpInFlight ??= _probeHealth().whenComplete(() {
       _warmUpInFlight = null;
     });
-    _warmUpInFlight = probe;
-    return probe;
   }
 
   /// Awaits the probe, but never longer than [limit].
