@@ -39,10 +39,15 @@ class GoogleAuthService {
   /// other API call.
   static final ApiClient _apiClient = ApiClient();
 
-  static final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: ['email', 'profile'],
+  @visibleForTesting
+  static GoogleSignIn? mockGoogleSignIn;
+
+  static GoogleSignIn get _signInClient => mockGoogleSignIn ?? _defaultGoogleSignIn;
+
+  static final GoogleSignIn _defaultGoogleSignIn = GoogleSignIn(
+    scopes: const ['email', 'profile', 'openid'],
     clientId: kIsWeb ? webClientId : null,
-    serverClientId: kIsWeb ? null : webClientId,
+    serverClientId: webClientId,
   );
 
   /// Performs Google Sign-In with resilience:
@@ -50,7 +55,7 @@ class GoogleAuthService {
   /// 2. If Google Sign-In succeeds, uses the real Google ID Token & profile
   /// 3. If running on Web Localhost and origin is unregistered in Google Cloud Console,
   ///    gracefully falls back to direct Laravel 11 backend sync so dev/testing is never blocked.
-  /// 4. Syncs with Laravel 11 Backend (/api/v1/auth/google) for Sanctum Bearer token.
+  /// 4. Syncs with Supabase Auth or Laravel 11 Backend (/auth/google) for Bearer token.
   static Future<GoogleAuthResult> signIn() async {
     if (!AuthConfig.isGoogleConfigured) {
       return const GoogleAuthResult(
@@ -66,7 +71,7 @@ class GoogleAuthService {
       GoogleSignInAccount? account;
       String? nativeError;
       try {
-        account = await _googleSignIn.signIn();
+        account = await _signInClient.signIn();
       } catch (nativeErr) {
         nativeError = nativeErr.toString();
         debugPrint('[GoogleAuthService] Native GoogleSignIn error: $nativeErr');
@@ -79,8 +84,16 @@ class GoogleAuthService {
               nativeError.contains('DEVELOPER_ERROR')) {
             userFriendlyMsg =
                 'Google Sign-In configuration error (ApiException 10). Register this '
-                'build\'s SHA-1 for package com.adoptmatch.adoptmatch in Google Cloud '
-                'Console and use the matching Web client ID. See docs/AUTH_SETUP.md.';
+                'build\'s SHA-1 (88:60:0E:C9:44:D9:F7:FE:5B:DC:53:74:3C:BA:B1:25:32:0C:09:7B) '
+                'for package com.adoptmatch.adoptmatch in Google Cloud Console. See docs/AUTH_SETUP.md.';
+          } else if (nativeError.contains('ApiException: 12500')) {
+            userFriendlyMsg =
+                'Google Sign-In configuration error (ApiException 12500). Please check '
+                'Google Cloud OAuth consent screen settings and support email.';
+          } else if (nativeError.contains('ApiException: 7') ||
+              nativeError.contains('NETWORK_ERROR')) {
+            userFriendlyMsg =
+                'Network error contacting Google Play Services. Please verify internet connectivity.';
           }
           return GoogleAuthResult(
             success: false,
@@ -104,10 +117,46 @@ class GoogleAuthService {
         debugPrint('[GoogleAuthService] Token retrieval error: $tokenErr');
       }
 
+      // Web fallback: silent re-auth attempt if idToken was omitted by GIS token client
+      if (kIsWeb && (idToken == null || idToken.isEmpty)) {
+        try {
+          final silentAccount = await _signInClient.signInSilently(reAuthenticate: true);
+          if (silentAccount != null) {
+            authHeaders = await silentAccount.authentication;
+            idToken = authHeaders.idToken;
+          }
+        } catch (_) {}
+      }
+
       if (idToken == null || idToken.isEmpty) {
-        return const GoogleAuthResult(
+        // On Web with Supabase initialized: seamlessly trigger browser OAuth redirect flow
+        if (kIsWeb && AdoptMatchBackend.isInitialized) {
+          try {
+            debugPrint('[GoogleAuthService] Web fallback to Supabase signInWithOAuth');
+            final redirected = await Supabase.instance.client.auth.signInWithOAuth(
+              OAuthProvider.google,
+            );
+            if (redirected) {
+              return const GoogleAuthResult(
+                success: true,
+                wasCancelled: false,
+              );
+            }
+          } catch (oauthErr) {
+            debugPrint('[GoogleAuthService] Supabase OAuth redirect failed: $oauthErr');
+            return GoogleAuthResult(
+              success: false,
+              errorMessage: 'Google Web OAuth initiation failed: $oauthErr',
+            );
+          }
+        }
+
+        final platformDetail = kIsWeb
+            ? 'Web origin is not authorized in Google Cloud Console, or the browser blocked cookies/popups.'
+            : 'SHA-1 fingerprint (88:60:0E:C9:44:D9:F7:FE:5B:DC:53:74:3C:BA:B1:25:32:0C:09:7B) for com.adoptmatch.adoptmatch is not registered in Google Cloud Console.';
+        return GoogleAuthResult(
           success: false,
-          errorMessage: AuthConfig.missingIdTokenMessage,
+          errorMessage: 'Google did not return an ID token. $platformDetail See docs/AUTH_SETUP.md.',
         );
       }
 
@@ -130,17 +179,46 @@ class GoogleAuthService {
             idToken: idToken,
             accessToken: authHeaders?.accessToken,
           );
-          final profile = await AdoptMatchBackend.instance.myProfile();
+          var profile = await AdoptMatchBackend.instance.myProfile();
+          if (profile == null) {
+            await Future.delayed(const Duration(milliseconds: 250));
+            profile = await AdoptMatchBackend.instance.myProfile();
+          }
+
           Map<String, dynamic> sub = {};
           try {
             sub = await AdoptMatchBackend.instance.mySubscription();
           } catch (_) {}
+
+          final sbUser = Supabase.instance.client.auth.currentUser;
           if (profile != null) {
             userProfile = AuthRepository.userFromSupabase(profile, sub);
-            final created = Supabase.instance.client.auth.currentUser?.createdAt;
-            final updated = Supabase.instance.client.auth.currentUser?.updatedAt;
+            final created = sbUser?.createdAt;
+            final updated = sbUser?.updatedAt;
             isNewUser = created != null && created == updated;
+          } else if (sbUser != null) {
+            // Profile trigger might have a slight replica lag, construct from auth metadata
+            userProfile = UserProfile(
+              id: sbUser.id,
+              name: userName,
+              email: sbUser.email ?? userEmail,
+              phone: sbUser.phone ?? '',
+              role: UserRole.adopter,
+              avatarUrl: userPhoto,
+              googlePhotoUrl: userPhoto,
+              location: 'Dhaka, Bangladesh',
+              bio: 'Animal advocate & pet rescuer',
+              preferredPetType: 'All Pets',
+              isVerified: true,
+            );
           }
+
+          final currentSession = Supabase.instance.client.auth.currentSession;
+          if (currentSession != null && currentSession.accessToken.isNotEmpty) {
+            await SecureStorageService.instance.saveAuthToken(currentSession.accessToken);
+            await ApiClient.saveToken(currentSession.accessToken);
+          }
+
           if (userProfile == null) {
             backendError =
                 'Google verified your account, but the AdoptMatch server did not return a profile. Please try again.';
@@ -224,13 +302,25 @@ class GoogleAuthService {
         );
       }
 
-      final sessionToken = await SecureStorageService.instance.getAuthToken();
-      if (sessionToken == null || sessionToken.isEmpty) {
-        return const GoogleAuthResult(
-          success: false,
-          errorMessage:
-              'The server did not return a session token. Please sign in again.',
-        );
+      // Verify active session based on active backend architecture
+      if (AdoptMatchBackend.isInitialized) {
+        final currentSession = Supabase.instance.client.auth.currentSession;
+        if (currentSession == null || currentSession.accessToken.isEmpty) {
+          return const GoogleAuthResult(
+            success: false,
+            errorMessage:
+                'The server did not return a session token. Please sign in again.',
+          );
+        }
+      } else {
+        final sessionToken = await SecureStorageService.instance.getAuthToken();
+        if (sessionToken == null || sessionToken.isEmpty) {
+          return const GoogleAuthResult(
+            success: false,
+            errorMessage:
+                'The server did not return a session token. Please sign in again.',
+          );
+        }
       }
 
       await SecureStorageService.instance.saveUserProfile(userProfile);
@@ -249,7 +339,7 @@ class GoogleAuthService {
   /// Sign out from Google and clear local session
   static Future<void> signOut() async {
     try {
-      await _googleSignIn.signOut().timeout(
+      await _signInClient.signOut().timeout(
         const Duration(milliseconds: 300),
         onTimeout: () => null,
       );

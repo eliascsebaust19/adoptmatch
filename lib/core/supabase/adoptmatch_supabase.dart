@@ -82,6 +82,19 @@ class AdoptMatchBackend {
     }
   }
 
+  Future<bool> signInWithGoogleOAuth({
+    String? redirectTo,
+  }) async {
+    try {
+      return await _db.auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: redirectTo,
+      );
+    } on AuthException catch (error) {
+      throw AdoptMatchException(error.message, code: 'GOOGLE_SIGN_IN_FAILED');
+    }
+  }
+
   Future<void> signUpWithEmail({
     required String email,
     required String password,
