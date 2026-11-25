@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../shared/widgets/app_network_image.dart';
+import '../../../shared/widgets/app_skeleton.dart';
 
+import '../../../core/config/demo_config.dart';
 import '../../../core/models/pet_model.dart';
 import '../../../core/models/application_model.dart';
 import '../../../core/repositories/pet_repository.dart';
@@ -31,6 +33,7 @@ class _AdoptionApplicationScreenState extends State<AdoptionApplicationScreen> {
   bool _hasActiveApp = false;
   String? _activeAppId;
   bool _hasDraft = false;
+  bool _usedDemoFill = false;
 
   // Step 1: Applicant & Contact
   final _nameController = TextEditingController();
@@ -248,6 +251,48 @@ class _AdoptionApplicationScreenState extends State<AdoptionApplicationScreen> {
     }
   }
 
+  void _fillDemoApplicationForm() {
+    setState(() {
+      _usedDemoFill = true;
+      _nameController.text = 'Nadia Rahman';
+      _phoneController.text = '+880 1712-445566';
+      _emailController.text = 'nadia.rahman@demo.adoptmatch.app';
+      _nidController.text = '1996-4410-8821-0012';
+      _emergencyNameController.text = 'Tariq Rahman';
+      _emergencyPhoneController.text = '+880 1811-223344';
+      _addressController.text = 'House 18, Road 7, Dhanmondi, Dhaka';
+      _housingType = 'Independent House';
+      _ownershipStatus = 'Owned';
+      _landlordAllowsPets = true;
+      _yardType = 'Private Fenced Yard';
+      _petLivingSpace = 'Indoor with Yard Access';
+      _step2ValidationError = null;
+      _totalAdults = 3;
+      _hasKids = true;
+      _childrenAgesController.text = '8 yrs';
+      _hasAllergies = false;
+      _hasOtherPets = false;
+      _otherPetsDetailsController.clear();
+      _petExperience = 'Experienced pet parent';
+      _dailyHoursAlone = '2-4 hours';
+      _primaryCaregiverController.text = 'Nadia Rahman';
+      _emergencyVetFund = true;
+      _monthlyBudget = '5,000 - 10,000 BDT';
+      _whyAdoptController.text =
+          'Looking for a loving companion for our family with plenty of daily walks and vet care.';
+      _declarationAgreed = true;
+      _hasSignature = true;
+      _signatureData = '{"strokes":[[[12,24],[64,28],[120,20]]]}';
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Filled demo application across all 5 steps.'),
+        backgroundColor: Color(0xFF0D9488),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -390,6 +435,7 @@ class _AdoptionApplicationScreenState extends State<AdoptionApplicationScreen> {
         monthlyBudget: _monthlyBudget,
         whyAdopt: _whyAdoptController.text.trim(),
         signatureData: _signatureData,
+        allowDemoFallback: _usedDemoFill,
       );
     } catch (e) {
       if (!mounted) return;
@@ -548,7 +594,8 @@ class _AdoptionApplicationScreenState extends State<AdoptionApplicationScreen> {
 
     if (_isLoadingPet) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator(color: teal)),
+        backgroundColor: Color(0xFFF8FAFC),
+        body: SafeArea(child: DetailPageSkeleton()),
       );
     }
 
@@ -565,6 +612,19 @@ class _AdoptionApplicationScreenState extends State<AdoptionApplicationScreen> {
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
         actions: [
+          if (DemoConfig.enableVivaDemoPass)
+            TextButton.icon(
+              onPressed: _fillDemoApplicationForm,
+              icon: const Icon(
+                Icons.auto_fix_high_rounded,
+                size: 17,
+                color: teal,
+              ),
+              label: const Text(
+                'Fill Demo',
+                style: TextStyle(color: teal, fontWeight: FontWeight.w700),
+              ),
+            ),
           TextButton.icon(
             onPressed: _saveDraft,
             icon: const Icon(

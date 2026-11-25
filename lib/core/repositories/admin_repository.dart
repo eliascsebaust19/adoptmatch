@@ -154,6 +154,12 @@ class AdminRepository {
   bool get _useSupabase =>
       AdoptMatchBackend.isInitialized && !_isTestConfigured;
 
+  bool _isDemoToken(String? token) =>
+      token != null &&
+      (token.startsWith('demo_') ||
+          token.startsWith('viva-') ||
+          token.contains('demo-token'));
+
   final _sheltersController =
       StreamController<List<ShelterApplication>>.broadcast();
   final _flaggedPetsController =
@@ -243,6 +249,44 @@ class AdminRepository {
   }
 
   Future<void> refresh() async {
+    if (!_isTestConfigured) {
+      final token = await _readToken();
+      if (_isDemoToken(token)) {
+        lastSyncError = null;
+        if (_users.isEmpty) {
+          _users = List<AdminManagedUser>.from(_defaultDemoUsers);
+        }
+        if (_shelters.isEmpty) {
+          _shelters = List<ShelterApplication>.from(_defaultDemoShelters);
+        }
+        if (_pets.isEmpty) {
+          _pets = List<Pet>.from(_defaultDemoPets);
+        }
+        if (_auditLogs.isEmpty) {
+          _auditLogs = List<AdminAuditLog>.from(_defaultDemoAuditLogs);
+        }
+        _kpis = AdminKPI(
+          totalAdoptions: 12,
+          pendingShelters: _shelters
+              .where((s) => s.status == VerificationStatus.pending)
+              .length,
+          activeRescues: _pets.where((p) => !p.isAdopted).length,
+          totalDonationsBDT: 48500,
+          flaggedListings: _flaggedPets.length,
+          activeDisputes: 0,
+          totalApplications: 3,
+          homeVisits: 1,
+          trialFosters: 0,
+          adoptionsCompleted: 12,
+        );
+        _usersController.add(List.unmodifiable(_users));
+        _sheltersController.add(List.unmodifiable(_shelters));
+        _petsController.add(List.unmodifiable(_pets));
+        _auditLogsController.add(List.unmodifiable(_auditLogs));
+        _flaggedPetsController.add(List.unmodifiable(_flaggedPets));
+        return;
+      }
+    }
     if (_useSupabase) {
       try {
         // 1. Stats KPI

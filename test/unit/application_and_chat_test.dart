@@ -251,7 +251,7 @@ void main() {
         ..configureForTesting(
           ApiPetService(apiClient: api),
           client: MockClient((_) async => http.Response('{}', 500)),
-          tokenReader: () async => 'demo_admin_pass_token_2026',
+          tokenReader: () async => 'viva-admin-demo-token',
         );
 
       final rows = await repo.getApplications(received: true);

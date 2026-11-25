@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/repositories/notification_repository.dart';
 import '../../../core/widgets/adoptmatch_back_button.dart';
+import '../../../shared/widgets/app_skeleton.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -131,7 +132,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: teal))
+          ? const ListCardSkeleton(itemCount: 6)
           : Column(
               children: [
                 // Filter Tabs

@@ -236,4 +236,24 @@ void main() {
     expect: () => [isA<AuthLoading>(), isA<Authenticated>(), isA<AuthLoading>(),
       isA<AuthFailure>(), isA<Authenticated>()],
   );
+
+  blocTest<AuthBloc, AuthState>(
+    'logout emits AuthUnauthenticated immediately even if cleanup throws',
+    build: () {
+      when(() => auth.logout()).thenThrow(Exception('network timeout'));
+      return AuthBloc(
+        authRepository: auth,
+        laravelAuthService: laravel,
+        initialUser: const UserProfile(
+          id: 'admin-demo',
+          name: 'Admin',
+          email: 'admin@adoptmatch.com',
+          phone: '+8801700000000',
+          role: UserRole.superAdmin,
+        ),
+      );
+    },
+    act: (bloc) => bloc.add(const LogoutEvent()),
+    expect: () => [isA<AuthUnauthenticated>()],
+  );
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/models/emergency_alert_model.dart';
 import '../../../core/repositories/emergency_repository.dart';
+import '../../../shared/widgets/app_skeleton.dart';
 
 class NearbyClinicsScreen extends StatefulWidget {
   const NearbyClinicsScreen({super.key});
@@ -57,7 +58,7 @@ class _NearbyClinicsScreenState extends State<NearbyClinicsScreen> {
         title: const Text('Nearby Vet Clinics & Shelters'),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: teal))
+          ? const ListCardSkeleton(itemCount: 5)
           : Column(
               children: [
                 // Top Filter Controls Card

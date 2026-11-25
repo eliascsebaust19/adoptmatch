@@ -172,16 +172,15 @@ class AppRouter {
           return '/admin/login';
         }
 
-        // 5. Unauthenticated users attempting to access account-restricted screens
+        // 5. Unauthenticated users attempting to access protected consumer screens
         if (!isAdminPath &&
             !isAuthCallback &&
             path != '/login' &&
-            path != '/onboarding') {
-          if (path.startsWith('/profile') ||
-              path.startsWith('/chat') ||
-              path.startsWith('/applications')) {
-            return '/login';
-          }
+            path != '/register' &&
+            !path.startsWith('/auth/') &&
+            path != '/verify-otp' &&
+            !isOnboardingPath) {
+          return '/login';
         }
 
         return null;

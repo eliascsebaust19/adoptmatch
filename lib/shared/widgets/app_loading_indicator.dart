@@ -1,20 +1,26 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
+import 'app_skeleton.dart';
 
 class AppLoadingIndicator extends StatelessWidget {
   final String? message;
   final double size;
   final Color? color;
+  final bool useSkeleton;
 
   const AppLoadingIndicator({
     super.key,
     this.message,
     this.size = 32.0,
     this.color,
+    this.useSkeleton = true,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (useSkeleton && size >= 28.0) {
+      return const ListCardSkeleton(itemCount: 4);
+    }
     final indicatorColor = color ?? AppTheme.primaryOrange;
 
     return Center(

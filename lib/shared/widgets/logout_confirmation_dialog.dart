@@ -32,14 +32,24 @@ class _AdoptMatchLogoutDialogState extends State<AdoptMatchLogoutDialog> {
   Future<void> _handleLogout() async {
     if (_isLoading) return;
 
+    final authBloc = context.read<AuthBloc>();
     final router = GoRouter.of(context);
     final nav = Navigator.of(context);
 
     setState(() => _isLoading = true);
 
     try {
-      // 1. Dispatch AuthLogoutRequested event to AuthBloc
-      context.read<AuthBloc>().add(const AuthLogoutRequested());
+      // 1. Dispatch AuthLogoutRequested and wait for Unauthenticated state so
+      //    GoRouter.redirect does not bounce back before state updates.
+      authBloc.add(const AuthLogoutRequested());
+      if (authBloc.state is Authenticated) {
+        await authBloc.stream
+            .firstWhere((s) => s is! Authenticated)
+            .timeout(
+              const Duration(seconds: 2),
+              onTimeout: () => const AuthUnauthenticated(),
+            );
+      }
 
       // 2. Clear credentials from FlutterSecureStorage and application session
       const storage = FlutterSecureStorage(

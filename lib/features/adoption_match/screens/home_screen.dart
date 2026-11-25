@@ -13,6 +13,7 @@ import '../../../core/widgets/language_selector_sheet.dart';
 import '../../auth/bloc/auth_bloc.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../shared/widgets/app_network_image.dart';
+import '../../../shared/widgets/app_skeleton.dart';
 import '../../../shared/widgets/logout_confirmation_dialog.dart';
 import '../../../core/config/demo_config.dart';
 
@@ -687,14 +688,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 BlocBuilder<PetMatchBloc, PetMatchState>(
                   builder: (context, state) {
                     if (state is PetMatchLoading) {
-                      return const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 40.0),
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            color: Color(0xFFE05626),
-                          ),
-                        ),
-                      );
+                      return const PetGridSkeleton(itemCount: 4);
                     }
 
                     if (state is PetMatchLoaded) {

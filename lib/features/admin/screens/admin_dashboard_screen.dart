@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/widgets/app_network_image.dart';
+import '../../../shared/widgets/app_skeleton.dart';
 
 import '../../../core/models/application_model.dart';
 import '../../../core/models/pet_model.dart';
@@ -15,6 +16,7 @@ import '../../auth/bloc/auth_bloc.dart';
 import '../widgets/admin_kpi_card.dart';
 import '../widgets/admin_create_pet_dialog.dart';
 import '../widgets/admin_drawer.dart';
+import '../widgets/filled_application_dialog.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -95,6 +97,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     });
 
     try {
+      final appsFuture = _appRepo.getApplications(received: true);
       try {
         await _adminRepo.refresh();
       } catch (repoErr) {
@@ -102,7 +105,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         _errorMessage = repoErr.toString();
       }
 
-      final apps = await _appRepo.getApplications(received: true);
+      final apps = await appsFuture;
       final pets = _adminRepo.getPets();
       if (mounted) {
         setState(() {
@@ -593,18 +596,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   @override
   Widget build(BuildContext context) {
     final kpis = _adminRepo.getKPIs();
-    final activeRescuesCount = (kpis != null && kpis.activeRescues > 0)
-        ? kpis.activeRescues
-        : _pets.length;
-    final pendingAppsCount = (kpis != null && kpis.totalApplications > 0)
-        ? kpis.totalApplications
-        : _applications
-              .where(
-                (a) =>
-                    a.status == ApplicationStatus.underReview ||
-                    a.status == ApplicationStatus.submitted,
-              )
-              .length;
+    final activeRescuesCount = _pets.isNotEmpty
+        ? _pets.length
+        : (kpis?.activeRescues ?? 0);
+    final localPendingAppsCount = _applications
+        .where(
+          (a) =>
+              a.status == ApplicationStatus.underReview ||
+              a.status == ApplicationStatus.submitted,
+        )
+        .length;
+    final pendingAppsCount = _applications.isNotEmpty
+        ? localPendingAppsCount
+        : (kpis?.totalApplications ?? 0);
     final homeVisitsCount = (kpis != null && kpis.homeVisits > 0)
         ? kpis.homeVisits
         : _applications
@@ -636,118 +640,127 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         currentRoute: '/admin/dashboard',
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: Stack(
-        children: [
-          if (_isLoading)
-            const Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: LinearProgressIndicator(
-                color: Color(0xFF0D9488),
-                backgroundColor: Colors.transparent,
-                minHeight: 2.5,
-              ),
-            ),
-          NestedScrollView(
-            headerSliverBuilder: (context, innerBoxIsScrolled) {
-              return [
-                SliverToBoxAdapter(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildRetryBanner(),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      body: _isLoading && _applications.isEmpty && _pets.isEmpty
+          ? const AdminDashboardSkeleton()
+          : Stack(
+              children: [
+                if (_isLoading)
+                  const Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: LinearProgressIndicator(
+                      color: Color(0xFF0D9488),
+                      backgroundColor: Colors.transparent,
+                      minHeight: 2.5,
+                    ),
+                  ),
+                NestedScrollView(
+                  headerSliverBuilder: (context, innerBoxIsScrolled) {
+                    return [
+                      SliverToBoxAdapter(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // 1. Live Emergency SOS Broadcast Card (5km Radius)
-                            if (_showEmergencySos) _buildEmergencySosCard(),
+                            _buildRetryBanner(),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // 1. Live Emergency SOS Broadcast Card (5km Radius)
+                                  if (_showEmergencySos)
+                                    _buildEmergencySosCard(),
 
-                            // 2. Section Header: Shelter Performance Overview
-                            _buildSectionHeader(),
-                            const SizedBox(height: 16),
+                                  // 2. Section Header: Shelter Performance Overview
+                                  _buildSectionHeader(),
+                                  const SizedBox(height: 16),
 
-                            // 3. Fully Clickable KPI Cards (Top of Dashboard)
-                            _buildKpiCardsRow(
-                              activeRescues: activeRescuesCount,
-                              pendingApps: pendingAppsCount,
-                              homeVisits: homeVisitsCount,
-                              trialFosters: trialFostersCount,
-                              adoptionsCompleted: adoptionsCompletedCount,
+                                  // 3. Fully Clickable KPI Cards (Top of Dashboard)
+                                  _buildKpiCardsRow(
+                                    activeRescues: activeRescuesCount,
+                                    pendingApps: pendingAppsCount,
+                                    homeVisits: homeVisitsCount,
+                                    trialFosters: trialFostersCount,
+                                    adoptionsCompleted: adoptionsCompletedCount,
+                                  ),
+                                ],
+                              ),
                             ),
+                            // 4. Standalone Search & Date Filter Bar Section
+                            _buildSearchAndFilterBar(),
                           ],
                         ),
                       ),
-                      // 4. Standalone Search & Date Filter Bar Section
-                      _buildSearchAndFilterBar(),
+                      // 5. Persistent TabBar Header: [Apps, Pets, Visits, Analytics]
+                      SliverPersistentHeader(
+                        pinned: true,
+                        delegate: _SliverTabBarDelegate(
+                          TabBar(
+                            controller: _tabController,
+                            labelColor: const Color(0xFF0D9488),
+                            unselectedLabelColor: const Color(0xFF64748B),
+                            indicatorColor: const Color(0xFF0D9488),
+                            indicatorWeight: 3,
+                            labelStyle: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                            tabs: [
+                              Tab(
+                                text: _isBangla
+                                    ? 'আবেদন (${_applications.length})'
+                                    : 'Apps (${_applications.length})',
+                                icon: const Icon(
+                                  Icons.description_outlined,
+                                  size: 18,
+                                ),
+                              ),
+                              Tab(
+                                text: _isBangla
+                                    ? 'পোষ্য (${_pets.length})'
+                                    : 'Pets (${_pets.length})',
+                                icon: const Icon(Icons.pets_rounded, size: 18),
+                              ),
+                              Tab(
+                                text: _isBangla
+                                    ? 'ভিজিট ($homeVisitsCount)'
+                                    : 'Visits ($homeVisitsCount)',
+                                icon: const Icon(
+                                  Icons.home_work_outlined,
+                                  size: 18,
+                                ),
+                              ),
+                              Tab(
+                                text: _isBangla
+                                    ? 'অ্যানালিটিক্স ও অডিট'
+                                    : 'Analytics & Audit',
+                                icon: const Icon(
+                                  Icons.analytics_outlined,
+                                  size: 18,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ];
+                  },
+                  body: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildApplicationsQueueTab(),
+                      _buildPetInventoryTab(),
+                      _buildVisitsAndAppointmentsTab(),
+                      _buildAnalyticsAndAuditTab(),
                     ],
                   ),
                 ),
-                // 5. Persistent TabBar Header: [Apps, Pets, Visits, Analytics]
-                SliverPersistentHeader(
-                  pinned: true,
-                  delegate: _SliverTabBarDelegate(
-                    TabBar(
-                      controller: _tabController,
-                      labelColor: const Color(0xFF0D9488),
-                      unselectedLabelColor: const Color(0xFF64748B),
-                      indicatorColor: const Color(0xFF0D9488),
-                      indicatorWeight: 3,
-                      labelStyle: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                      tabs: [
-                        Tab(
-                          text: _isBangla
-                              ? 'আবেদন (${_applications.length})'
-                              : 'Apps (${_applications.length})',
-                          icon: const Icon(
-                            Icons.description_outlined,
-                            size: 18,
-                          ),
-                        ),
-                        Tab(
-                          text: _isBangla
-                              ? 'পোষ্য (${_pets.length})'
-                              : 'Pets (${_pets.length})',
-                          icon: const Icon(Icons.pets_rounded, size: 18),
-                        ),
-                        Tab(
-                          text: _isBangla
-                              ? 'ভিজিট ($homeVisitsCount)'
-                              : 'Visits ($homeVisitsCount)',
-                          icon: const Icon(Icons.home_work_outlined, size: 18),
-                        ),
-                        Tab(
-                          text: _isBangla
-                              ? 'অ্যানালিটিক্স ও অডিট'
-                              : 'Analytics & Audit',
-                          icon: const Icon(Icons.analytics_outlined, size: 18),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ];
-            },
-            body: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildApplicationsQueueTab(),
-                _buildPetInventoryTab(),
-                _buildVisitsAndAppointmentsTab(),
-                _buildAnalyticsAndAuditTab(),
+
+                // Pinned Floating Batch Action Bar (When items selected)
+                if (_selectedAppIds.isNotEmpty) _buildBatchActionBar(),
               ],
             ),
-          ),
-
-          // Pinned Floating Batch Action Bar (When items selected)
-          if (_selectedAppIds.isNotEmpty) _buildBatchActionBar(),
-        ],
-      ),
 
       // Floating Action Button: "Add Rescue Pet / পোষ্য যোগ"
       floatingActionButton: Padding(
@@ -1022,10 +1035,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
-                  onPressed: () {
+                  onPressed: () async {
+                    final authBloc = context.read<AuthBloc>();
+                    final router = GoRouter.of(context);
                     Navigator.pop(ctx);
-                    context.read<AuthBloc>().add(LogoutEvent());
-                    context.go('/admin/login');
+                    authBloc.add(const LogoutEvent());
+                    if (authBloc.state is Authenticated) {
+                      await authBloc.stream
+                          .firstWhere((s) => s is! Authenticated)
+                          .timeout(
+                            const Duration(seconds: 2),
+                            onTimeout: () => const AuthUnauthenticated(),
+                          );
+                    }
+                    router.go('/login');
                   },
                   child: Text(
                     _isBangla ? 'লগআউট' : 'Logout',
@@ -1256,19 +1279,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           ),
           const SizedBox(width: 12),
 
-          // 2. Total Applications -> Apps Tab (Status: PENDING / underReview)
+          // 2. Total Applications -> Apps Tab (Review pending)
           AdminKpiCard(
-            title: _isBangla ? 'মোট আবেদন' : 'Total Applications',
+            title: _isBangla ? 'পেন্ডিং আবেদন' : 'Pending Applications',
             count: '$pendingApps',
             icon: Icons.description_outlined,
             accentColor: const Color(0xFF6366F1),
             subtitle: _isBangla ? 'বিবেচনাধীন কিউ' : 'Review pending',
             isSelected:
                 _tabController.index == 0 &&
-                _appFilter == ApplicationStatus.underReview,
+                (_appFilter == null ||
+                    _appFilter == ApplicationStatus.submitted ||
+                    _appFilter == ApplicationStatus.underReview),
             onTap: () {
               setState(() {
-                _appFilter = ApplicationStatus.underReview;
+                _appFilter = null;
                 _tabController.animateTo(0);
               });
             },
@@ -1507,7 +1532,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
         // List
         Expanded(
-          child: filtered.isEmpty
+          child: _isLoading && filtered.isEmpty
+              ? const ListCardSkeleton(showTrailingButton: true)
+              : filtered.isEmpty
               ? _buildEmptyState(
                   _isBangla
                       ? 'কোনো আবেদন পাওয়া যায়নি'
@@ -1591,6 +1618,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       child: Column(
         children: [
           ListTile(
+            onTap: () => showFilledApplicationDialog(
+              context,
+              app,
+              onUpdateStatus: (status, notes) => _updateApplicationStatuses(
+                [app.id],
+                status,
+                notes: notes.isEmpty ? null : notes,
+              ),
+            ),
             leading: Checkbox(
               value: isChecked,
               activeColor: const Color(0xFF0D9488),
@@ -1670,9 +1706,37 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.end,
               children: [
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF0F172A),
+                    side: const BorderSide(color: Color(0xFFCBD5E1)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    minimumSize: const Size(60, 30),
+                  ),
+                  onPressed: () => showFilledApplicationDialog(
+                    context,
+                    app,
+                    onUpdateStatus: (status, notes) =>
+                        _updateApplicationStatuses(
+                          [app.id],
+                          status,
+                          notes: notes.isEmpty ? null : notes,
+                        ),
+                  ),
+                  icon: const Icon(Icons.description_outlined, size: 15),
+                  label: const Text(
+                    'Filled Form',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                ),
                 OutlinedButton(
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF0D9488),
@@ -1683,25 +1747,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                     ),
                     minimumSize: const Size(60, 30),
                   ),
-                  onPressed: () {
-                    _appRepo.updateApplicationStatus(
-                      app.id,
-                      ApplicationStatus.fosterTrial,
-                      notes: 'Moved to 14-day trial foster',
-                    );
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Placed on 14-day trial foster!'),
-                      ),
-                    );
-                  },
+                  onPressed: () => _updateApplicationStatuses(
+                    [app.id],
+                    ApplicationStatus.fosterTrial,
+                    notes: 'Moved to 14-day trial foster',
+                  ),
                   child: const Text(
                     'Trial Foster',
                     style: TextStyle(fontSize: 11),
                   ),
                 ),
-                const SizedBox(width: 8),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF0D9488),
@@ -1712,17 +1767,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                     ),
                     minimumSize: const Size(60, 30),
                   ),
-                  onPressed: () {
-                    _appRepo.updateApplicationStatus(
-                      app.id,
-                      ApplicationStatus.approved,
-                      notes: 'Approved by admin dashboard',
-                    );
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Application Approved!')),
-                    );
-                  },
+                  onPressed: () => _updateApplicationStatuses(
+                    [app.id],
+                    ApplicationStatus.approved,
+                    notes: 'Approved by admin dashboard',
+                  ),
                   child: const Text('Approve', style: TextStyle(fontSize: 11)),
                 ),
               ],
@@ -1795,7 +1844,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         ),
 
         Expanded(
-          child: filtered.isEmpty
+          child: _isLoading && filtered.isEmpty
+              ? const PetGridSkeleton(
+                  itemCount: 4,
+                  shrinkWrap: false,
+                  padding: EdgeInsets.fromLTRB(16, 8, 16, 96),
+                )
+              : filtered.isEmpty
               ? _buildEmptyState(
                   _isBangla
                       ? 'কোনো পোষ্য পাওয়া যায়নি'
@@ -2073,7 +2128,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                                   .replaceAll('[ADOPTED]', '');
                         final updated = pet.copyWith(
                           story: newStory,
-                          adoptionStatus: isNowAdopted ? 'adopted' : 'available',
+                          adoptionStatus: isNowAdopted
+                              ? 'adopted'
+                              : 'available',
                         );
                         _adminRepo
                             .overridePetListing(
@@ -2133,7 +2190,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                               ),
                             );
                             if (confirmed == true) {
-                              await _adminRepo.deletePetListing(pet.id, petName: pet.name);
+                              await _adminRepo.deletePetListing(
+                                pet.id,
+                                petName: pet.name,
+                              );
                             }
                           }
                           if (mounted) setState(() {});

@@ -108,7 +108,7 @@ class _ChatInboxScreenState extends State<ChatInboxScreen> {
         ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: teal))
+          ? const ListCardSkeleton(itemCount: 6)
           : Column(
               children: [
                 if (_loadError != null)

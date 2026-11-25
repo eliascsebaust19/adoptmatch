@@ -471,16 +471,25 @@ class _LoginScreenState extends State<LoginScreen> {
                                                     : const Color(0xFF64748B),
                                               ),
                                               const SizedBox(width: 6),
-                                              Text(
-                                                'Adopter / ইউজার',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: !_isAdminMode
-                                                      ? FontWeight.bold
-                                                      : FontWeight.w600,
-                                                  color: !_isAdminMode
-                                                      ? const Color(0xFF0F172A)
-                                                      : const Color(0xFF64748B),
+                                              Flexible(
+                                                child: Text(
+                                                  'Adopter',
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    fontWeight: !_isAdminMode
+                                                        ? FontWeight.bold
+                                                        : FontWeight.w600,
+                                                    color: !_isAdminMode
+                                                        ? const Color(
+                                                            0xFF0F172A,
+                                                          )
+                                                        : const Color(
+                                                            0xFF64748B,
+                                                          ),
+                                                  ),
                                                 ),
                                               ),
                                             ],
@@ -536,16 +545,25 @@ class _LoginScreenState extends State<LoginScreen> {
                                                     : const Color(0xFF64748B),
                                               ),
                                               const SizedBox(width: 6),
-                                              Text(
-                                                'Admin / অ্যাডমিন',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: _isAdminMode
-                                                      ? FontWeight.bold
-                                                      : FontWeight.w600,
-                                                  color: _isAdminMode
-                                                      ? const Color(0xFF0F172A)
-                                                      : const Color(0xFF64748B),
+                                              Flexible(
+                                                child: Text(
+                                                  'Admin',
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    fontWeight: _isAdminMode
+                                                        ? FontWeight.bold
+                                                        : FontWeight.w600,
+                                                    color: _isAdminMode
+                                                        ? const Color(
+                                                            0xFF0F172A,
+                                                          )
+                                                        : const Color(
+                                                            0xFF64748B,
+                                                          ),
+                                                  ),
                                                 ),
                                               ),
                                             ],
@@ -626,12 +644,16 @@ class _LoginScreenState extends State<LoginScreen> {
                                           color: Color(0xFF4F46E5),
                                         ),
                                         SizedBox(width: 8),
-                                        Text(
-                                          '⚡ 1-Tap Admin Demo Access (All Permissions)',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w700,
-                                            color: Color(0xFF3730A3),
+                                        Flexible(
+                                          child: Text(
+                                            'Admin Demo Access (Full Access)',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w700,
+                                              color: Color(0xFF3730A3),
+                                            ),
                                           ),
                                         ),
                                       ],
@@ -649,9 +671,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                   },
                                   borderRadius: BorderRadius.circular(8),
                                   child: Container(
+                                    width: double.infinity,
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 10,
-                                      vertical: 6,
+                                      vertical: 8,
                                     ),
                                     decoration: BoxDecoration(
                                       color: const Color(0xFFCCFBF1),
@@ -661,7 +684,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ),
                                     ),
                                     child: const Row(
-                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: [
                                         Icon(
                                           Icons.key_rounded,
@@ -669,12 +693,16 @@ class _LoginScreenState extends State<LoginScreen> {
                                           color: Color(0xFF0D9488),
                                         ),
                                         SizedBox(width: 6),
-                                        Text(
-                                          'Quick Fill Demo Admin Credentials',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                            color: Color(0xFF0F766E),
+                                        Flexible(
+                                          child: Text(
+                                            'Fill Demo Admin Credentials',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF0F766E),
+                                            ),
                                           ),
                                         ),
                                       ],
@@ -725,12 +753,16 @@ class _LoginScreenState extends State<LoginScreen> {
                                           color: Color(0xFF0D9488),
                                         ),
                                         SizedBox(width: 8),
-                                        Text(
-                                          '⚡ 1-Tap User Demo Access (All Permissions)',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w700,
-                                            color: Color(0xFF0F766E),
+                                        Flexible(
+                                          child: Text(
+                                            'User Demo Access (Full Access)',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w700,
+                                              color: Color(0xFF0F766E),
+                                            ),
                                           ),
                                         ),
                                       ],

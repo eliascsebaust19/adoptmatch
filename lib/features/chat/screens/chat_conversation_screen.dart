@@ -279,7 +279,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: teal))
+          ? const ChatConversationSkeleton()
           : Column(
               children: [
                 // Top Pet Quick Access Pill Banner

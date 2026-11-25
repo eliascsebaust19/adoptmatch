@@ -504,7 +504,9 @@ class AuthEmailDispatched extends AuthState {
   List<Object?> get props => [email, message];
 }
 
-class AuthUnauthenticated extends AuthState {}
+class AuthUnauthenticated extends AuthState {
+  const AuthUnauthenticated();
+}
 
 class AuthFailure extends AuthState {
   final String errorMessage;
@@ -1046,11 +1048,23 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   }
 
   Future<void> _onLogout(LogoutEvent event, Emitter<AuthState> emit) async {
-    await _authRepository.logout();
-    await GoogleAuthService.signOut();
-    await SupabaseService.signOut();
     _currentUser = null;
     emit(AuthUnauthenticated());
+    try {
+      await _authRepository.logout();
+    } catch (e) {
+      debugPrint('[AuthBloc] Logout repository cleanup notice: $e');
+    }
+    try {
+      await GoogleAuthService.signOut();
+    } catch (e) {
+      debugPrint('[AuthBloc] Google signOut notice: $e');
+    }
+    try {
+      await SupabaseService.signOut();
+    } catch (e) {
+      debugPrint('[AuthBloc] Supabase signOut notice: $e');
+    }
   }
 
   Future<void> _onUpdateUserProfile(

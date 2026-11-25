@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/models/pet_model.dart';
 import '../../../core/repositories/pet_repository.dart';
 import '../../../shared/widgets/app_network_image.dart';
+import '../../../shared/widgets/app_skeleton.dart';
 
 class PetComparisonScreen extends StatefulWidget {
   final String? initialPetId;
@@ -194,7 +195,8 @@ class _PetComparisonScreenState extends State<PetComparisonScreen> {
 
     if (_isLoading || _petA == null || _petB == null) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator(color: teal)),
+        backgroundColor: Color(0xFFF8FAFC),
+        body: SafeArea(child: DetailPageSkeleton()),
       );
     }
 

@@ -11,6 +11,7 @@ import '../../../core/models/emergency_alert_model.dart';
 import '../../../core/repositories/emergency_repository.dart';
 import '../../../shared/widgets/custom_button.dart';
 import '../../../shared/widgets/app_network_image.dart';
+import '../../../shared/widgets/app_skeleton.dart';
 
 class EmergencySosScreen extends StatefulWidget {
   const EmergencySosScreen({super.key});
@@ -221,7 +222,7 @@ class _EmergencySosScreenState extends State<EmergencySosScreen>
         onPressed: _openBroadcastDialog,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: teal))
+          ? const ListCardSkeleton(itemCount: 5)
           : TabBarView(
               controller: _tabController,
               children: [

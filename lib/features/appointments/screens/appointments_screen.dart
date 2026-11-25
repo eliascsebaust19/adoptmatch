@@ -69,7 +69,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
         title: const Text('My Scheduled Visits'),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: teal))
+          ? const ListCardSkeleton(itemCount: 4)
           : _appointments.isEmpty
               ? Center(
                   child: Column(

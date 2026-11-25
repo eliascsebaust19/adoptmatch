@@ -11,6 +11,7 @@ import '../../../core/widgets/guest_restriction_dialog.dart';
 import '../../../shared/widgets/status_badge.dart';
 import '../../../shared/widgets/custom_button.dart';
 import '../../../shared/widgets/app_network_image.dart';
+import '../../../shared/widgets/app_skeleton.dart';
 import '../../appointments/widgets/book_appointment_modal.dart';
 
 class PetDetailScreen extends StatefulWidget {
@@ -67,7 +68,8 @@ class _PetDetailScreenState extends State<PetDetailScreen> {
 
     if (_isLoading) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator(color: teal)),
+        backgroundColor: Color(0xFFF8FAFC),
+        body: SafeArea(child: DetailPageSkeleton()),
       );
     }
 

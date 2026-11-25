@@ -147,10 +147,20 @@ class _AdminDashboardLayoutState extends State<AdminDashboardLayout> {
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
-                  onPressed: () {
+                  onPressed: () async {
+                    final authBloc = context.read<AuthBloc>();
+                    final router = GoRouter.of(context);
                     Navigator.pop(ctx);
-                    context.read<AuthBloc>().add(LogoutEvent());
-                    context.go('/admin/login');
+                    authBloc.add(const LogoutEvent());
+                    if (authBloc.state is Authenticated) {
+                      await authBloc.stream
+                          .firstWhere((s) => s is! Authenticated)
+                          .timeout(
+                            const Duration(seconds: 2),
+                            onTimeout: () => const AuthUnauthenticated(),
+                          );
+                    }
+                    router.go('/login');
                   },
                   child: const Text(
                     'Logout',

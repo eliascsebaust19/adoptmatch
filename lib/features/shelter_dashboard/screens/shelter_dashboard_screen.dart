@@ -436,7 +436,7 @@ class _ShelterDashboardScreenState extends State<ShelterDashboardScreen>
         ),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const ListCardSkeleton(itemCount: 5, showTrailingButton: true)
           : _error != null
           ? Center(
               child: Padding(

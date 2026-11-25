@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../shared/widgets/app_skeleton.dart';
 import '../bloc/pet_match_bloc.dart';
 import '../widgets/pet_card_grid_item.dart';
 
@@ -13,15 +14,17 @@ class SavedPetsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const teal = Color(0xFF0D9488);
-
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(title: const Text('Saved & Favorite Pets')),
       body: BlocBuilder<PetMatchBloc, PetMatchState>(
         builder: (context, state) {
           if (state is PetMatchLoading) {
-            return const Center(child: CircularProgressIndicator(color: teal));
+            return const PetGridSkeleton(
+              itemCount: 6,
+              shrinkWrap: false,
+              padding: EdgeInsets.all(16),
+            );
           }
 
           if (state is PetMatchLoaded) {

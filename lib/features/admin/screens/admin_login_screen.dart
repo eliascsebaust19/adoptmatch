@@ -398,7 +398,9 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                                               size: 18,
                                             ),
                                             label: const Text(
-                                              '1-Tap Admin Demo Access (All Permissions)',
+                                              'Admin Demo Access (Full Access)',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                               style: TextStyle(
                                                 fontWeight: FontWeight.w700,
                                                 fontSize: 12.5,
