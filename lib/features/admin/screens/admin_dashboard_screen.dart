@@ -1473,6 +1473,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               ),
               const SizedBox(width: 8),
               _buildAppStatusChip(
+                ApplicationStatus.submitted,
+                _isBangla ? 'নতুন পেন্ডিং' : 'Pending (Submitted)',
+              ),
+              const SizedBox(width: 8),
+              _buildAppStatusChip(
                 ApplicationStatus.underReview,
                 _isBangla ? 'বিবেচনাধীন' : 'Under Review',
               ),

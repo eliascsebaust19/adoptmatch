@@ -232,4 +232,48 @@ void main() {
       );
     },
   );
+
+  test(
+    'demo admin session loads pending demo applications and updates status',
+    () async {
+      final adapter = FakeDioAdapter(
+        (options) async => (
+          200,
+          {
+            'status': 'success',
+            'data': {'data': []},
+          },
+        ),
+      );
+      final api = ApiClient(baseUrl: 'https://api.example.test/api/v1')
+        ..dio.httpClientAdapter = adapter;
+      final repo = ApplicationRepository()
+        ..configureForTesting(
+          ApiPetService(apiClient: api),
+          client: MockClient((_) async => http.Response('{}', 500)),
+          tokenReader: () async => 'demo_admin_pass_token_2026',
+        );
+
+      final rows = await repo.getApplications(received: true);
+      expect(rows.length, greaterThanOrEqualTo(3));
+      expect(
+        rows.any(
+          (a) =>
+              a.status == ApplicationStatus.submitted ||
+              a.status == ApplicationStatus.underReview,
+        ),
+        isTrue,
+      );
+
+      final target = rows.first;
+      await repo.updateApplicationStatus(
+        target.id,
+        ApplicationStatus.approved,
+        notes: 'Approved in demo test',
+      );
+      final updated = await repo.getApplicationById(target.id);
+      expect(updated?.status, ApplicationStatus.approved);
+      expect(updated?.reviewerNotes, 'Approved in demo test');
+    },
+  );
 }

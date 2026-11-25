@@ -17,6 +17,8 @@ class ApplicationRepository {
   ApiPetService _remote = ApiPetService();
   http.Client _client = http.Client();
   Future<String?> Function() _readToken = SecureStorageService.instance.getAuthToken;
+  bool _isDemoToken(String? token) => token != null && token.startsWith('demo_');
+
   void configureForTesting(ApiPetService remote, {http.Client? client,
       Future<String?> Function()? tokenReader}) {
     _remote = remote;
@@ -64,10 +66,184 @@ class ApplicationRepository {
     if (!_initialized) await _init();
     final token = await _readToken();
     if (token == null || token.isEmpty) return const [];
+    if (_isDemoToken(token)) {
+      try {
+        final remoteRows = await _remote.getMyAdoptionRequests(received: received);
+        if (remoteRows.isNotEmpty) {
+          _applications = remoteRows;
+          await _storage.saveApplications(_applications);
+          _appStreamController.add(List.unmodifiable(_applications));
+          return List.unmodifiable(_applications);
+        }
+      } catch (e) {
+        debugPrint('[ApplicationRepository] Demo mode remote notice: $e');
+      }
+      if (_applications.isEmpty) {
+        _applications = _buildDemoPendingApplications();
+        await _storage.saveApplications(_applications);
+      }
+      _appStreamController.add(List.unmodifiable(_applications));
+      return List.unmodifiable(_applications);
+    }
     _applications = await _remote.getMyAdoptionRequests(received: received);
     await _storage.saveApplications(_applications);
     _appStreamController.add(List.unmodifiable(_applications));
     return List.unmodifiable(_applications);
+  }
+
+  List<AdoptionApplication> _buildDemoPendingApplications() {
+    final now = DateTime.now();
+    return [
+      AdoptionApplication(
+        id: 'AM-DEMO-101',
+        serverId: 'demo-app-101',
+        petId: 'p1',
+        petName: 'Buddy',
+        petBreed: 'Golden Retriever',
+        petImageUrl:
+            'https://images.unsplash.com/photo-1552053831-71594a27632d?w=600&auto=format&fit=crop',
+        applicantName: 'Nadia Rahman',
+        applicantPhone: '+880 1712-445566',
+        applicantEmail: 'nadia.rahman@demo.adoptmatch.app',
+        nidNumber: '1996-4410-8821-0012',
+        emergencyContactName: 'Tariq Rahman',
+        emergencyContactPhone: '+880 1811-223344',
+        address: 'House 18, Road 7, Dhanmondi, Dhaka',
+        housingType: 'Independent House',
+        ownershipStatus: 'Owned',
+        landlordAllowsPets: true,
+        yardType: 'Private Fenced Yard',
+        petLivingSpace: 'Indoor with Yard Access',
+        totalAdults: 3,
+        hasKids: true,
+        childrenAges: '8 yrs',
+        hasAllergies: false,
+        hasOtherPets: false,
+        dailyHoursAlone: '2-3 hours',
+        primaryCaregiver: 'Nadia Rahman',
+        petExperience: 'Raised a Golden Retriever for 6 years',
+        emergencyVetFund: true,
+        monthlyBudget: '8000',
+        whyAdopt: 'Looking for an affectionate family companion for our home.',
+        status: ApplicationStatus.submitted,
+        submittedAt: now.subtract(const Duration(hours: 3)),
+        reviewerNotes: 'Pending initial admin document verification.',
+        isESigned: true,
+        signatureData: '{"strokes":[[[10,12],[48,18]]]}',
+      ),
+      AdoptionApplication(
+        id: 'AM-DEMO-102',
+        serverId: 'demo-app-102',
+        petId: 'p2',
+        petName: 'Milo',
+        petBreed: 'British Shorthair',
+        petImageUrl:
+            'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=600&auto=format&fit=crop',
+        applicantName: 'Farhan Ahmed',
+        applicantPhone: '+880 1911-778899',
+        applicantEmail: 'farhan.ahmed@demo.adoptmatch.app',
+        nidNumber: '1994-8821-5530-0041',
+        emergencyContactName: 'Sadia Ahmed',
+        emergencyContactPhone: '+880 1715-667788',
+        address: 'Flat 5B, Banani Road 11, Dhaka',
+        housingType: 'Apartment',
+        ownershipStatus: 'Rented',
+        landlordAllowsPets: true,
+        landlordContact: '+880 1700-998877',
+        yardType: 'Screened Balcony',
+        petLivingSpace: 'Indoor Only',
+        totalAdults: 2,
+        hasKids: false,
+        hasAllergies: false,
+        hasOtherPets: true,
+        otherPetsDetails: '1 neutered indoor tabby cat',
+        dailyHoursAlone: '3-4 hours',
+        primaryCaregiver: 'Farhan Ahmed',
+        petExperience: 'Current indoor cat parent (3 years)',
+        emergencyVetFund: true,
+        monthlyBudget: '5500',
+        whyAdopt: 'Want a gentle indoor companion for our cat.',
+        status: ApplicationStatus.underReview,
+        submittedAt: now.subtract(const Duration(days: 1, hours: 2)),
+        reviewerNotes: 'Landlord NOC attached; awaiting final admin approval.',
+        isESigned: true,
+        signatureData: '{"strokes":[[[14,20],[52,16]]]}',
+      ),
+      AdoptionApplication(
+        id: 'AM-DEMO-103',
+        serverId: 'demo-app-103',
+        petId: 'p3',
+        petName: 'Simba',
+        petBreed: 'Persian Cat',
+        petImageUrl:
+            'https://images.unsplash.com/photo-1573865526739-10659fec78a5?w=600&auto=format&fit=crop',
+        applicantName: 'Tasnim Chowdhury',
+        applicantPhone: '+880 1614-332211',
+        applicantEmail: 'tasnim.c@demo.adoptmatch.app',
+        nidNumber: '1998-3301-7712-0087',
+        emergencyContactName: 'Mahmud Chowdhury',
+        emergencyContactPhone: '+880 1819-445511',
+        address: 'Nasirabad Housing Society, Chattogram',
+        housingType: 'Apartment',
+        ownershipStatus: 'Owned',
+        landlordAllowsPets: true,
+        yardType: 'Balcony',
+        petLivingSpace: 'Indoor Only',
+        totalAdults: 2,
+        hasKids: false,
+        hasAllergies: false,
+        hasOtherPets: false,
+        dailyHoursAlone: '1-2 hours',
+        primaryCaregiver: 'Tasnim Chowdhury',
+        petExperience: 'First-time adopter (completed care quiz)',
+        emergencyVetFund: true,
+        monthlyBudget: '6000',
+        whyAdopt: 'Working from home and ready to adopt a calm indoor cat.',
+        status: ApplicationStatus.submitted,
+        submittedAt: now.subtract(const Duration(minutes: 45)),
+        reviewerNotes: 'Newly submitted adoption application awaiting review.',
+        isESigned: true,
+        signatureData: '{"strokes":[[[8,15],[42,22]]]}',
+      ),
+      AdoptionApplication(
+        id: 'AM-DEMO-104',
+        serverId: 'demo-app-104',
+        petId: 'p4',
+        petName: 'Cookie',
+        petBreed: 'Deshi Rescue Pup',
+        petImageUrl:
+            'https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=600&auto=format&fit=crop',
+        applicantName: 'Rafiul Islam',
+        applicantPhone: '+880 1511-909080',
+        applicantEmail: 'rafiul.islam@demo.adoptmatch.app',
+        nidNumber: '1993-7120-9914-0023',
+        emergencyContactName: 'Kamrul Islam',
+        emergencyContactPhone: '+880 1718-303020',
+        address: 'Sector 4, Uttara, Dhaka',
+        housingType: 'Duplex',
+        ownershipStatus: 'Owned',
+        landlordAllowsPets: true,
+        yardType: 'Private Fenced Yard',
+        petLivingSpace: 'Indoor & Outdoor',
+        totalAdults: 4,
+        hasKids: true,
+        childrenAges: '12 yrs',
+        hasAllergies: false,
+        hasOtherPets: false,
+        dailyHoursAlone: '2 hours',
+        primaryCaregiver: 'Rafiul Islam & Family',
+        petExperience: 'Adopted rescue dogs before',
+        emergencyVetFund: true,
+        monthlyBudget: '7000',
+        whyAdopt: 'Home visit scheduled to introduce Cookie to the family.',
+        status: ApplicationStatus.homeVisitScheduled,
+        submittedAt: now.subtract(const Duration(days: 2)),
+        homeVisitDate: now.add(const Duration(days: 1)),
+        reviewerNotes: 'Home visit assigned for tomorrow at 4:00 PM.',
+        isESigned: true,
+        signatureData: '{"strokes":[[[12,10],[55,24]]]}',
+      ),
+    ];
   }
 
   Future<void> clearCache() async {
@@ -275,7 +451,12 @@ class ApplicationRepository {
       throw Exception('Load the server application before changing its status.');
     }
     final app = _applications[index];
-    await _remote.updateAdoptionStatus(app.serverId!, status, notes: notes, homeVisitDate: homeVisitDate);
+    final token = await _readToken();
+    final isDemoRecord =
+        (app.serverId?.startsWith('demo-') ?? false) && _isDemoToken(token);
+    if (!isDemoRecord) {
+      await _remote.updateAdoptionStatus(app.serverId!, status, notes: notes, homeVisitDate: homeVisitDate);
+    }
     _applications[index] = app.copyWith(status: status,
       reviewerNotes: notes ?? app.reviewerNotes, homeVisitDate: homeVisitDate ?? app.homeVisitDate);
     await _storage.saveApplications(_applications);
