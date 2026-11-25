@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../config/demo_config.dart';
 import '../models/chat_message_model.dart';
 import '../models/pet_model.dart';
 import '../network/api_client.dart';
@@ -36,6 +37,12 @@ class ChatRepository {
 
   bool get _useSupabase => AdoptMatchBackend.isInitialized && !_isTestConfigured;
 
+  bool _isDemoToken(String? token) =>
+      token != null &&
+      (token.startsWith('demo_') ||
+          token.startsWith('viva-') ||
+          token.contains('demo-token'));
+
   final _conversationsStreamController = StreamController<List<ChatConversation>>.broadcast();
   final Map<String, StreamController<List<ChatMessage>>> _messageStreamControllers = {};
   Stream<List<ChatConversation>> get conversationsStream => _conversationsStreamController.stream;
@@ -52,7 +59,10 @@ class ChatRepository {
   Future<void> _doInit() async {
     _ownerId = await _readUserId();
     final saved = await _storage.loadConversations();
-    _conversations = saved?.where((c) => c.id.startsWith('remote-')).toList() ?? [];
+    _conversations = saved
+            ?.where((c) => c.id.startsWith('remote-') || c.id.startsWith('demo-conv-'))
+            .toList() ??
+        [];
     for (final conv in _conversations) {
       final savedMessages = await _storage.loadMessages(conv.id) ?? [];
       _messages[conv.id] = savedMessages.where((m) =>
@@ -101,6 +111,11 @@ class ChatRepository {
   /// Fetch the inbox and real message history, including replies from the shelter.
   Future<void> refreshRemote() async {
     await _init();
+    if (!_isTestConfigured && _isDemoToken(await _readToken())) {
+      _conversationsStreamController.add(List.unmodifiable(_conversations));
+      lastSyncError = null;
+      return;
+    }
     if (_useSupabase) {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) return;
@@ -174,7 +189,10 @@ class ChatRepository {
           await _storage.saveMessages(id, _messages[id]!);
           _notifyMessagesChanged(id);
         }
-        _conversations = refreshed;
+        final demoConvs = _conversations
+            .where((c) => c.id.startsWith('demo-conv-'))
+            .toList();
+        _conversations = [...refreshed, ...demoConvs];
         await _storage.saveConversations(_conversations);
         _conversationsStreamController.add(List.unmodifiable(_conversations));
         lastSyncError = null;
@@ -254,12 +272,58 @@ class ChatRepository {
   }
 
   Future<List<ChatMessage>> getMessages(String id) async {
+    if (id.startsWith('demo-conv-') && !_isTestConfigured) {
+      await _init();
+      return List.unmodifiable(_messages[id] ?? const []);
+    }
     await refreshRemote();
     return List.unmodifiable(_messages[id] ?? const []);
   }
 
   Future<ChatConversation> getOrCreateConversationForPet(Pet pet) async {
     await _init();
+    final token = await _readToken();
+    final canOpenDemoChat =
+        DemoConfig.enableVivaDemoPass &&
+        (_isDemoToken(token) ||
+            (!_isTestConfigured &&
+                (pet.ownerId == null || pet.ownerId!.isEmpty)));
+    if (canOpenDemoChat) {
+      final id = 'demo-conv-${pet.id}';
+      final existing = await getConversationById(id);
+      if (existing != null) return existing;
+      final conv = ChatConversation(
+        id: id,
+        petId: pet.id,
+        petName: pet.name,
+        petBreed: pet.breed,
+        petImageUrl: pet.imageUrl,
+        shelterName: pet.shelterName,
+        shelterUserId: pet.ownerId ?? 'demo-shelter-${pet.id}',
+        isOnline: true,
+        lastMessage:
+            'Hi! Ask ${pet.shelterName} anything about ${pet.name}.',
+        lastMessageTime: DateTime.now(),
+      );
+      _conversations.insert(0, conv);
+      _messages[id] = [
+        ChatMessage(
+          id: 'demo-welcome-${pet.id}',
+          conversationId: id,
+          senderId: conv.shelterUserId ?? 'demo-shelter',
+          senderName: pet.shelterName,
+          text:
+              'Hello! Thanks for checking out ${pet.name} (${pet.breed}). Feel free to ask about temperament, vaccines, or scheduling a visit.',
+          timestamp: DateTime.now(),
+          isFromUser: false,
+          deliveryStatus: MessageDeliveryStatus.read,
+        ),
+      ];
+      await _storage.saveConversations(_conversations);
+      await _storage.saveMessages(id, _messages[id]!);
+      _conversationsStreamController.add(List.unmodifiable(_conversations));
+      return conv;
+    }
     if (_useSupabase) {
       final recipient = pet.ownerId;
       if (recipient == null || recipient.isEmpty || pet.id.isEmpty) {
@@ -311,6 +375,36 @@ class ChatRepository {
       {String? attachmentUrl, String? senderName}) async {
     await _init();
     final conv = await getConversationById(conversationId);
+    if (conversationId.startsWith('demo-conv-') &&
+        (_isDemoToken(await _readToken()) || !_isTestConfigured)) {
+      if (text.trim().isEmpty || text.length > 1000) {
+        throw Exception('Messages must contain 1–1000 characters.');
+      }
+      final message = ChatMessage(
+        id: 'demo-msg-${DateTime.now().microsecondsSinceEpoch}',
+        conversationId: conversationId,
+        senderId: _ownerId ?? 'demo-user',
+        senderName: senderName ?? 'You',
+        text: text,
+        timestamp: DateTime.now(),
+        isFromUser: true,
+        deliveryStatus: MessageDeliveryStatus.sent,
+        attachmentUrl: attachmentUrl,
+      );
+      _messages.putIfAbsent(conversationId, () => []).add(message);
+      final convIndex = _conversations.indexWhere((c) => c.id == conversationId);
+      if (convIndex != -1 && conv != null) {
+        _conversations[convIndex] = conv.copyWith(
+          lastMessage: text,
+          lastMessageTime: message.timestamp,
+        );
+      }
+      await _storage.saveMessages(conversationId, _messages[conversationId]!);
+      await _storage.saveConversations(_conversations);
+      _notifyMessagesChanged(conversationId);
+      _conversationsStreamController.add(List.unmodifiable(_conversations));
+      return message;
+    }
     if (_useSupabase) {
       if (text.trim().isEmpty || text.length > 1000) {
         throw Exception('Messages must contain 1–1000 characters.');
@@ -411,6 +505,15 @@ class ChatRepository {
   }
 
   Future<void> markConversationAsRead(String id) async {
+    if (id.startsWith('demo-conv-') && !_isTestConfigured) {
+      final index = _conversations.indexWhere((c) => c.id == id);
+      if (index != -1) {
+        _conversations[index] = _conversations[index].copyWith(unreadCount: 0);
+        await _storage.saveConversations(_conversations);
+        _conversationsStreamController.add(List.unmodifiable(_conversations));
+      }
+      return;
+    }
     if (_useSupabase) {
       final user = Supabase.instance.client.auth.currentUser;
       if (user != null) {

@@ -263,22 +263,28 @@ class _ShelterApprovalScreenState extends State<ShelterApprovalScreen> {
               ),
             ),
           // Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 8,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text(
-                    'Shelter & Organization Verification Queue',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'Audit government licenses, NID identity, and veterinarian backing prior to listing rescues.',
-                    style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
-                  ),
-                ],
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 560),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text(
+                      'Shelter Verification Queue',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Audit licenses, NID identity, and veterinary backing prior to listing rescues.',
+                      style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -294,19 +300,29 @@ class _ShelterApprovalScreenState extends State<ShelterApprovalScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
 
           // Filters & Search Bar
-          Row(
+          Wrap(
+            spacing: 12,
+            runSpacing: 10,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              _buildFilterChip('ALL', 'All Registrations (${allShelters.length})'),
-              const SizedBox(width: 8),
-              _buildFilterChip('PENDING', 'Pending (${allShelters.where((s) => s.status == VerificationStatus.pending).length})'),
-              const SizedBox(width: 8),
-              _buildFilterChip('APPROVED', 'Approved (${allShelters.where((s) => s.status == VerificationStatus.approved).length})'),
-              const SizedBox(width: 8),
-              _buildFilterChip('REJECTED', 'Rejected'),
-              const Spacer(),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _buildFilterChip('ALL', 'All Registrations (${allShelters.length})'),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('PENDING', 'Pending (${allShelters.where((s) => s.status == VerificationStatus.pending).length})'),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('APPROVED', 'Approved (${allShelters.where((s) => s.status == VerificationStatus.approved).length})'),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('REJECTED', 'Rejected'),
+                  ],
+                ),
+              ),
               SizedBox(
                 width: 260,
                 height: 40,

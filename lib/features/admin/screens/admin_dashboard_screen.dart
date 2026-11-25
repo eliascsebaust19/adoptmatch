@@ -702,42 +702,71 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                             unselectedLabelColor: const Color(0xFF64748B),
                             indicatorColor: const Color(0xFF0D9488),
                             indicatorWeight: 3,
+                            labelPadding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                            ),
                             labelStyle: const TextStyle(
                               fontWeight: FontWeight.bold,
-                              fontSize: 14,
+                              fontSize: 12,
+                            ),
+                            unselectedLabelStyle: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
                             ),
                             tabs: [
                               Tab(
-                                text: _isBangla
-                                    ? 'আবেদন (${_applications.length})'
-                                    : 'Apps (${_applications.length})',
                                 icon: const Icon(
                                   Icons.description_outlined,
                                   size: 18,
                                 ),
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    _isBangla
+                                        ? 'আবেদন (${_applications.length})'
+                                        : 'Apps (${_applications.length})',
+                                    maxLines: 1,
+                                  ),
+                                ),
                               ),
                               Tab(
-                                text: _isBangla
-                                    ? 'পোষ্য (${_pets.length})'
-                                    : 'Pets (${_pets.length})',
                                 icon: const Icon(Icons.pets_rounded, size: 18),
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    _isBangla
+                                        ? 'পোষ্য (${_pets.length})'
+                                        : 'Pets (${_pets.length})',
+                                    maxLines: 1,
+                                  ),
+                                ),
                               ),
                               Tab(
-                                text: _isBangla
-                                    ? 'ভিজিট ($homeVisitsCount)'
-                                    : 'Visits ($homeVisitsCount)',
                                 icon: const Icon(
                                   Icons.home_work_outlined,
                                   size: 18,
                                 ),
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    _isBangla
+                                        ? 'ভিজিট ($homeVisitsCount)'
+                                        : 'Visits ($homeVisitsCount)',
+                                    maxLines: 1,
+                                  ),
+                                ),
                               ),
                               Tab(
-                                text: _isBangla
-                                    ? 'অ্যানালিটিক্স ও অডিট'
-                                    : 'Analytics & Audit',
                                 icon: const Icon(
                                   Icons.analytics_outlined,
                                   size: 18,
+                                ),
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    _isBangla ? 'অ্যানালিটিক্স' : 'Analytics',
+                                    maxLines: 1,
+                                  ),
                                 ),
                               ),
                             ],
@@ -786,7 +815,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           elevation: 4,
           icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
           label: Text(
-            _isBangla ? 'পোষ্য যোগ করুন' : 'Add Rescue Pet / পোষ্য যোগ',
+            _isBangla ? 'পোষ্য যোগ করুন' : 'Add Rescue Pet',
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
           ),
         ),
@@ -845,11 +874,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             child: Text(
               _isBangla ? 'অ্যাডমিন ড্যাশবোর্ড' : 'AdoptMatch Admin',
               style: const TextStyle(
-                fontSize: 16,
+                fontSize: 15,
                 fontWeight: FontWeight.w800,
                 color: Color(0xFF0F172A),
                 letterSpacing: -0.2,
               ),
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -858,10 +888,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       actions: [
         // 1. Push Alert Dispatcher
         IconButton(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
           icon: const Icon(
             Icons.campaign_rounded,
             color: Color(0xFF0284C7),
-            size: 22,
+            size: 21,
           ),
           tooltip: _isBangla ? 'পুশ অ্যালার্ট পাঠান' : 'Broadcast / SOS',
           onPressed: _showPushNotificationDispatcher,
@@ -2097,9 +2129,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                           );
                         },
                         child: const Text(
-                          'Edit / তথ্য',
+                          'Edit',
                           style: TextStyle(
-                            fontSize: 10,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
                             color: Color(0xFF0F172A),
                           ),
                         ),
@@ -2264,27 +2297,139 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
       itemCount: visits.length,
-      separatorBuilder: (_, index) => const SizedBox(height: 10),
+      separatorBuilder: (_, index) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final app = visits[index];
-        return Card(
-          child: ListTile(
-            title: Text(
-              '${app.petName} • ${app.applicantName}',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Text(
-              '${app.status.displayName}${app.homeVisitDate == null ? '' : '\n${app.homeVisitDate!.toLocal()}'}',
-            ),
-            isThreeLine: true,
-            trailing: ElevatedButton(
-              onPressed: () => _updateApplicationStatuses(
-                [app.id],
-                ApplicationStatus.underReview,
-                notes: 'Visit/trial reviewed from admin dashboard',
+        final visitDate = app.homeVisitDate?.toLocal();
+        final visitDateText = visitDate == null
+            ? 'Date not scheduled'
+            : '${visitDate.year}-${visitDate.month.toString().padLeft(2, '0')}-${visitDate.day.toString().padLeft(2, '0')} • ${visitDate.hour.toString().padLeft(2, '0')}:${visitDate.minute.toString().padLeft(2, '0')}';
+
+        return Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
               ),
-              child: const Text('Record Review'),
-            ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0284C7).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.home_work_outlined,
+                      color: Color(0xFF0284C7),
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${app.petName} • ${app.applicantName}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14.5,
+                            color: Color(0xFF0F172A),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          app.status.displayName,
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF0284C7),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Visit: $visitDateText • ${app.address}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF0F172A),
+                      side: const BorderSide(color: Color(0xFFCBD5E1)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      minimumSize: const Size(64, 34),
+                    ),
+                    onPressed: () => showFilledApplicationDialog(
+                      context,
+                      app,
+                      onUpdateStatus: (status, notes) =>
+                          _updateApplicationStatuses(
+                        [app.id],
+                        status,
+                        notes: notes.isEmpty ? null : notes,
+                      ),
+                    ),
+                    icon: const Icon(Icons.description_outlined, size: 15),
+                    label: const Text(
+                      'Filled Form',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0D9488),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 6,
+                      ),
+                      minimumSize: const Size(64, 34),
+                      elevation: 0,
+                    ),
+                    onPressed: () => _updateApplicationStatuses(
+                      [app.id],
+                      ApplicationStatus.underReview,
+                      notes: 'Visit/trial reviewed from admin dashboard',
+                    ),
+                    child: const Text(
+                      'Record Review',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         );
       },

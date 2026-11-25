@@ -274,7 +274,7 @@ class _SubscriptionManagementScreenState
               ),
             )
           : SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 88),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -311,28 +311,30 @@ class _SubscriptionManagementScreenState
                     ),
                   // Header Bar
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text(
-                            'Subscription & Billing Management',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFF0F172A),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Subscription & Billing',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF0F172A),
+                              ),
                             ),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            'SSLCommerz gateway monitoring, manual bKash approvals & dynamic pricing desk',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              color: Color(0xFF64748B),
+                            SizedBox(height: 4),
+                            Text(
+                              'SSLCommerz monitoring, manual bKash approvals & pricing desk',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                color: Color(0xFF64748B),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                       IconButton(
                         icon: const Icon(Icons.refresh, color: Color(0xFF0F172A)),
@@ -340,13 +342,13 @@ class _SubscriptionManagementScreenState
                       ),
                     ],
                   ),
-                  const SizedBox(height: AppSpacing.xl),
+                  const SizedBox(height: AppSpacing.lg),
 
-                  // KPI Metric Cards
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildMetricCard(
+                  // KPI Metric Cards (Responsive stacked on mobile, 3-col on desktop)
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final cards = [
+                        _buildMetricCard(
                           title: 'Total Revenue',
                           value:
                               '৳${((_stats['totalRevenue'] as num?) ?? 0).toInt()} BDT',
@@ -354,20 +356,14 @@ class _SubscriptionManagementScreenState
                           icon: Icons.monetization_on,
                           color: const Color(0xFF10B981),
                         ),
-                      ),
-                      const SizedBox(width: AppSpacing.md),
-                      Expanded(
-                        child: _buildMetricCard(
+                        _buildMetricCard(
                           title: 'Active VIP Rescuers',
                           value: '${_stats['activePremiumUsersCount'] ?? 0}',
                           subtitle: 'Currently paid subscriptions',
                           icon: Icons.workspace_premium,
                           color: const Color(0xFFF59E0B),
                         ),
-                      ),
-                      const SizedBox(width: AppSpacing.md),
-                      Expanded(
-                        child: _buildMetricCard(
+                        _buildMetricCard(
                           title: 'Pending bKash Approvals',
                           value: '${pendingQueue.length}',
                           subtitle: 'Manual TrxID submissions',
@@ -376,10 +372,30 @@ class _SubscriptionManagementScreenState
                               ? const Color(0xFFD12053)
                               : const Color(0xFF64748B),
                         ),
-                      ),
-                    ],
+                      ];
+                      if (constraints.maxWidth < 700) {
+                        return Column(
+                          children: [
+                            cards[0],
+                            const SizedBox(height: 10),
+                            cards[1],
+                            const SizedBox(height: 10),
+                            cards[2],
+                          ],
+                        );
+                      }
+                      return Row(
+                        children: [
+                          Expanded(child: cards[0]),
+                          const SizedBox(width: AppSpacing.md),
+                          Expanded(child: cards[1]),
+                          const SizedBox(width: AppSpacing.md),
+                          Expanded(child: cards[2]),
+                        ],
+                      );
+                    },
                   ),
-                  const SizedBox(height: AppSpacing.xxl),
+                  const SizedBox(height: AppSpacing.xl),
 
                   // Navigation Tabs
                   Container(
@@ -394,19 +410,31 @@ class _SubscriptionManagementScreenState
                       unselectedLabelColor: const Color(0xFF64748B),
                       indicatorColor: const Color(0xFF0D9488),
                       indicatorWeight: 3,
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 4),
                       tabs: [
                         Tab(
                           icon: const Icon(Icons.approval, size: 16),
-                          text:
-                              'Pending bKash Approvals (${pendingQueue.length})',
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Pending (${pendingQueue.length})',
+                              maxLines: 1,
+                            ),
+                          ),
                         ),
                         const Tab(
                           icon: Icon(Icons.receipt_long, size: 16),
-                          text: 'All Payment Transactions',
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text('Transactions', maxLines: 1),
+                          ),
                         ),
                         const Tab(
                           icon: Icon(Icons.tune, size: 16),
-                          text: 'Subscription Plans Editor',
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text('Plans', maxLines: 1),
+                          ),
                         ),
                       ],
                     ),
@@ -564,184 +592,153 @@ class _SubscriptionManagementScreenState
               ),
             ],
           ),
-          child: Row(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD12053).withOpacity(0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.phone_android,
-                  color: Color(0xFFD12053),
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.lg),
-
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD12053).withOpacity(0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.phone_android,
+                      color: Color(0xFFD12053),
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          item.userName,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 15,
-                            color: Color(0xFF0F172A),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFFBEB),
-                            borderRadius: BorderRadius.circular(AppRadius.xs),
-                          ),
-                          child: const Text(
-                            'PENDING APPROVAL',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFFB45309),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              item.userName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15,
+                                color: Color(0xFF0F172A),
+                              ),
                             ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFFBEB),
+                                borderRadius: BorderRadius.circular(AppRadius.xs),
+                              ),
+                              child: const Text(
+                                'PENDING APPROVAL',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFFB45309),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${item.userEmail} • ${DateFormat('dd MMM yyyy, hh:mm a').format(item.createdAt)}',
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            color: Color(0xFF64748B),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${item.userEmail} • Submitted: ${DateFormat('dd MMM yyyy, hh:mm a').format(item.createdAt)}',
-                      style: const TextStyle(
-                        fontSize: 11.5,
-                        color: Color(0xFF64748B),
-                      ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Wrap(
+                  spacing: 18,
+                  runSpacing: 8,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'bKash Sender:',
+                          style: TextStyle(fontSize: 10.5, color: Color(0xFF64748B)),
+                        ),
+                        Text(
+                          item.senderPhone ?? 'N/A',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0F172A),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(AppRadius.sm),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'bKash Sender Phone:',
-                                  style: TextStyle(
-                                    fontSize: 10.5,
-                                    color: Color(0xFF64748B),
-                                  ),
-                                ),
-                                Text(
-                                  item.senderPhone ?? 'N/A',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF0F172A),
-                                  ),
-                                ),
-                              ],
-                            ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'TrxID:',
+                          style: TextStyle(fontSize: 10.5, color: Color(0xFF64748B)),
+                        ),
+                        Text(
+                          item.trxId ?? 'N/A',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0284C7),
+                            fontFamily: 'monospace',
                           ),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'bKash TrxID:',
-                                  style: TextStyle(
-                                    fontSize: 10.5,
-                                    color: Color(0xFF64748B),
-                                  ),
-                                ),
-                                Text(
-                                  item.trxId ?? 'N/A',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF0284C7),
-                                    fontFamily: 'monospace',
-                                  ),
-                                ),
-                              ],
-                            ),
+                        ),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Plan & Amount:',
+                          style: TextStyle(fontSize: 10.5, color: Color(0xFF64748B)),
+                        ),
+                        Text(
+                          '${item.planName} (৳${item.amount.toInt()} BDT)',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF10B981),
                           ),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Plan & Amount:',
-                                  style: TextStyle(
-                                    fontSize: 10.5,
-                                    color: Color(0xFF64748B),
-                                  ),
-                                ),
-                                Text(
-                                  '${item.planName} (৳${item.amount.toInt()} BDT)',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF10B981),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: AppSpacing.lg),
-
-              // Action Buttons
-              Column(
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF10B981),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.button),
-                      ),
-                    ),
-                    icon: const Icon(Icons.check, size: 16),
-                    label: const Text(
-                      'Approve & Activate',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    onPressed: () => _handleApprove(item.tranId, item.userName),
-                  ),
-                  const SizedBox(height: 6),
                   OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.error,
                       side: const BorderSide(color: AppColors.error),
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
+                        horizontal: 12,
                         vertical: 8,
                       ),
                       shape: RoundedRectangleBorder(
@@ -752,11 +749,34 @@ class _SubscriptionManagementScreenState
                     label: const Text(
                       'Reject',
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 11.5,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     onPressed: () => _handleReject(item.tranId),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF10B981),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.button),
+                      ),
+                    ),
+                    icon: const Icon(Icons.check, size: 15),
+                    label: const Text(
+                      'Approve',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    onPressed: () => _handleApprove(item.tranId, item.userName),
                   ),
                 ],
               ),
@@ -778,10 +798,15 @@ class _SubscriptionManagementScreenState
       child: Column(
         children: [
           // Filter & Search Controls
-          Row(
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Wrap(
                 spacing: 8,
+                runSpacing: 6,
                 children: ['ALL', 'SUCCESS', 'PENDING_APPROVAL', 'FAILED'].map((
                   st,
                 ) {
@@ -812,7 +837,6 @@ class _SubscriptionManagementScreenState
                   );
                 }).toList(),
               ),
-              const Spacer(),
               SizedBox(
                 width: 240,
                 height: 38,
@@ -985,81 +1009,77 @@ class _SubscriptionManagementScreenState
               ),
             ],
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          plan.name,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF0F172A),
-                          ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      plan.name,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                  ),
+                  if (plan.isBestValue)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF59E0B),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'BEST VALUE',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
                         ),
-                        if (plan.isBestValue) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF59E0B),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text(
-                              'BEST VALUE',
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Price: ৳${plan.price.toInt()} BDT • Duration: ${plan.durationDays} Days',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF0284C7),
-                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      plan.features.take(3).join(' • '),
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Color(0xFF64748B),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Price: ৳${plan.price.toInt()} BDT • Duration: ${plan.durationDays} Days',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF0284C7),
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.button),
+              const SizedBox(height: 6),
+              Text(
+                plan.features.take(3).join(' • '),
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  color: Color(0xFF64748B),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerRight,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.button),
+                    ),
                   ),
+                  icon: const Icon(Icons.edit, size: 14),
+                  label: const Text(
+                    'Edit Pricing & Duration',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  onPressed: () => _showPlanEditDialog(plan),
                 ),
-                icon: const Icon(Icons.edit, size: 14),
-                label: const Text(
-                  'Edit Pricing & Duration',
-                  style: TextStyle(fontSize: 12),
-                ),
-                onPressed: () => _showPlanEditDialog(plan),
               ),
             ],
           ),

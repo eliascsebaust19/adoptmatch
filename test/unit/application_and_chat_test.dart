@@ -276,4 +276,22 @@ void main() {
       expect(updated?.reviewerNotes, 'Approved in demo test');
     },
   );
+
+  test(
+    'demo user session can open chat and send message on local pet listing',
+    () async {
+      final chat = ChatRepository()
+        ..configureForTesting(
+          client: MockClient((_) async => http.Response('{}', 500)),
+          tokenReader: () async => 'viva-guest-demo-token',
+          userId: 'demo-user-1',
+        );
+      final conv = await chat.getOrCreateConversationForPet(
+        serverPet.copyWith(id: 'p1', ownerId: null),
+      );
+      expect(conv.id, 'demo-conv-p1');
+      final sent = await chat.sendMessage(conv.id, 'Is Barnaby friendly?');
+      expect(sent.deliveryStatus, MessageDeliveryStatus.sent);
+    },
+  );
 }

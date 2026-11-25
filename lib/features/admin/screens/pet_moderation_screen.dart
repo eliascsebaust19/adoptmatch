@@ -159,27 +159,36 @@ class _PetModerationScreenState extends State<PetModerationScreen> {
                 ],
               ),
             ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 12,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text(
-                    'Pet Listings: Anytime CRUD, Image Override & Moderation',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'Full admin control: create pet listings, replace multi-image carousels, and override medical history anytime.',
-                    style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
-                  ),
-                ],
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 560),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text(
+                      'Pet Listings & Moderation',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Create pet listings, update photo galleries, and manage health records.',
+                      style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
               ),
-              Row(
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   SizedBox(
-                    width: 240,
+                    width: 220,
                     height: 38,
                     child: TextField(
                       onChanged: (val) => setState(() => _searchQuery = val.trim()),
@@ -196,18 +205,17 @@ class _PetModerationScreenState extends State<PetModerationScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0D9488),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      icon: const Icon(Icons.add_circle_outline_rounded, size: 16),
-                      label: const Text('Add Rescue Pet / পোষ্য যোগ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      onPressed: () => _showCreateOrEditPetDialog(null),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0D9488),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
+                    icon: const Icon(Icons.add_circle_outline_rounded, size: 16),
+                    label: const Text('Add Rescue Pet', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    onPressed: () => _showCreateOrEditPetDialog(null),
+                  ),
                 ],
               ),
             ],
@@ -215,16 +223,19 @@ class _PetModerationScreenState extends State<PetModerationScreen> {
           const SizedBox(height: 14),
 
           // Filter bar
-          Row(
-            children: [
-              _buildFilterChip('ALL', 'All Listings (${allPets.length})'),
-              const SizedBox(width: 8),
-              _buildFilterChip('FLAGGED', 'Flagged Queue (${flaggedPets.where((p) => !p.isBanned).length})'),
-              const SizedBox(width: 8),
-              _buildFilterChip('DOG', 'Dogs Only'),
-              const SizedBox(width: 8),
-              _buildFilterChip('CAT', 'Cats Only'),
-            ],
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildFilterChip('ALL', 'All Listings (${allPets.length})'),
+                const SizedBox(width: 8),
+                _buildFilterChip('FLAGGED', 'Flagged Queue (${flaggedPets.where((p) => !p.isBanned).length})'),
+                const SizedBox(width: 8),
+                _buildFilterChip('DOG', 'Dogs Only'),
+                const SizedBox(width: 8),
+                _buildFilterChip('CAT', 'Cats Only'),
+              ],
+            ),
           ),
           const SizedBox(height: 16),
 

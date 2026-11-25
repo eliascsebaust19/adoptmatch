@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../config/demo_config.dart';
 import '../models/subscription_plan_model.dart';
 import '../models/payment_record_model.dart';
 import '../models/user_subscription_model.dart';
@@ -31,6 +32,87 @@ class SubscriptionRepository {
   bool get _useSupabase =>
       AdoptMatchBackend.isInitialized && !_isTestConfigured;
 
+  bool _isDemoToken(String? token) =>
+      token != null &&
+      (token.startsWith('demo_') ||
+          token.startsWith('viva-') ||
+          token.contains('demo-token'));
+
+  Future<bool> _isDemoSession([String? token]) async {
+    if (_isTestConfigured || !DemoConfig.enableVivaDemoPass) return false;
+    final effective = token ?? await SecureStorageService.instance.getAuthToken();
+    return _isDemoToken(effective);
+  }
+
+  final List<SubscriptionPlan> _demoPlans = [
+    const SubscriptionPlan(
+      id: 'plan-monthly',
+      name: 'Monthly VIP',
+      nameBn: 'মাসিক ভিআইপি',
+      price: 99,
+      currency: 'BDT',
+      durationDays: 30,
+      tag: 'FLEXIBLE',
+      features: ['Unlimited Adoptions', '24/7 Vet Chat', 'Health Passport'],
+      featuresBn: ['আনলিমিটেড অ্যাডপশন', '২৪/৭ ভেট চ্যাট', 'হেলথ পাসপোর্ট'],
+    ),
+    const SubscriptionPlan(
+      id: 'plan-quarterly',
+      name: 'Quarterly Pro',
+      nameBn: 'ত্রৈমাসিক প্রো',
+      price: 249,
+      currency: 'BDT',
+      durationDays: 90,
+      tag: 'POPULAR',
+      isBestValue: true,
+      features: ['Unlimited Adoptions', 'Priority Support', 'Vet Discount'],
+      featuresBn: ['আনলিমিটেড অ্যাডপশন', 'অগ্রাধিকার সহায়তা', 'ভেট ডিসকাউন্ট'],
+    ),
+    const SubscriptionPlan(
+      id: 'plan-annual',
+      name: 'Annual Rescuer',
+      nameBn: 'বাৎসরিক রেসকিউয়ার',
+      price: 799,
+      currency: 'BDT',
+      durationDays: 365,
+      tag: 'BEST VALUE',
+      features: ['All VIP Perks', 'SOS Broadcast Priority', 'Verified Badge'],
+      featuresBn: ['সব ভিআইপি সুবিধা', 'জরুরি SOS অগ্রাধিকার', 'ভেরিফায়েড ব্যাজ'],
+    ),
+  ];
+
+  final List<PaymentRecord> _demoPayments = [
+    PaymentRecord(
+      tranId: 'AM-BKASH-9041',
+      userId: 'u-demo-1',
+      userName: 'Nadia Rahman',
+      userEmail: 'nadia.rahman@demo.adoptmatch.app',
+      planId: 'plan-annual',
+      planName: 'Annual Rescuer',
+      amount: 799,
+      currency: 'BDT',
+      status: 'PENDING_APPROVAL',
+      paymentMethod: 'bKash (Manual)',
+      senderPhone: '01712-445566',
+      trxId: 'BKX84291QA',
+      createdAt: DateTime.now().subtract(const Duration(minutes: 35)),
+    ),
+    PaymentRecord(
+      tranId: 'AM-SSL-8820',
+      userId: 'u-demo-2',
+      userName: 'Farhan Ahmed',
+      userEmail: 'farhan.ahmed@demo.adoptmatch.app',
+      planId: 'plan-quarterly',
+      planName: 'Quarterly Pro',
+      amount: 249,
+      currency: 'BDT',
+      status: 'SUCCESS',
+      paymentMethod: 'SSLCommerz',
+      trxId: 'SSL99210PM',
+      createdAt: DateTime.now().subtract(const Duration(days: 1)),
+    ),
+  ];
+
   /// Configurable backend URL pointing to deployed production API by default
   String get baseUrl => ApiClient.rootUrl;
 
@@ -53,6 +135,10 @@ class SubscriptionRepository {
 
   /// Fetch all active subscription plans
   Future<List<SubscriptionPlan>> fetchPlans() async {
+    if (await _isDemoSession()) {
+      _cachedPlans = List<SubscriptionPlan>.from(_demoPlans);
+      return _cachedPlans;
+    }
     if (_useSupabase) {
       try {
         final rows = await AdoptMatchBackend.instance.plans();
@@ -305,8 +391,38 @@ class SubscriptionRepository {
   Future<Map<String, dynamic>> fetchAdminSubscriptionsStats([
     String? token,
   ]) async {
+    if (await _isDemoSession(token)) {
+      final successPayments =
+          _demoPayments.where((p) => p.status.toUpperCase() == 'SUCCESS');
+      final pendingPayments =
+          _demoPayments.where((p) => p.isPendingApproval);
+      final totalRev = successPayments.fold<double>(
+        4050.0,
+        (sum, p) => sum + p.amount,
+      );
+      return {
+        'stats': {
+          'totalRevenue': totalRev,
+          'successfulTransactionsCount': successPayments.length + 12,
+          'pendingApprovalsCount': pendingPayments.length,
+          'activePremiumUsersCount': 14,
+        },
+      };
+    }
     if (_useSupabase) {
-      return AdoptMatchBackend.instance.adminStats();
+      final raw = await AdoptMatchBackend.instance.adminStats();
+      if (raw['stats'] is Map) return raw;
+      return {
+        'stats': {
+          'totalRevenue': (raw['revenue_bdt'] as num?)?.toDouble() ?? 0.0,
+          'successfulTransactionsCount':
+              (raw['successful_transactions'] as num?)?.toInt() ?? 0,
+          'pendingApprovalsCount':
+              (raw['unverified_payments'] as num?)?.toInt() ?? 0,
+          'activePremiumUsersCount':
+              (raw['active_premium_users'] as num?)?.toInt() ?? 0,
+        },
+      };
     }
     final headers = await _authHeaders(json: true);
     if (token != null && token.isNotEmpty) {
@@ -330,6 +446,23 @@ class SubscriptionRepository {
     String? search,
     String? token,
   }) async {
+    if (await _isDemoSession(token)) {
+      return _demoPayments.where((p) {
+        if (status != null &&
+            status != 'ALL' &&
+            p.status.toUpperCase() != status.toUpperCase()) {
+          return false;
+        }
+        if (search != null && search.trim().isNotEmpty) {
+          final q = search.trim().toLowerCase();
+          return p.tranId.toLowerCase().contains(q) ||
+              (p.trxId?.toLowerCase().contains(q) ?? false) ||
+              p.userEmail.toLowerCase().contains(q) ||
+              p.userName.toLowerCase().contains(q);
+        }
+        return true;
+      }).toList();
+    }
     if (_useSupabase) {
       try {
         var query = Supabase.instance.client
@@ -405,6 +538,27 @@ class SubscriptionRepository {
 
   /// Admin approves a pending manual bKash payment
   Future<bool> approveManualPayment(String tranId, [String? token]) async {
+    if (await _isDemoSession(token)) {
+      final idx = _demoPayments.indexWhere((p) => p.tranId == tranId);
+      if (idx == -1) return false;
+      final item = _demoPayments[idx];
+      _demoPayments[idx] = PaymentRecord(
+        tranId: item.tranId,
+        userId: item.userId,
+        userName: item.userName,
+        userEmail: item.userEmail,
+        planId: item.planId,
+        planName: item.planName,
+        amount: item.amount,
+        currency: item.currency,
+        status: 'SUCCESS',
+        paymentMethod: item.paymentMethod,
+        senderPhone: item.senderPhone,
+        trxId: item.trxId,
+        createdAt: item.createdAt,
+      );
+      return true;
+    }
     if (_useSupabase) {
       try {
         await AdoptMatchBackend.instance.approvePayment(tranId);
@@ -443,6 +597,28 @@ class SubscriptionRepository {
     String reason, [
     String? token,
   ]) async {
+    if (await _isDemoSession(token)) {
+      final idx = _demoPayments.indexWhere((p) => p.tranId == tranId);
+      if (idx == -1) return false;
+      final item = _demoPayments[idx];
+      _demoPayments[idx] = PaymentRecord(
+        tranId: item.tranId,
+        userId: item.userId,
+        userName: item.userName,
+        userEmail: item.userEmail,
+        planId: item.planId,
+        planName: item.planName,
+        amount: item.amount,
+        currency: item.currency,
+        status: 'FAILED',
+        paymentMethod: item.paymentMethod,
+        senderPhone: item.senderPhone,
+        trxId: item.trxId,
+        adminNote: reason,
+        createdAt: item.createdAt,
+      );
+      return true;
+    }
     if (_useSupabase) {
       try {
         await AdoptMatchBackend.instance.rejectPayment(tranId, reason);
@@ -482,6 +658,28 @@ class SubscriptionRepository {
     Map<String, dynamic> updates, [
     String? token,
   ]) async {
+    if (await _isDemoSession(token)) {
+      final idx = _demoPlans.indexWhere((p) => p.id == planId);
+      if (idx == -1) return null;
+      final existing = _demoPlans[idx];
+      final updated = SubscriptionPlan(
+        id: existing.id,
+        name: existing.name,
+        nameBn: existing.nameBn,
+        price: (updates['price'] as num?)?.toDouble() ?? existing.price,
+        currency: existing.currency,
+        durationDays:
+            (updates['durationDays'] as num?)?.toInt() ?? existing.durationDays,
+        tag: existing.tag,
+        isBestValue: existing.isBestValue,
+        isActive: existing.isActive,
+        features: existing.features,
+        featuresBn: existing.featuresBn,
+      );
+      _demoPlans[idx] = updated;
+      _cachedPlans = List<SubscriptionPlan>.from(_demoPlans);
+      return updated;
+    }
     if (_useSupabase) {
       try {
         await Supabase.instance.client

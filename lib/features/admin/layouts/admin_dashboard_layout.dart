@@ -230,14 +230,18 @@ class _AdminDashboardLayoutState extends State<AdminDashboardLayout> {
                               ),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      const Text(
-                        'AdoptMatch Admin',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF0F172A),
-                          letterSpacing: -0.2,
+                      const SizedBox(width: 8),
+                      const Flexible(
+                        child: Text(
+                          'AdoptMatch Admin',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF0F172A),
+                            letterSpacing: -0.2,
+                          ),
                         ),
                       ),
                     ],
@@ -249,7 +253,7 @@ class _AdminDashboardLayoutState extends State<AdminDashboardLayout> {
                         color: Color(0xFF0D9488),
                         size: 22,
                       ),
-                      tooltip: 'Add Pet / পোষ্য যোগ',
+                      tooltip: 'Add Pet',
                       onPressed: () => showAdminCreatePetDialog(
                         context,
                         onSaved: (_) => setState(() {}),
@@ -277,7 +281,7 @@ class _AdminDashboardLayoutState extends State<AdminDashboardLayout> {
             elevation: 4,
             icon: const Icon(Icons.add_photo_alternate_rounded, size: 20),
             label: const Text(
-              'Add Rescue Pet / পোষ্য যোগ',
+              'Add Rescue Pet',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             ),
           ),
@@ -401,7 +405,7 @@ class _AdminDashboardLayoutState extends State<AdminDashboardLayout> {
                 ),
                 icon: const Icon(Icons.add_photo_alternate_rounded, size: 16),
                 label: const Text(
-                  'Add Rescue Pet / পোষ্য যোগ',
+                  'Add Rescue Pet',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                 ),
                 onPressed: () => showAdminCreatePetDialog(
@@ -592,7 +596,7 @@ class _AdminDashboardLayoutState extends State<AdminDashboardLayout> {
                               ),
                               SizedBox(width: 12),
                               Text(
-                                '+ Add Rescue Pet / পোষ্য যোগ',
+                                'Add Rescue Pet',
                                 style: TextStyle(
                                   color: Color(0xFF2DD4BF),
                                   fontSize: 12,
