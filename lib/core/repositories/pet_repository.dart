@@ -40,9 +40,11 @@ class PetRepository {
 
   bool _realtimeStarted = false;
   RealtimeChannel? _petsRealtimeChannel;
+  Timer? _backgroundSyncTimer;
 
   /// Subscribe once to live changes on `public.pets` so admin edits and image
   /// re-uploads propagate immediately to every open user dashboard.
+  /// Also maintains a lightweight 25s catch-up poll to recover from dropped sockets.
   void startRealtimeSync() {
     if (_realtimeStarted || !AdoptMatchBackend.isInitialized) return;
     _realtimeStarted = true;
@@ -69,7 +71,10 @@ class PetRepository {
               if (id.isEmpty) return;
 
               final modStatus = (rec['moderation_status'] ?? 'approved').toString();
-              if (modStatus != 'approved') {
+              final adoptStatus = (rec['adoption_status'] ?? 'available').toString().toLowerCase();
+              final isActive = rec['is_active'] is bool ? rec['is_active'] as bool : true;
+              if (modStatus != 'approved' || !isActive || adoptStatus == 'archived') {
+                _sessionOverrides.remove(id);
                 _pets.removeWhere((p) => p.id == id);
                 _petStreamController.add(List.unmodifiable(_pets));
                 return;
@@ -112,7 +117,19 @@ class PetRepository {
               unawaited(fetchAvailablePets());
             },
           )
-          .subscribe();
+          .subscribe((status, [error]) {
+            if (status == RealtimeSubscribeStatus.channelError ||
+                status == RealtimeSubscribeStatus.timedOut) {
+              debugPrint('[PetRepository] Realtime status $status ($error); refreshing feed.');
+              unawaited(fetchAvailablePets());
+            }
+          });
+
+      _backgroundSyncTimer?.cancel();
+      _backgroundSyncTimer = Timer.periodic(
+        const Duration(seconds: 25),
+        (_) => unawaited(fetchAvailablePets()),
+      );
     } catch (e) {
       _realtimeStarted = false;
       debugPrint('[PetRepository] Realtime sync notice: $e');
@@ -121,6 +138,8 @@ class PetRepository {
 
   /// Unsubscribes the live pets Realtime channel (e.g. on logout/dispose).
   Future<void> stopRealtimeSync() async {
+    _backgroundSyncTimer?.cancel();
+    _backgroundSyncTimer = null;
     final ch = _petsRealtimeChannel;
     _petsRealtimeChannel = null;
     _realtimeStarted = false;
@@ -1155,7 +1174,9 @@ class PetRepository {
     bool? apartmentOnly,
     bool? vaccinatedOnly,
   }) {
-    var result = List<Pet>.from(source);
+    var result = source
+        .where((p) => p.adoptionStatus.toLowerCase() != 'archived')
+        .toList();
 
     if (category != null &&
         category != 'All Pets' &&

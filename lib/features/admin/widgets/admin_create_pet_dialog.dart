@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../../../core/models/pet_model.dart';
 import '../../../core/repositories/admin_repository.dart';
 import '../../../core/services/storage_service.dart';
+import '../../../core/services/supabase_service.dart';
 import '../../../shared/widgets/app_network_image.dart';
 
 /// Shows the Admin Create or Edit Pet Dialog with full image support
@@ -50,6 +51,7 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
 
   late String _selectedSpecies;
   late String _selectedGender;
+  late String _selectedAdoptionStatus;
   late bool _isVaccinated;
   late bool _isNeutered;
   late bool _isHouseTrained;
@@ -72,6 +74,13 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
     'Senior',
   ];
   final List<String> _genderOptions = ['Male', 'Female'];
+  final List<String> _adoptionStatusOptions = [
+    'available',
+    'pending',
+    'foster',
+    'adopted',
+    'archived',
+  ];
 
   // Reliable, high-resolution public animal presets (Unsplash CDN)
   static const List<Map<String, String>> _samplePresets = [
@@ -129,6 +138,10 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
 
     _selectedSpecies = p?.species ?? 'Dog';
     _selectedGender = p?.gender ?? 'Male';
+    final rawStatus = (p?.adoptionStatus ?? 'available').toLowerCase();
+    _selectedAdoptionStatus = _adoptionStatusOptions.contains(rawStatus)
+        ? rawStatus
+        : 'available';
     _isVaccinated = p?.isVaccinated ?? true;
     _isNeutered = p?.isNeutered ?? true;
     _isHouseTrained = p?.isHouseTrained ?? true;
@@ -170,10 +183,13 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
     List<int> bytes,
     String fileName,
   ) {
+    final allowFallback =
+        !SupabaseService.isInitialized || SupabaseService.auth.currentSession == null;
     final uploadFuture = StorageService.uploadPetImage(
       bytes: bytes is Uint8List ? bytes : Uint8List.fromList(bytes),
       fileName: fileName,
       petId: widget.existingPet?.id,
+      allowLocalFallback: allowFallback,
     );
     _pendingUploads[previewUri] = uploadFuture;
     unawaited(() async {
@@ -189,7 +205,7 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
         }
       } catch (uploadErr) {
         debugPrint(
-          '[AdminCreatePet] Background upload fallback to local preview: $uploadErr',
+          '[AdminCreatePet] Cloud upload notice: $uploadErr',
         );
       } finally {
         _pendingUploads.remove(previewUri);
@@ -197,16 +213,20 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
     }());
   }
 
-  /// Pick from gallery with instant local base64 preview and background cloud upload
+  /// Pick from gallery with validation (JPG/PNG/WebP <= 5 MB), instant preview & cloud upload
   Future<void> _pickFromGallery({bool replaceCover = false}) async {
     try {
       final file = await StorageService.pickImageFromGallery();
       if (file != null) {
         setState(() => _isProcessingImage = true);
         final bytes = await file.readAsBytes();
+        final mime = StorageService.validateAndDetectPetImage(
+          bytes: bytes,
+          fileName: file.name,
+        );
 
         // 1. Instant local base64 preview (appears in < 50ms)
-        final previewUri = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+        final previewUri = 'data:$mime;base64,${base64Encode(bytes)}';
         setState(() {
           if (replaceCover && _carouselImages.isNotEmpty) {
             _pendingUploads.remove(_carouselImages.first);
@@ -226,7 +246,7 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
         setState(() => _isProcessingImage = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Could not pick image: $e'),
+            content: Text('$e'.replaceFirst('FormatException: ', '')),
             backgroundColor: const Color(0xFFE11D48),
           ),
         );
@@ -234,15 +254,65 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
     }
   }
 
-  /// Take photo using camera with instant local preview and background cloud upload
+  /// Pick multiple images to upload a completely new gallery
+  Future<void> _replaceWithNewGallery() async {
+    try {
+      final files = await StorageService.pickMultipleImagesFromGallery();
+      if (files.isEmpty) return;
+
+      setState(() => _isProcessingImage = true);
+      final newEntries = <({String uri, Uint8List bytes, String name})>[];
+      for (final file in files) {
+        final bytes = await file.readAsBytes();
+        final mime = StorageService.validateAndDetectPetImage(
+          bytes: bytes,
+          fileName: file.name,
+        );
+        newEntries.add((
+          uri: 'data:$mime;base64,${base64Encode(bytes)}',
+          bytes: bytes,
+          name: file.name,
+        ));
+      }
+
+      setState(() {
+        _pendingUploads.clear();
+        _carouselImages
+          ..clear()
+          ..addAll(newEntries.map((e) => e.uri));
+        _isProcessingImage = false;
+      });
+
+      for (final entry in newEntries) {
+        _queueCloudUpload(entry.uri, entry.bytes, entry.name);
+      }
+    } catch (e) {
+      debugPrint('[AdminCreatePet] New gallery pick error: $e');
+      if (mounted) {
+        setState(() => _isProcessingImage = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$e'.replaceFirst('FormatException: ', '')),
+            backgroundColor: const Color(0xFFE11D48),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Take photo using camera with validation, instant local preview & background cloud upload
   Future<void> _takePhoto() async {
     try {
       final file = await StorageService.pickImageFromCamera();
       if (file != null) {
         setState(() => _isProcessingImage = true);
         final bytes = await file.readAsBytes();
+        final mime = StorageService.validateAndDetectPetImage(
+          bytes: bytes,
+          fileName: file.name,
+        );
 
-        final previewUri = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+        final previewUri = 'data:$mime;base64,${base64Encode(bytes)}';
         setState(() {
           _carouselImages.insert(0, previewUri); // Make cover immediately
           _isProcessingImage = false;
@@ -256,7 +326,7 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
         setState(() => _isProcessingImage = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Camera capture error: $e'),
+            content: Text('$e'.replaceFirst('FormatException: ', '')),
             backgroundColor: const Color(0xFFE11D48),
           ),
         );
@@ -330,6 +400,10 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
         widget.existingPet?.id ??
         'pet-admin-${DateTime.now().millisecondsSinceEpoch}';
 
+    final hasCloudSession =
+        SupabaseService.isInitialized &&
+        SupabaseService.auth.currentSession != null;
+
     // Ensure any data URI images are resolved/uploaded to cloud storage
     final resolvedImages = <String>[];
     for (int i = 0; i < _carouselImages.length; i++) {
@@ -337,9 +411,23 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
       if (_pendingUploads.containsKey(img)) {
         try {
           final cloudUrl = await _pendingUploads[img]!;
+          if (hasCloudSession && !cloudUrl.startsWith('http')) {
+            throw Exception('Cloud image upload did not return a hosted URL.');
+          }
           resolvedImages.add(cloudUrl.startsWith('http') ? cloudUrl : img);
         } catch (e) {
-          debugPrint('[AdminCreatePet] Pending upload fallback for image $i: $e');
+          if (hasCloudSession) {
+            if (mounted) {
+              setState(() => _isSaving = false);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: const Color(0xFFE11D48),
+                  content: Text('Image upload failed: $e'),
+                ),
+              );
+            }
+            return;
+          }
           resolvedImages.add(img);
         }
       } else if (img.startsWith('data:image')) {
@@ -351,6 +439,7 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
             bytes: bytes,
             fileName: 'pet_${id}_$i.jpg',
             petId: id,
+            allowLocalFallback: !hasCloudSession,
           );
           if (cloudUrl.startsWith('http')) {
             resolvedImages.add(cloudUrl);
@@ -358,6 +447,18 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
             resolvedImages.add(img);
           }
         } catch (e) {
+          if (hasCloudSession) {
+            if (mounted) {
+              setState(() => _isSaving = false);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: const Color(0xFFE11D48),
+                  content: Text('Cloud image upload failed: $e'),
+                ),
+              );
+            }
+            return;
+          }
           debugPrint('[AdminCreatePet] Cloud upload for image $i: $e');
           resolvedImages.add(img);
         }
@@ -368,6 +469,11 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
 
     _carouselImages.clear();
     _carouselImages.addAll(resolvedImages);
+
+    final baseStory = _storyController.text.trim();
+    final syncedStory = _selectedAdoptionStatus == 'adopted'
+        ? (baseStory.startsWith('[ADOPTED]') ? baseStory : '[ADOPTED] $baseStory')
+        : baseStory.replaceAll('[ADOPTED] ', '').replaceAll('[ADOPTED]', '');
 
     final pet = Pet(
       id: id,
@@ -392,17 +498,17 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
       isFeatured: _isFeatured,
       isUrgent: _isUrgent,
       isFavorite: widget.existingPet?.isFavorite ?? false,
-      isFoster: widget.existingPet?.isFoster ?? false,
+      isFoster: _selectedAdoptionStatus == 'foster',
       shelterName: _shelterNameController.text.trim(),
       shelterPhone: widget.existingPet?.shelterPhone ?? '+880 17•• ••••89',
       shelterAddress: _locationController.text.trim(),
       shelterRating: widget.existingPet?.shelterRating ?? 4.9,
-      story: _storyController.text.trim(),
+      story: syncedStory,
       medicalHistory: _medicalHistoryController.text.trim(),
       qrHash: (widget.existingPet?.qrHash.isNotEmpty == true)
           ? widget.existingPet!.qrHash
           : 'ADMIN-PET-$id',
-      adoptionStatus: widget.existingPet?.adoptionStatus ?? 'available',
+      adoptionStatus: _selectedAdoptionStatus,
     );
 
     Pet saved;
@@ -410,6 +516,17 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
       if (widget.existingPet != null) {
         await AdminRepository().overridePetListing(pet);
         saved = pet;
+        // Delete obsolete cloud images that were replaced or removed
+        final previousUrls = <String>{
+          if (widget.existingPet!.imageUrl.isNotEmpty)
+            widget.existingPet!.imageUrl,
+          ...widget.existingPet!.galleryUrls,
+        };
+        for (final oldUrl in previousUrls) {
+          if (!resolvedImages.contains(oldUrl)) {
+            unawaited(StorageService.deletePetImageByUrl(oldUrl));
+          }
+        }
       } else {
         saved = await AdminRepository().createPetListing(pet);
       }
@@ -811,6 +928,48 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
                           hint: 'Fully checked by licensed veterinarian. Dewormed & healthy...',
                           prefixIcon: Icons.medical_services_outlined,
                         ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Adoption Availability Status
+                      const Text(
+                        'Availability Status / বর্তমান অবস্থা:',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF334155),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: _adoptionStatusOptions.map((st) {
+                          final isSelected = _selectedAdoptionStatus == st;
+                          final label = st[0].toUpperCase() + st.substring(1);
+                          return ChoiceChip(
+                            label: Text(
+                              label,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                color: isSelected ? Colors.white : const Color(0xFF334155),
+                              ),
+                            ),
+                            selected: isSelected,
+                            selectedColor: st == 'adopted'
+                                ? const Color(0xFF10B981)
+                                : (st == 'pending'
+                                    ? const Color(0xFFF59E0B)
+                                    : (st == 'archived'
+                                        ? const Color(0xFF64748B)
+                                        : const Color(0xFF0D9488))),
+                            backgroundColor: const Color(0xFFF1F5F9),
+                            onSelected: (val) {
+                              if (val) setState(() => _selectedAdoptionStatus = st);
+                            },
+                          );
+                        }).toList(),
                       ),
                       const SizedBox(height: 14),
 
@@ -1262,6 +1421,23 @@ class _AdminCreatePetDialogState extends State<_AdminCreatePetDialog> {
                   ),
                 ),
                 const SizedBox(width: 8),
+                IconButton(
+                  tooltip: 'Upload New Gallery / নতুন গ্যালারি',
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    side: const BorderSide(color: Color(0xFF0D9488)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  icon: const Icon(
+                    Icons.collections_outlined,
+                    size: 18,
+                    color: Color(0xFF0D9488),
+                  ),
+                  onPressed: _isProcessingImage ? null : _replaceWithNewGallery,
+                ),
+                const SizedBox(width: 6),
                 IconButton(
                   tooltip: 'Add from Web URL',
                   style: IconButton.styleFrom(

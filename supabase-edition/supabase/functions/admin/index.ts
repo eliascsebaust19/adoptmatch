@@ -50,6 +50,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (resource === 'pets' && method === 'GET' && !id) return await listPets(req, url);
     if (resource === 'pets' && method === 'POST' && !id) return await createPet(req);
     if (resource === 'pets' && (method === 'PATCH' || method === 'PUT') && id) return await patchPet(req, id);
+    if (resource === 'pets' && method === 'DELETE' && id) return await deletePet(req, id, url);
     if (resource === 'shelters' && method === 'GET' && !id) return await listShelters(req, url);
     if (resource === 'shelters' && method === 'PATCH' && id) return await patchShelter(req, id);
     if (resource === 'payments' && method === 'GET' && !id) return await listPayments(req, url);
@@ -225,6 +226,7 @@ async function patchPet(req: Request, petId: string): Promise<Response> {
   const body = await readJson<{
     moderation_status?: string;
     is_featured?: boolean;
+    is_active?: boolean;
     is_urgent?: boolean;
     is_vaccinated?: boolean;
     is_neutered?: boolean;
@@ -271,6 +273,7 @@ async function patchPet(req: Request, petId: string): Promise<Response> {
   if (body.medical_history !== undefined) patch.medical_history = body.medical_history;
   if (body.image_url !== undefined) patch.image_url = body.image_url;
   if (body.is_featured !== undefined) patch.is_featured = Boolean(body.is_featured);
+  if (body.is_active !== undefined) patch.is_active = Boolean(body.is_active);
   if (body.is_urgent !== undefined) patch.is_urgent = Boolean(body.is_urgent);
   if (body.is_vaccinated !== undefined) patch.is_vaccinated = Boolean(body.is_vaccinated);
   if (body.is_neutered !== undefined) patch.is_neutered = Boolean(body.is_neutered);
@@ -293,6 +296,28 @@ async function patchPet(req: Request, petId: string): Promise<Response> {
 
   await audit(actor.id, 'pet.moderate', 'pets', petId, { ...patch, reason: body.reason ?? null });
   return json({ status: 'success', data });
+}
+
+async function deletePet(req: Request, petId: string, url: URL): Promise<Response> {
+  const actor = await requireStaff(req, ROLES);
+  const soft = url.searchParams.get('soft') === 'true';
+
+  if (soft) {
+    const { data, error } = await serviceClient()
+      .from('pets')
+      .update({ adoption_status: 'archived', is_active: false })
+      .eq('id', petId)
+      .select()
+      .maybeSingle();
+    if (error || !data) throw new ApiError(500, 'PET_ARCHIVE_FAILED', 'Could not archive this listing.');
+    await audit(actor.id, 'pet.archive', 'pets', petId, {});
+    return json({ status: 'success', data });
+  }
+
+  const { error } = await serviceClient().from('pets').delete().eq('id', petId);
+  if (error) throw new ApiError(500, 'PET_DELETE_FAILED', 'Could not delete this listing.');
+  await audit(actor.id, 'pet.delete', 'pets', petId, {});
+  return json({ status: 'success', data: { id: petId, deleted: true } });
 }
 
 async function listShelters(req: Request, url: URL): Promise<Response> {

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
+import '../../../config/demo_config.dart';
 import '../../../core/models/user_subscription_model.dart';
 import '../../../core/network/network_error.dart';
 import '../../../core/repositories/subscription_repository.dart';
@@ -334,6 +335,10 @@ class GuestLoginEvent extends AuthEvent {
   const GuestLoginEvent();
 }
 
+class VivaDemoPassEvent extends AuthEvent {
+  const VivaDemoPassEvent();
+}
+
 class UserConfirmedSessionEvent extends AuthEvent {
   final UserProfile user;
   final String? accessToken;
@@ -504,6 +509,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<VerifyPhoneOtpEvent>(_onVerifyOtp);
     on<SocialLoginEvent>(_onSocialLogin);
     on<GuestLoginEvent>(_onGuestLogin);
+    on<VivaDemoPassEvent>(_onVivaDemoPass);
     on<UserConfirmedSessionEvent>(_onUserConfirmedSession);
     on<SwitchRoleEvent>(_onSwitchRole);
     on<UpdateUserProfileEvent>(_onUpdateUserProfile);
@@ -641,8 +647,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       final emailLower = event.email.trim().toLowerCase();
 
-      // 0. Instant Academic Demo / Viva Fallback
-      if (emailLower == 'admin@adoptmatch.com' && event.password == 'admin123') {
+      // 0. Academic Demo / Viva Fallback (only when explicitly enabled via ENABLE_VIVA_DEMO=true)
+      if (DemoConfig.enableVivaDemoPass &&
+          emailLower == 'admin@adoptmatch.com' &&
+          event.password == 'admin123') {
         final demoAdmin = UserProfile(
           id: 'admin-demo-master',
           name: 'Shelter Operations Admin',
@@ -761,6 +769,25 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     GuestLoginEvent event,
     Emitter<AuthState> emit,
   ) async {
+    emit(
+      const AuthFailure(
+        'Guest access is disabled. Please create an account or sign in.',
+      ),
+    );
+  }
+
+  Future<void> _onVivaDemoPass(
+    VivaDemoPassEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    if (!DemoConfig.enableVivaDemoPass) {
+      emit(
+        const AuthFailure(
+          'Demo pass is disabled in production builds. Please sign in with your account.',
+        ),
+      );
+      return;
+    }
     emit(AuthLoading());
     final guestProfile = UserProfile(
       id: 'usr-guest-2hr-${DateTime.now().millisecondsSinceEpoch}',

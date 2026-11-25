@@ -508,8 +508,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
 
-                              // Quick Fill Demo Admin Chip (Viva / Defense)
-                              if (_isAdminMode) ...[
+                              // Quick Fill Demo Admin Chip (Viva / Defense only)
+                              if (_isAdminMode && DemoConfig.enableVivaDemoPass) ...[
                                 const SizedBox(height: 12),
                                 InkWell(
                                   onTap: () {
@@ -545,8 +545,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ],
 
-                              // 1-Tap Free Access (2 Hours Demo Pass - Viva / Defense)
-                              if (!_isAdminMode && !_isSignUp) ...[
+                              // 1-Tap Free Access (2 Hours Demo Pass - Viva / Defense only)
+                              if (!_isAdminMode && !_isSignUp && DemoConfig.enableVivaDemoPass) ...[
                                 const SizedBox(height: 12),
                                 InkWell(
                                   onTap: isGlobalLoading
@@ -556,7 +556,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                             _activeAction = 'signin';
                                             _isSubmitting = true;
                                           });
-                                          context.read<AuthBloc>().add(const GuestLoginEvent());
+                                          context.read<AuthBloc>().add(const VivaDemoPassEvent());
                                         },
                                   borderRadius: BorderRadius.circular(10),
                                   child: Container(

@@ -567,10 +567,13 @@ class LaravelPetService {
   }
 
   Pet _petFromJson(Map<String, dynamic> json) {
+    final rawGallery = (json['images'] ?? json['gallery_urls']) as List?;
     final images =
-        (json['images'] as List?)
+        rawGallery
             ?.map((img) {
-              if (img is Map) return img['image_url']?.toString() ?? '';
+              if (img is Map) {
+                return (img['image_url'] ?? img['url'] ?? '').toString();
+              }
               return img.toString();
             })
             .where((url) => url.isNotEmpty)
@@ -579,7 +582,9 @@ class LaravelPetService {
 
     final rawPrimary = json['primary_image_url'] ?? json['image_url'];
     final primaryUrl =
-        rawPrimary?.toString() ?? (images.isNotEmpty ? images.first : '');
+        (rawPrimary != null && rawPrimary.toString().isNotEmpty)
+            ? rawPrimary.toString()
+            : (images.isNotEmpty ? images.first : '');
     final ageMonths = (json['age_months'] as num?)?.toInt() ?? 0;
     final ageDisplay = ageMonths <= 0
         ? 'Age not provided'

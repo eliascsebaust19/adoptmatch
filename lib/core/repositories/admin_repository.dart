@@ -18,6 +18,7 @@ import '../../features/admin/models/admin_audit_log_model.dart';
 import '../../features/auth/bloc/auth_bloc.dart';
 import '../models/pet_model.dart';
 import '../network/api_client.dart';
+import '../services/storage_service.dart';
 import '../storage/secure_storage_service.dart';
 import '../supabase/adoptmatch_supabase.dart';
 import 'pet_repository.dart';
@@ -1012,21 +1013,82 @@ class AdminRepository {
     );
   }
 
+  Future<void> archivePetListing(String id) async {
+    final idx = _pets.indexWhere((p) => p.id == id);
+    if (idx != -1) {
+      final archived = _pets[idx].copyWith(adoptionStatus: 'archived');
+      await overridePetListing(archived, notes: 'Archived by admin');
+    }
+  }
+
+  Future<void> restorePetListing(String id) async {
+    final idx = _pets.indexWhere((p) => p.id == id);
+    if (idx != -1) {
+      final restored = _pets[idx].copyWith(
+        adoptionStatus: 'available',
+        story: _pets[idx].story
+            .replaceAll('[ADOPTED] ', '')
+            .replaceAll('[ADOPTED]', ''),
+      );
+      await overridePetListing(restored, notes: 'Restored by admin');
+    }
+  }
+
   Future<void> deletePetListing(String id, {String? petName}) async {
+    final existingIdx = _pets.indexWhere((p) => p.id == id);
+    final existingUrls = existingIdx != -1
+        ? <String>{
+            if (_pets[existingIdx].imageUrl.isNotEmpty) _pets[existingIdx].imageUrl,
+            ..._pets[existingIdx].galleryUrls,
+          }
+        : const <String>{};
+
     if (_useSupabase) {
       final isUuid = RegExp(
         r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
       ).hasMatch(id);
-      if (isUuid) {
+      final client = Supabase.instance.client;
+      bool deletedOnServer = false;
+      Object? deleteErr;
+
+      if (isUuid && client.auth.currentSession != null) {
         try {
-          await Supabase.instance.client.from('pets').delete().eq('id', id);
+          final rows = await client.from('pets').delete().eq('id', id).select('id');
+          if ((rows as List).isNotEmpty) {
+            deletedOnServer = true;
+          }
         } catch (e) {
-          debugPrint('[AdminRepository] delete pet db notice: $e');
+          deleteErr = e;
+          debugPrint('[AdminRepository] Direct delete pet notice: $e');
+        }
+
+        if (!deletedOnServer) {
+          try {
+            final res = await client.functions.invoke(
+              'admin/pets/$id',
+              method: HttpMethod.delete,
+            );
+            if (res.status < 300) {
+              deletedOnServer = true;
+              deleteErr = null;
+            }
+          } catch (fnErr) {
+            deleteErr = fnErr;
+          }
+        }
+
+        if (!deletedOnServer && deleteErr != null) {
+          throw Exception('Could not delete listing on server: $deleteErr');
         }
       }
+
+      for (final url in existingUrls) {
+        unawaited(StorageService.deletePetImageByUrl(url));
+      }
+
       _pets.removeWhere((p) => p.id == id);
       _petsController.add(List.unmodifiable(_pets));
-      PetRepository().deletePet(id);
+      await PetRepository().deletePet(id);
       return;
     }
     return _changed(_request('DELETE', '/pets/$id'));
@@ -1190,6 +1252,17 @@ class AdminRepository {
       final client = Supabase.instance.client;
       final currentSession = client.auth.currentSession;
 
+      final normalizedStatus = pet.adoptionStatus.toLowerCase().trim();
+      final validStatus = const {
+        'available',
+        'pending',
+        'adopted',
+        'foster',
+        'archived',
+      }.contains(normalizedStatus)
+          ? normalizedStatus
+          : 'available';
+
       final updatePayload = <String, dynamic>{
         'name': pet.name,
         'species': pet.species,
@@ -1208,12 +1281,8 @@ class AdminRepository {
         'is_featured': pet.isFeatured,
         'image_url': pet.imageUrl,
         'moderation_status': 'approved',
-        if (pet.adoptionStatus.isNotEmpty)
-          'adoption_status':
-              (pet.adoptionStatus.toLowerCase() == 'adopted' ||
-                  pet.adoptionStatus.toLowerCase() == 'pending')
-              ? pet.adoptionStatus.toLowerCase()
-              : 'available',
+        'adoption_status': validStatus,
+        'is_active': validStatus != 'archived',
       };
 
       bool syncedToServer = false;

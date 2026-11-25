@@ -69,6 +69,9 @@ class Pet extends Equatable {
 
   String get distanceLabel => distanceKm.isFinite ? '$distanceKm km' : 'Distance unavailable';
 
+  bool get isAdopted =>
+      adoptionStatus.toLowerCase() == 'adopted' || story.contains('[ADOPTED]');
+
   Pet copyWith({
     String? id,
     String? name,

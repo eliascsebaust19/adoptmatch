@@ -16,10 +16,6 @@ import '../widgets/admin_kpi_card.dart';
 import '../widgets/admin_create_pet_dialog.dart';
 import '../widgets/admin_drawer.dart';
 
-extension PetAdoptionStatusExtension on Pet {
-  bool get isAdopted => story.contains('[ADOPTED]');
-}
-
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
 
@@ -1737,9 +1733,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   // ==========================================
   Widget _buildPetInventoryTab() {
     var filtered = _pets.where((p) {
-      if (_petFilter == 'available' && p.isAdopted) return false;
+      final status = p.adoptionStatus.toLowerCase();
+      if (_petFilter == 'available' && (p.isAdopted || status == 'archived')) {
+        return false;
+      }
       if (_petFilter == 'adopted' && !p.isAdopted) return false;
       if (_petFilter == 'urgent' && !p.isUrgent) return false;
+      if (_petFilter == 'archived' && status != 'archived') return false;
+      if (_petFilter == 'all' && status == 'archived') return false;
       if (_searchQuery.isNotEmpty) {
         final q = _searchQuery.toLowerCase();
         return p.name.toLowerCase().contains(q) ||
@@ -1778,6 +1779,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               _buildPetStatusChip(
                 'urgent',
                 _isBangla ? 'জরুরি কেয়ার' : 'Urgent Medical',
+              ),
+              const SizedBox(width: 8),
+              _buildPetStatusChip(
+                'archived',
+                _isBangla ? 'আর্কাইভড' : 'Archived',
               ),
             ],
           ),
@@ -2060,7 +2066,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                             : pet.story
                                   .replaceAll('[ADOPTED] ', '')
                                   .replaceAll('[ADOPTED]', '');
-                        final updated = pet.copyWith(story: newStory);
+                        final updated = pet.copyWith(
+                          story: newStory,
+                          adoptionStatus: isNowAdopted ? 'adopted' : 'available',
+                        );
                         _adminRepo
                             .overridePetListing(
                               updated,
@@ -2080,6 +2089,79 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                               }
                             });
                       },
+                    ),
+                    PopupMenuButton<String>(
+                      padding: EdgeInsets.zero,
+                      icon: const Icon(
+                        Icons.more_vert_rounded,
+                        size: 18,
+                        color: Color(0xFF64748B),
+                      ),
+                      tooltip: 'Archive / Restore / Delete',
+                      onSelected: (action) async {
+                        try {
+                          if (action == 'archive') {
+                            await _adminRepo.archivePetListing(pet.id);
+                          } else if (action == 'restore') {
+                            await _adminRepo.restorePetListing(pet.id);
+                          } else if (action == 'delete') {
+                            final confirmed = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: Text('Delete ${pet.name}?'),
+                                content: const Text(
+                                  'This permanently removes the pet listing and its cloud images.',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(ctx, false),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFFE11D48),
+                                    ),
+                                    onPressed: () => Navigator.pop(ctx, true),
+                                    child: const Text('Delete'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirmed == true) {
+                              await _adminRepo.deletePetListing(pet.id, petName: pet.name);
+                            }
+                          }
+                          if (mounted) setState(() {});
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                backgroundColor: const Color(0xFFE11D48),
+                                content: Text('Action failed: $e'),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                      itemBuilder: (ctx) => [
+                        if (pet.adoptionStatus.toLowerCase() == 'archived')
+                          const PopupMenuItem(
+                            value: 'restore',
+                            child: Text('Restore Listing'),
+                          )
+                        else
+                          const PopupMenuItem(
+                            value: 'archive',
+                            child: Text('Archive (Hide)'),
+                          ),
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Text(
+                            'Delete Permanently',
+                            style: TextStyle(color: Color(0xFFE11D48)),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

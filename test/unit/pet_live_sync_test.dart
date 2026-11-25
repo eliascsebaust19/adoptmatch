@@ -1,9 +1,12 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:adoptmatch/core/models/pet_model.dart';
 import 'package:adoptmatch/core/repositories/pet_repository.dart';
 import 'package:adoptmatch/core/services/laravel_pet_service.dart';
+import 'package:adoptmatch/core/services/storage_service.dart';
 import 'package:adoptmatch/features/adoption_match/bloc/pet_match_bloc.dart';
 
 class _MockLaravelPetService extends Mock implements LaravelPetService {}
@@ -81,6 +84,76 @@ void main() {
     expect(
       refetched.firstWhere((p) => p.id == 'pet-live-1').imageUrl,
       updatedUrl,
+    );
+
+    // Archiving removes pet from user listings live; restoring brings it back.
+    await repo.applyAdminPetUpdate(
+      updatedPet.copyWith(adoptionStatus: 'archived'),
+      syncedToServer: false,
+    );
+    await expectLater(
+      bloc.stream,
+      emitsThrough(
+        isA<PetMatchLoaded>().having(
+          (s) => s.pets.any((p) => p.id == 'pet-live-1'),
+          'archived pet hidden from user list',
+          isFalse,
+        ),
+      ),
+    );
+
+    await repo.applyAdminPetUpdate(
+      updatedPet.copyWith(adoptionStatus: 'available'),
+      syncedToServer: false,
+    );
+    await expectLater(
+      bloc.stream,
+      emitsThrough(
+        isA<PetMatchLoaded>().having(
+          (s) => s.pets.any((p) => p.id == 'pet-live-1'),
+          'restored pet visible again',
+          isTrue,
+        ),
+      ),
+    );
+  });
+
+  test('StorageService validates JPG/PNG/WebP formats and 5 MB max size', () {
+    final jpegBytes = Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xE0, 0x00]);
+    expect(
+      StorageService.validateAndDetectPetImage(bytes: jpegBytes, fileName: 'cat.jpg'),
+      'image/jpeg',
+    );
+
+    final pngBytes = Uint8List.fromList([0x89, 0x50, 0x4E, 0x47, 0x0D]);
+    expect(
+      StorageService.validateAndDetectPetImage(bytes: pngBytes, fileName: 'dog.png'),
+      'image/png',
+    );
+
+    final webpBytes = Uint8List.fromList([
+      0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50,
+    ]);
+    expect(
+      StorageService.validateAndDetectPetImage(bytes: webpBytes, fileName: 'bird.webp'),
+      'image/webp',
+    );
+
+    expect(
+      () => StorageService.validateAndDetectPetImage(
+        bytes: Uint8List.fromList([1, 2, 3, 4]),
+        fileName: 'document.pdf',
+      ),
+      throwsA(isA<FormatException>()),
+    );
+
+    final oversized = Uint8List(StorageService.maxPetImageBytes + 1);
+    expect(
+      () => StorageService.validateAndDetectPetImage(
+        bytes: oversized,
+        fileName: 'huge.jpg',
+      ),
+      throwsA(isA<FormatException>()),
     );
   });
 }

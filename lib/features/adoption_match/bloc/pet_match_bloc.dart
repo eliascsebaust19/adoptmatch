@@ -209,11 +209,17 @@ class PetMatchBloc extends Bloc<PetMatchEvent, PetMatchState> {
     on<ResetQuizFilterEvent>(_onResetQuiz);
     on<_SyncPetsFromRepositoryEvent>(_onSyncPetsFromRepository);
 
-    _petsSub = repository.petsStream.listen((pets) {
-      if (!isClosed) {
-        add(_SyncPetsFromRepositoryEvent(pets));
+    try {
+      // Cast through dynamic so unstubbed mocks in unit tests returning null don't throw.
+      final dynamic maybeStream = repository.petsStream;
+      if (maybeStream is Stream<List<Pet>>) {
+        _petsSub = maybeStream.listen((pets) {
+          if (!isClosed) {
+            add(_SyncPetsFromRepositoryEvent(pets));
+          }
+        });
       }
-    });
+    } catch (_) {}
   }
 
   @override

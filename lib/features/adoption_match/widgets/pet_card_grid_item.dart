@@ -89,20 +89,30 @@ class PetCardGridItem extends StatelessWidget {
                     ),
                   ),
 
-                  // Distance or Urgent tag if applicable
-                  if (pet.isUrgent)
+                  // Status / Urgent tags
+                  if (pet.isUrgent ||
+                      pet.isAdopted ||
+                      pet.adoptionStatus.toLowerCase() == 'pending')
                     Positioned(
                       top: 8,
                       left: 8,
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFE11D48),
+                          color: pet.isAdopted
+                              ? const Color(0xFF10B981)
+                              : (pet.adoptionStatus.toLowerCase() == 'pending'
+                                  ? const Color(0xFFF59E0B)
+                                  : const Color(0xFFE11D48)),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Text(
-                          'URGENT',
-                          style: TextStyle(
+                        child: Text(
+                          pet.isAdopted
+                              ? 'ADOPTED'
+                              : (pet.adoptionStatus.toLowerCase() == 'pending'
+                                  ? 'PENDING'
+                                  : 'URGENT'),
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 9,
                             fontWeight: FontWeight.w800,
