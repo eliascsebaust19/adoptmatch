@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -8,12 +9,13 @@ import '../../features/onboarding/screens/onboarding_screen.dart';
 import '../../features/auth/bloc/auth_bloc.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/otp_screen.dart';
+import '../../features/auth/screens/verify_otp_screen.dart';
 import '../../features/auth/screens/auth_callback_screen.dart';
 import '../../features/auth/screens/reset_password_screen.dart';
 
 // Consumer Screens
 import '../../features/main_navigation/screens/main_nav_screen.dart';
-import '../../features/adoption_match/screens/discover_screen.dart';
+import '../../features/adoption_match/screens/home_screen.dart';
 import '../../features/adoption_match/screens/swipe_match_screen.dart';
 import '../../features/adoption_match/screens/quiz_screen.dart';
 import '../../features/pet_profile/screens/pet_detail_screen.dart';
@@ -101,12 +103,15 @@ class AppRouter {
         final hasAdminAccess = role.hasAdminAccess;
 
         final path = state.uri.path;
-        final isAdminPath = path.startsWith('/admin') || path.startsWith('/shelter');
+        final isAdminPath =
+            path.startsWith('/admin') || path.startsWith('/shelter');
         final isAdminLogin = path == '/admin/login';
-        final hasSeenOnboarding = LocalStorageService.instance.hasSeenOnboarding;
+        final hasSeenOnboarding =
+            LocalStorageService.instance.hasSeenOnboarding;
         final isOnboardingPath = path == '/onboarding';
         final isSplashPath = path == '/splash';
-        final isAuthCallback = path == '/auth-callback' ||
+        final isAuthCallback =
+            path == '/auth-callback' ||
             path == '/auth/callback' ||
             path == '/auth/reset-password';
 
@@ -172,7 +177,9 @@ class AppRouter {
             !isAuthCallback &&
             path != '/login' &&
             path != '/onboarding') {
-          if (path.startsWith('/profile') || path.startsWith('/chat') || path.startsWith('/applications')) {
+          if (path.startsWith('/profile') ||
+              path.startsWith('/chat') ||
+              path.startsWith('/applications')) {
             return '/login';
           }
         }
@@ -195,7 +202,7 @@ class AppRouter {
               routes: [
                 GoRoute(
                   path: '/home',
-                  builder: (context, state) => const DiscoverScreen(),
+                  builder: (context, state) => const HomeScreen(),
                 ),
               ],
             ),
@@ -349,6 +356,17 @@ class AppRouter {
             return OtpVerificationScreen(phoneNumber: phone);
           },
         ),
+        GoRoute(
+          parentNavigatorKey: rootNavigatorKey,
+          path: '/verify-otp',
+          builder: (context, state) {
+            final email =
+                state.uri.queryParameters['email'] ??
+                (state.extra as String?) ??
+                '';
+            return VerifyOtpScreen(email: email);
+          },
+        ),
 
         // ==========================================
         // 4. SUB-SCREENS (PUSHED OVER BOTTOM BAR)
@@ -498,9 +516,7 @@ class AppRouter {
         ),
       ],
       errorBuilder: (context, state) => Scaffold(
-        appBar: AppBar(
-          title: const Text('Page Not Found'),
-        ),
+        appBar: AppBar(title: const Text('Page Not Found')),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -522,7 +538,10 @@ class AppRouter {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF0D9488),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),

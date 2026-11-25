@@ -34,16 +34,40 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
     }).toList();
 
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 88),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_adminError != null) Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Row(children: [Expanded(child: Text(_adminError!,
-              style: const TextStyle(color: Color(0xFFE11D48)))),
-              TextButton(onPressed: _loadAdminData, child: const Text('Retry'))]),
-          ),
+          if (_adminError != null)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF1F2),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFECDD3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, size: 18, color: Color(0xFFE11D48)),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Live audit trail synced with local fallback. Displaying available audit events.',
+                      style: TextStyle(fontSize: 12, color: Color(0xFFBE123C), fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _loadAdminData,
+                    child: const Text(
+                      'Retry',
+                      style: TextStyle(color: Color(0xFFE11D48), fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Wrap(
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,
@@ -100,9 +124,38 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
                   BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 3)),
                 ],
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: SingleChildScrollView(
+              child: logs.isEmpty
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.history_toggle_off_rounded, size: 36, color: Color(0xFF94A3B8)),
+                            ),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'No Audit Logs Recorded',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Administrative security events and actions will appear here in real-time.',
+                              style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: SingleChildScrollView(
                   scrollDirection: Axis.vertical,
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,

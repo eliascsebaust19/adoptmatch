@@ -47,8 +47,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, state) {
-        if (state is AuthOtpSent) ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Verification code sent.')));
+        if (state is AuthOtpSent) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Verification code sent.')),
+          );
+        }
       },
       child: Scaffold(
       backgroundColor: AppColors.surfaceScaffold,

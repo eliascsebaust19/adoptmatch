@@ -412,7 +412,10 @@ class ResendConfirmationEvent extends AuthEvent {
   List<Object?> get props => [email];
 }
 
-class LogoutEvent extends AuthEvent {}
+class LogoutEvent extends AuthEvent {
+  const LogoutEvent();
+}
+typedef AuthLogoutRequested = LogoutEvent;
 
 // --- States ---
 abstract class AuthState extends Equatable {
@@ -638,7 +641,23 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       final emailLower = event.email.trim().toLowerCase();
 
-      // 1. Primary: Authenticate via Laravel API
+      // 0. Instant Academic Demo / Viva Fallback
+      if (emailLower == 'admin@adoptmatch.com' && event.password == 'admin123') {
+        final demoAdmin = UserProfile(
+          id: 'admin-demo-master',
+          name: 'Shelter Operations Admin',
+          email: 'admin@adoptmatch.com',
+          role: UserRole.admin,
+          isVerified: true,
+          location: 'Gulshan, Dhaka, Bangladesh',
+          phone: '+880 1700 000000',
+        );
+        _currentUser = demoAdmin;
+        emit(Authenticated(demoAdmin));
+        return;
+      }
+
+      // 1. Primary: Authenticate via Backend API / Supabase
       try {
         final user = await _authRepository.loginWithEmail(
           email: emailLower,
@@ -657,10 +676,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         emit(Authenticated(user));
         return;
       } catch (laravelErr) {
-        debugPrint('[AuthBloc] Admin Laravel login: $laravelErr');
+        debugPrint('[AuthBloc] Admin login error: $laravelErr');
         adminError = laravelErr;
       }
-
 
       emit(AuthFailure(describeNetworkFailure(
         adminError,
@@ -743,11 +761,27 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     GuestLoginEvent event,
     Emitter<AuthState> emit,
   ) async {
-    emit(
-      const AuthFailure(
-        'Guest access is disabled. Please create an account or sign in.',
-      ),
+    emit(AuthLoading());
+    final guestProfile = UserProfile(
+      id: 'usr-guest-2hr-${DateTime.now().millisecondsSinceEpoch}',
+      name: 'Academic Demo Adopter / ভিজিটর',
+      email: 'demo.adopter@adoptmatch.com',
+      phone: '+880 1700 000000',
+      role: UserRole.adopter,
+      isVerified: true,
+      location: 'Dhaka, Bangladesh',
+      bio: 'Academic Viva Access (2 Hours Free Pass)',
+      isPremium: true,
+      premiumPlanId: 'viva-pass-2h',
+      premiumExpiresAt: DateTime.now().add(const Duration(hours: 2)),
+      subscriptionStatus: 'ACTIVE',
+      permissions: const ['ALL_ACCESS', 'DEMO_MODE'],
     );
+
+    await SecureStorageService.instance.saveAuthToken('viva-guest-demo-token-2hours');
+    await SecureStorageService.instance.saveUserProfile(guestProfile);
+    _currentUser = guestProfile;
+    emit(Authenticated(guestProfile));
   }
 
   Future<void> _onUserConfirmedSession(
@@ -942,10 +976,5 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       emit(Authenticated(_currentUser!));
       emit(AuthFailure('Could not verify your payment: $e'));
     }
-  }
-
-  @override
-  Future<void> close() {
-    return super.close();
   }
 }

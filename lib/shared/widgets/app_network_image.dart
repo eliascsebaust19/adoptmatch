@@ -80,6 +80,7 @@ class AppNetworkImage extends StatelessWidget {
         final bytes = base64Decode(base64Str);
         return Image.memory(
           bytes,
+          key: ValueKey(imageUrl),
           width: width,
           height: height,
           fit: fit,
@@ -93,6 +94,7 @@ class AppNetworkImage extends StatelessWidget {
     if (kIsWeb) {
       return Image.network(
         imageUrl,
+        key: ValueKey(imageUrl),
         width: width,
         height: height,
         fit: fit,
@@ -108,6 +110,7 @@ class AppNetworkImage extends StatelessWidget {
     }
 
     return CachedNetworkImage(
+      key: ValueKey(imageUrl),
       imageUrl: imageUrl,
       width: width,
       height: height,

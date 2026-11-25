@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../auth/bloc/auth_bloc.dart';
 import '../../../core/network/api_client.dart';
+import '../../../shared/widgets/shared_widgets.dart';
 
 class AdminLoginScreen extends StatefulWidget {
   const AdminLoginScreen({super.key});
@@ -57,7 +58,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
     return Scaffold(
       backgroundColor: darkNavy,
-      body: BlocListener<AuthBloc, AuthState>(
+      body: BlocConsumer<AuthBloc, AuthState>(
         listener: (context, state) {
           if (state is Authenticated) {
             if (state.user.role.hasAdminAccess) {
@@ -74,15 +75,20 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
             });
           }
         },
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Admin Logo Header
+        builder: (context, state) {
+          final isLoading = state is AuthLoading;
+
+          return Stack(
+            children: [
+              Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 440),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Admin Logo Header
                   Container(
                     width: 76,
                     height: 76,
@@ -373,7 +379,12 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
             ),
           ),
         ),
-      ),
+        if (isLoading)
+          const AuthLoadingOverlay(actionType: 'admin'),
+      ],
     );
+  },
+),
+);
   }
 }

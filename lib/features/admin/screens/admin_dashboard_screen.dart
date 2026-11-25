@@ -1,8 +1,10 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../shared/widgets/app_network_image.dart';
 
 import '../../../core/models/application_model.dart';
@@ -12,6 +14,7 @@ import '../../../core/repositories/admin_repository.dart';
 import '../../auth/bloc/auth_bloc.dart';
 import '../widgets/admin_kpi_card.dart';
 import '../widgets/admin_create_pet_dialog.dart';
+import '../widgets/admin_drawer.dart';
 
 extension PetAdoptionStatusExtension on Pet {
   bool get isAdopted => story.contains('[ADOPTED]');
@@ -38,6 +41,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   List<AdoptionApplication> _applications = [];
   List<Pet> _pets = [];
   bool _isLoading = false;
+  String? _errorMessage;
 
   // Bilingual Mode Toggle (English / বাংলা)
   bool _isBangla = false;
@@ -89,8 +93,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   }
 
   Future<void> _loadInitialData() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
     try {
-      await _adminRepo.refresh();
+      try {
+        await _adminRepo.refresh();
+      } catch (repoErr) {
+        debugPrint('[AdminDashboard] Stats/Admin refresh notice: $repoErr');
+        _errorMessage = repoErr.toString();
+      }
+
       final apps = await _appRepo.getApplications(received: true);
       final pets = _adminRepo.getPets();
       if (mounted) {
@@ -101,36 +116,113 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         });
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: const Color(0xFFE11D48), content: Text('Admin data unavailable: $e')));
+      debugPrint('[AdminDashboard] Global load notice: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = e.toString();
+        });
+      }
     }
+  }
+
+  Widget _buildRetryBanner() {
+    if (_errorMessage == null) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFECDD3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.info_outline_rounded,
+            color: Color(0xFFE11D48),
+            size: 18,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _isBangla
+                  ? 'কিছু পরিসংখ্যান সিঙ্ক করা যায়নি। অফলাইন ক্যাশ দেখানো হচ্ছে।'
+                  : 'Live stats partially synced. Displaying available local records.',
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF991B1B),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFE11D48),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              minimumSize: const Size(50, 30),
+            ),
+            onPressed: _loadInitialData,
+            child: Text(
+              _isBangla ? 'পুনরায় চেষ্টা' : 'Retry',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ==========================================
   // ACTION LOGIC & AUDIT TRAIL HELPERS
   // ==========================================
-  Future<void> _batchApproveApplications() =>
-      _updateApplicationStatuses(_selectedAppIds.toList(), ApplicationStatus.approved, notes: 'Approved from admin dashboard');
-  Future<void> _batchRejectApplications() =>
-      _updateApplicationStatuses(_selectedAppIds.toList(), ApplicationStatus.rejected, notes: 'Rejected from admin dashboard');
+  Future<void> _batchApproveApplications() => _updateApplicationStatuses(
+    _selectedAppIds.toList(),
+    ApplicationStatus.approved,
+    notes: 'Approved from admin dashboard',
+  );
+  Future<void> _batchRejectApplications() => _updateApplicationStatuses(
+    _selectedAppIds.toList(),
+    ApplicationStatus.rejected,
+    notes: 'Rejected from admin dashboard',
+  );
 
-  Future<void> _updateApplicationStatuses(List<String> ids, ApplicationStatus status, {String? notes}) async {
-    var saved = 0; Object? failure;
+  Future<void> _updateApplicationStatuses(
+    List<String> ids,
+    ApplicationStatus status, {
+    String? notes,
+  }) async {
+    var saved = 0;
+    Object? failure;
     for (final id in ids) {
-      try { await _appRepo.updateApplicationStatus(id, status, notes: notes); saved++; }
-      catch (e) { failure = e; }
+      try {
+        await _appRepo.updateApplicationStatus(id, status, notes: notes);
+        saved++;
+      } catch (e) {
+        failure = e;
+      }
     }
     await _loadInitialData();
     if (!mounted) return;
     setState(() => _selectedAppIds.clear());
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      backgroundColor: failure == null ? const Color(0xFF0D9488) : const Color(0xFFE11D48),
-      content: Text(failure == null ? 'Saved $saved application status changes.' :
-        'Saved $saved of ${ids.length}; server error: $failure')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: failure == null
+            ? const Color(0xFF0D9488)
+            : const Color(0xFFE11D48),
+        content: Text(
+          failure == null
+              ? 'Saved $saved application status changes.'
+              : 'Saved $saved of ${ids.length}; server error: $failure',
+        ),
+      ),
+    );
   }
 
   void _showPushNotificationDispatcher() {
-    final titleController = TextEditingController(text: '🐾 Emergency Rescue Alert');
+    final titleController = TextEditingController(
+      text: '🐾 Emergency Rescue Alert',
+    );
     final messageController = TextEditingController(
       text: 'Special adoption drive active this weekend in Dhaka. Foster parents urgently needed!',
     );
@@ -141,7 +233,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDlgState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
           title: Row(
             children: [
               Container(
@@ -150,12 +244,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   color: const Color(0xFF0D9488).withOpacity(0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.campaign_rounded, color: Color(0xFF0D9488), size: 22),
+                child: const Icon(
+                  Icons.campaign_rounded,
+                  color: Color(0xFF0D9488),
+                  size: 22,
+                ),
               ),
               const SizedBox(width: 12),
               Text(
-                _isBangla ? 'পুশ নোটিফিকেশন ডিসপ্যাচার' : 'Push Alert Dispatcher',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                _isBangla
+                    ? 'পুশ নোটিফিকেশন ডিসপ্যাচার'
+                    : 'Push Alert Dispatcher',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                ),
               ),
             ],
           ),
@@ -165,56 +268,96 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _isBangla ? 'টার্গেট অডিয়েন্স নির্বাচন করুন:' : 'Target Audience:',
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  _isBangla
+                      ? 'টার্গেট অডিয়েন্স নির্বাচন করুন:'
+                      : 'Target Audience:',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
                 ),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
                   value: targetAudience,
                   decoration: InputDecoration(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
-                  items: [
-                    'All Users in Dhaka (5km)',
-                    'Verified Shelters Network',
-                    'Active Foster Parents',
-                    'All AdoptMatch Users',
-                  ].map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 13)))).toList(),
-                  onChanged: (val) => setDlgState(() => targetAudience = val ?? targetAudience),
+                  items:
+                      [
+                            'All Users in Dhaka (5km)',
+                            'Verified Shelters Network',
+                            'Active Foster Parents',
+                            'All AdoptMatch Users',
+                          ]
+                          .map(
+                            (s) => DropdownMenuItem(
+                              value: s,
+                              child: Text(
+                                s,
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                  onChanged: (val) =>
+                      setDlgState(() => targetAudience = val ?? targetAudience),
                 ),
                 const SizedBox(height: 14),
                 Text(
                   _isBangla ? 'শিরোনাম (Title):' : 'Alert Title:',
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
                 ),
                 const SizedBox(height: 6),
                 TextField(
                   controller: titleController,
                   decoration: InputDecoration(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 14),
                 Text(
                   _isBangla ? 'মেসেজ বিবরণ (Message Body):' : 'Message Body:',
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
                 ),
                 const SizedBox(height: 6),
                 TextField(
                   controller: messageController,
                   maxLines: 3,
                   decoration: InputDecoration(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 10),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text(
-                    _isBangla ? 'জরুরি অগ্রাধিকার (High Priority Sound & Vibrate)' : 'High Priority Sound & Vibrate',
+                    _isBangla
+                        ? 'জরুরি অগ্রাধিকার (High Priority Sound & Vibrate)'
+                        : 'High Priority Sound & Vibrate',
                     style: const TextStyle(fontSize: 13),
                   ),
                   value: isUrgent,
@@ -227,22 +370,32 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text(_isBangla ? 'বাতিল' : 'Cancel', style: const TextStyle(color: Colors.grey)),
+              child: Text(
+                _isBangla ? 'বাতিল' : 'Cancel',
+                style: const TextStyle(color: Colors.grey),
+              ),
             ),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF0D9488),
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
               icon: const Icon(Icons.send_rounded, size: 16),
               label: Text(_isBangla ? 'ব্রডকাস্ট পাঠান' : 'Broadcast Alert'),
               onPressed: () {
                 Navigator.pop(ctx);
 
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  backgroundColor: Color(0xFFE11D48),
-                  content: Text('Push broadcasting is not configured. No alert was sent.')));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    backgroundColor: Color(0xFFE11D48),
+                    content: Text(
+                      'Push broadcasting is not configured. No alert was sent.',
+                    ),
+                  ),
+                );
               },
             ),
           ],
@@ -264,7 +417,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 color: const Color(0xFF6366F1).withOpacity(0.12),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.file_download_outlined, color: Color(0xFF6366F1), size: 22),
+              child: const Icon(
+                Icons.file_download_outlined,
+                color: Color(0xFF6366F1),
+                size: 22,
+              ),
             ),
             const SizedBox(width: 12),
             Text(
@@ -288,12 +445,27 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               contentPadding: EdgeInsets.zero,
               leading: Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: const Color(0xFF0D9488).withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                child: const Icon(Icons.table_chart_rounded, color: Color(0xFF0D9488)),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0D9488).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.table_chart_rounded,
+                  color: Color(0xFF0D9488),
+                ),
               ),
-              title: const Text('Adoption Applications (CSV)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-              subtitle: const Text('Full pipeline records, adopter contacts & vetting history', style: TextStyle(fontSize: 11)),
-              trailing: const Icon(Icons.download_rounded, color: Color(0xFF0D9488)),
+              title: const Text(
+                'Adoption Applications (CSV)',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              subtitle: const Text(
+                'Full pipeline records, adopter contacts & vetting history',
+                style: TextStyle(fontSize: 11),
+              ),
+              trailing: const Icon(
+                Icons.download_rounded,
+                color: Color(0xFF0D9488),
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 _triggerExportFeedback('Adoption_Applications_Export.csv');
@@ -304,12 +476,27 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               contentPadding: EdgeInsets.zero,
               leading: Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: const Color(0xFFE11D48).withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                child: const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFFE11D48)),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE11D48).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.picture_as_pdf_rounded,
+                  color: Color(0xFFE11D48),
+                ),
               ),
-              title: const Text('System Audit Trail (CSV)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-              subtitle: const Text('Server-recorded administrative actions', style: TextStyle(fontSize: 11)),
-              trailing: const Icon(Icons.download_rounded, color: Color(0xFFE11D48)),
+              title: const Text(
+                'System Audit Trail (CSV)',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              subtitle: const Text(
+                'Server-recorded administrative actions',
+                style: TextStyle(fontSize: 11),
+              ),
+              trailing: const Icon(
+                Icons.download_rounded,
+                color: Color(0xFFE11D48),
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 _triggerExportFeedback('System_Audit_Trail_Export.csv');
@@ -320,12 +507,24 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               contentPadding: EdgeInsets.zero,
               leading: Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: const Color(0xFF6366F1).withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6366F1).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
                 child: const Icon(Icons.pets_rounded, color: Color(0xFF6366F1)),
               ),
-              title: const Text('Pet Inventory & Microchips (CSV)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-              subtitle: const Text('Complete roster of active rescues and vaccine passports', style: TextStyle(fontSize: 11)),
-              trailing: const Icon(Icons.download_rounded, color: Color(0xFF6366F1)),
+              title: const Text(
+                'Pet Inventory & Microchips (CSV)',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              subtitle: const Text(
+                'Complete roster of active rescues and vaccine passports',
+                style: TextStyle(fontSize: 11),
+              ),
+              trailing: const Icon(
+                Icons.download_rounded,
+                color: Color(0xFF6366F1),
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 _triggerExportFeedback('Pet_Inventory_Registry.csv');
@@ -336,7 +535,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(_isBangla ? 'বন্ধ করুন' : 'Close', style: const TextStyle(color: Colors.grey)),
+            child: Text(
+              _isBangla ? 'বন্ধ করুন' : 'Close',
+              style: const TextStyle(color: Colors.grey),
+            ),
           ),
         ],
       ),
@@ -350,32 +552,43 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
   Future<void> _triggerExportFeedback(String filename) async {
     if (filename.endsWith('.pdf')) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('PDF export is not configured. No file was generated.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('PDF export is not configured. No file was generated.'),
+        ),
+      );
       return;
     }
     String csv;
     if (filename.contains('Applications')) {
-      csv = 'id,pet,applicant,status\n' + _applications.map((a) =>
-        [a.id, a.petName, a.applicantName, a.status.name].map(_csvCell).join(',')).join('\n');
+      csv =
+          'id,pet,applicant,status\n${_applications.map((a) => [a.id, a.petName, a.applicantName, a.status.name].map(_csvCell).join(',')).join('\n')}';
     } else if (filename.contains('Pet')) {
-      csv = 'id,name,species,breed\n' + _pets.map((p) =>
-        [p.id, p.name, p.species, p.breed].map(_csvCell).join(',')).join('\n');
+      csv =
+          'id,name,species,breed\n${_pets.map((p) => [p.id, p.name, p.species, p.breed].map(_csvCell).join(',')).join('\n')}';
     } else {
       final logs = _adminRepo.getAuditLogs();
-      csv = 'timestamp,actor,action,target\n' + logs.map((l) =>
-        [l.timestamp.toIso8601String(), l.actorName, l.action, l.target].map(_csvCell).join(',')).join('\n');
+      csv =
+          'timestamp,actor,action,target\n${logs.map((l) => [l.timestamp.toIso8601String(), l.actorName, l.action, l.target].map(_csvCell).join(',')).join('\n')}';
     }
     await Clipboard.setData(ClipboardData(text: csv));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('CSV copied to clipboard. No file download was created.')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('CSV copied to clipboard. No file download was created.'),
+      ),
+    );
   }
 
   void _handleEmergencyRescueDispatch() {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      backgroundColor: Color(0xFFE11D48),
-      content: Text('Emergency dispatch is not connected. Contact local rescue services directly.')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        backgroundColor: Color(0xFFE11D48),
+        content: Text(
+          'Emergency dispatch is not connected. Contact local rescue services directly.',
+        ),
+      ),
+    );
   }
 
   // ==========================================
@@ -383,16 +596,50 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   // ==========================================
   @override
   Widget build(BuildContext context) {
-    final activeRescuesCount = _pets.length;
-    final pendingAppsCount = _applications.where((a) => a.status == ApplicationStatus.underReview || a.status == ApplicationStatus.submitted).length;
-    final homeVisitsCount = _applications.where((a) => a.status == ApplicationStatus.homeVisitScheduled || a.status == ApplicationStatus.fosterTrial).length;
-    final trialFostersCount = _applications.where((a) => a.status == ApplicationStatus.fosterTrial).length;
-    final adoptionsCompletedCount = _applications.where((a) => a.status == ApplicationStatus.approved).length;
+    final kpis = _adminRepo.getKPIs();
+    final activeRescuesCount = (kpis != null && kpis.activeRescues > 0)
+        ? kpis.activeRescues
+        : _pets.length;
+    final pendingAppsCount = (kpis != null && kpis.totalApplications > 0)
+        ? kpis.totalApplications
+        : _applications
+              .where(
+                (a) =>
+                    a.status == ApplicationStatus.underReview ||
+                    a.status == ApplicationStatus.submitted,
+              )
+              .length;
+    final homeVisitsCount = (kpis != null && kpis.homeVisits > 0)
+        ? kpis.homeVisits
+        : _applications
+              .where(
+                (a) =>
+                    a.status == ApplicationStatus.homeVisitScheduled ||
+                    a.status == ApplicationStatus.fosterTrial,
+              )
+              .length;
+    final trialFostersCount = (kpis != null && kpis.trialFosters > 0)
+        ? kpis.trialFosters
+        : _applications
+              .where((a) => a.status == ApplicationStatus.fosterTrial)
+              .length;
+    final adoptionsCompletedCount =
+        (kpis != null && kpis.adoptionsCompleted > 0)
+        ? kpis.adoptionsCompleted
+        : (kpis?.totalAdoptions ??
+              _applications
+                  .where((a) => a.status == ApplicationStatus.approved)
+                  .length);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: _buildPageHeader(),
-      drawer: _buildAdminDrawer(context),
+      drawer: AdminDrawer(
+        isBangla: _isBangla,
+        onLogoutRequested: _showLogoutConfirmation,
+        currentRoute: '/admin/dashboard',
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: Stack(
         children: [
           if (_isLoading)
@@ -410,33 +657,36 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             headerSliverBuilder: (context, innerBoxIsScrolled) {
               return [
                 SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // 1. Live Emergency SOS Broadcast Card (5km Radius)
-                        if (_showEmergencySos) _buildEmergencySosCard(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildRetryBanner(),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // 1. Live Emergency SOS Broadcast Card (5km Radius)
+                            if (_showEmergencySos) _buildEmergencySosCard(),
 
-                        // 2. Section Header: Shelter Performance Overview
-                        _buildSectionHeader(),
-                        const SizedBox(height: 16),
+                            // 2. Section Header: Shelter Performance Overview
+                            _buildSectionHeader(),
+                            const SizedBox(height: 16),
 
-                        // 3. Fully Clickable KPI Cards (Top of Dashboard)
-                        _buildKpiCardsRow(
-                          activeRescues: activeRescuesCount,
-                          pendingApps: pendingAppsCount,
-                          homeVisits: homeVisitsCount,
-                          trialFosters: trialFostersCount,
-                          adoptionsCompleted: adoptionsCompletedCount,
+                            // 3. Fully Clickable KPI Cards (Top of Dashboard)
+                            _buildKpiCardsRow(
+                              activeRescues: activeRescuesCount,
+                              pendingApps: pendingAppsCount,
+                              homeVisits: homeVisitsCount,
+                              trialFosters: trialFostersCount,
+                              adoptionsCompleted: adoptionsCompletedCount,
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 20),
-
-                        // 4. Global Search & Date Filter Bar
-                        _buildSearchAndFilterBar(),
-                        const SizedBox(height: 16),
-                      ],
-                    ),
+                      ),
+                      // 4. Standalone Search & Date Filter Bar Section
+                      _buildSearchAndFilterBar(),
+                    ],
                   ),
                 ),
                 // 5. Persistent TabBar Header: [Apps, Pets, Visits, Analytics]
@@ -449,22 +699,36 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                       unselectedLabelColor: const Color(0xFF64748B),
                       indicatorColor: const Color(0xFF0D9488),
                       indicatorWeight: 3,
-                      labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      labelStyle: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
                       tabs: [
                         Tab(
-                          text: _isBangla ? 'আবেদন (${_applications.length})' : 'Apps (${_applications.length})',
-                          icon: const Icon(Icons.description_outlined, size: 18),
+                          text: _isBangla
+                              ? 'আবেদন (${_applications.length})'
+                              : 'Apps (${_applications.length})',
+                          icon: const Icon(
+                            Icons.description_outlined,
+                            size: 18,
+                          ),
                         ),
                         Tab(
-                          text: _isBangla ? 'পোষ্য (${_pets.length})' : 'Pets (${_pets.length})',
+                          text: _isBangla
+                              ? 'পোষ্য (${_pets.length})'
+                              : 'Pets (${_pets.length})',
                           icon: const Icon(Icons.pets_rounded, size: 18),
                         ),
                         Tab(
-                          text: _isBangla ? 'ভিজিট ($homeVisitsCount)' : 'Visits ($homeVisitsCount)',
+                          text: _isBangla
+                              ? 'ভিজিট ($homeVisitsCount)'
+                              : 'Visits ($homeVisitsCount)',
                           icon: const Icon(Icons.home_work_outlined, size: 18),
                         ),
                         Tab(
-                          text: _isBangla ? 'অ্যানালিটিক্স ও অডিট' : 'Analytics & Audit',
+                          text: _isBangla
+                              ? 'অ্যানালিটিক্স ও অডিট'
+                              : 'Analytics & Audit',
                           icon: const Icon(Icons.analytics_outlined, size: 18),
                         ),
                       ],
@@ -493,7 +757,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       floatingActionButton: Padding(
         padding: EdgeInsets.only(bottom: _selectedAppIds.isNotEmpty ? 64 : 0),
         child: FloatingActionButton.extended(
-          onPressed: () => showAdminCreatePetDialog(context),
+          onPressed: () => showAdminCreatePetDialog(
+            context,
+            onSaved: (newPet) {
+              if (mounted) {
+                setState(() {
+                  final idx = _pets.indexWhere((p) => p.id == newPet.id);
+                  if (idx != -1) {
+                    _pets[idx] = newPet;
+                  } else {
+                    _pets.insert(0, newPet);
+                  }
+                });
+              }
+            },
+          ),
           backgroundColor: const Color(0xFF0D9488),
           foregroundColor: Colors.white,
           elevation: 4,
@@ -512,74 +790,153 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   // ==========================================
   PreferredSizeWidget _buildPageHeader() {
     return AppBar(
-      backgroundColor: const Color(0xFF0F172A),
-      elevation: 1,
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
       centerTitle: false,
+      titleSpacing: 0,
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(1),
+        child: Container(color: const Color(0xFFE2E8F0), height: 1),
+      ),
       leading: Builder(
         builder: (context) => IconButton(
-          icon: const Icon(Icons.menu_rounded, color: Colors.white, size: 24),
+          icon: const Icon(
+            Icons.menu_rounded,
+            color: Color(0xFF0F172A),
+            size: 24,
+          ),
           tooltip: 'Admin Menu',
           onPressed: () => Scaffold.of(context).openDrawer(),
         ),
       ),
-      title: FittedBox(
-        fit: BoxFit.scaleDown,
-        alignment: Alignment.centerLeft,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0D9488),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.shield_rounded, color: Colors.white, size: 18),
+      title: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: const Color(0xFF0D9488).withOpacity(0.12),
+              borderRadius: BorderRadius.circular(8),
             ),
-            const SizedBox(width: 8),
-            Text(
-              _isBangla ? 'শেল্টার ম্যানেজমেন্ট অ্যাডমিন' : 'Shelter Management Admin',
+            clipBehavior: Clip.antiAlias,
+            child: Image.asset(
+              'assets/images/app_logo.png',
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => const Icon(
+                Icons.pets_rounded,
+                color: Color(0xFF0D9488),
+                size: 16,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              _isBangla ? 'অ্যাডমিন ড্যাশবোর্ড' : 'AdoptMatch Admin',
               style: const TextStyle(
-                color: Colors.white,
+                fontSize: 16,
                 fontWeight: FontWeight.w800,
-                fontSize: 16.5,
+                color: Color(0xFF0F172A),
                 letterSpacing: -0.2,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        // 1. Push Alert Dispatcher
+        IconButton(
+          icon: const Icon(
+            Icons.campaign_rounded,
+            color: Color(0xFF0284C7),
+            size: 22,
+          ),
+          tooltip: _isBangla ? 'পুশ অ্যালার্ট পাঠান' : 'Broadcast / SOS',
+          onPressed: _showPushNotificationDispatcher,
+        ),
+        // 2. Bilingual Switch
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () => setState(() => _isBangla = !_isBangla),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: _isBangla
+                    ? const Color(0xFF0D9488)
+                    : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: _isBangla
+                      ? const Color(0xFF0D9488)
+                      : const Color(0xFFCBD5E1),
+                ),
+              ),
+              child: Text(
+                _isBangla ? 'বাং' : 'EN',
+                style: TextStyle(
+                  color: _isBangla ? Colors.white : const Color(0xFF334155),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+          ),
+        ),
+        // 3. Compact Overflow Menu (Export CSV, Logout)
+        PopupMenuButton<String>(
+          icon: const Icon(
+            Icons.more_vert_rounded,
+            color: Color(0xFF0F172A),
+            size: 22,
+          ),
+          tooltip: 'More actions',
+          onSelected: (val) {
+            if (val == 'export') _showExportDataDialog();
+            if (val == 'logout') _showLogoutConfirmation();
+          },
+          itemBuilder: (context) => [
+            PopupMenuItem(
+              value: 'export',
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.file_download_outlined,
+                    color: Color(0xFFD97706),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    _isBangla ? 'রিপোর্ট এক্সপোর্ট (CSV)' : 'Export CSV Report',
+                  ),
+                ],
+              ),
+            ),
+            PopupMenuItem(
+              value: 'logout',
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.logout_rounded,
+                    color: Color(0xFFE11D48),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    _isBangla ? 'লগআউট' : 'Logout',
+                    style: const TextStyle(
+                      color: Color(0xFFE11D48),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
-        ),
-      ),
-      actions: [
-        // Push Alert Dispatcher
-        IconButton(
-          icon: const Icon(Icons.campaign_rounded, color: Color(0xFF38BDF8), size: 22),
-          tooltip: _isBangla ? 'পুশ অ্যালার্ট পাঠান' : 'Dispatch Push Alert',
-          onPressed: _showPushNotificationDispatcher,
-        ),
-        // Export Report (CSV / PDF)
-        IconButton(
-          icon: const Icon(Icons.file_download_outlined, color: Color(0xFFFBBF24), size: 22),
-          tooltip: _isBangla ? 'রিপোর্ট এক্সপোর্ট (CSV/PDF)' : 'Export Report (CSV/PDF)',
-          onPressed: _showExportDataDialog,
-        ),
-        // Bilingual Switch
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: ActionChip(
-            backgroundColor: _isBangla ? const Color(0xFF0D9488) : const Color(0xFF1E293B),
-            side: BorderSide(color: _isBangla ? const Color(0xFF0D9488) : const Color(0xFF475569)),
-            label: Text(
-              _isBangla ? 'বাং' : 'EN',
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
-            ),
-            onPressed: () => setState(() => _isBangla = !_isBangla),
-          ),
-        ),
-        // Logout Icon
-        IconButton(
-          icon: const Icon(Icons.logout_rounded, color: Color(0xFFEF4444), size: 20),
-          tooltip: _isBangla ? 'লগআউট' : 'Sign Out',
-          onPressed: _showLogoutConfirmation,
         ),
         const SizedBox(width: 4),
       ],
@@ -590,218 +947,104 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          _isBangla ? 'লগআউট নিশ্চিতকরণ' : 'Confirm Admin Logout',
-          style: const TextStyle(fontWeight: FontWeight.bold),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: Colors.white,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF1F2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.logout_rounded,
+                color: Color(0xFFE11D48),
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                _isBangla ? 'লগআউট নিশ্চিতকরণ' : 'Confirm Admin Logout',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+            ),
+          ],
         ),
         content: Text(
           _isBangla
               ? 'আপনি কি নিশ্চিত যে আপনার অ্যাডমিন সেশন শেষ করতে চান?'
               : 'Are you sure you want to end your administrative session?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(
-              _isBangla ? 'বাতিল' : 'Cancel',
-              style: const TextStyle(color: Colors.grey),
-            ),
+          style: const TextStyle(
+            color: Color(0xFF475569),
+            fontSize: 14,
+            height: 1.4,
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFE11D48),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            onPressed: () {
-              Navigator.pop(ctx);
-              context.read<AuthBloc>().add(LogoutEvent());
-              context.go('/admin/login');
-            },
-            child: Text(_isBangla ? 'লগআউট' : 'Logout'),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF475569),
+                    side: const BorderSide(
+                      color: Color(0xFFCBD5E1),
+                      width: 1.2,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text(
+                    _isBangla ? 'বাতিল' : 'Cancel',
+                    style: const TextStyle(
+                      color: Color(0xFF475569),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFE11D48),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    context.read<AuthBloc>().add(LogoutEvent());
+                    context.go('/admin/login');
+                  },
+                  child: Text(
+                    _isBangla ? 'লগআউট' : 'Logout',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildAdminDrawer(BuildContext context) {
-    final authState = context.read<AuthBloc>().state;
-    final user = authState is Authenticated ? authState.user : null;
-    final roleName = user?.role.code ?? 'ADMIN';
-    final adminName = user?.name ?? 'Administrator';
-
-    return Drawer(
-      backgroundColor: const Color(0xFF0F172A),
-      child: SafeArea(
-        child: Column(
-          children: [
-            // Drawer Header
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                color: Color(0xFF1E293B),
-                border: Border(bottom: BorderSide(color: Color(0xFF334155))),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: Image.asset(
-                      'assets/images/app_logo.png',
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
-                          const Icon(Icons.shield_outlined, color: Color(0xFF0D9488), size: 28),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          adminName,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0D9488).withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            roleName,
-                            style: const TextStyle(color: Color(0xFF14B8A6), fontSize: 10, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Navigation Links
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                children: [
-                  _drawerItem(
-                    icon: Icons.dashboard_outlined,
-                    label: _isBangla ? 'ড্যাশবোর্ড ওভারভিউ' : 'Dashboard Overview',
-                    selected: true,
-                    onTap: () => Navigator.pop(context),
-                  ),
-                  _drawerItem(
-                    icon: Icons.verified_user_outlined,
-                    label: _isBangla ? 'সেল্টার অনুমোদন' : 'Shelter Approvals',
-                    onTap: () {
-                      Navigator.pop(context);
-                      context.push('/admin/shelters');
-                    },
-                  ),
-                  _drawerItem(
-                    icon: Icons.pets_outlined,
-                    label: _isBangla ? 'পোষ্য মডারেশন' : 'Pet Moderation',
-                    onTap: () {
-                      Navigator.pop(context);
-                      context.push('/admin/pets');
-                    },
-                  ),
-                  _drawerItem(
-                    icon: Icons.track_changes_outlined,
-                    label: _isBangla ? 'অ্যাডপশন ট্র্যাকিং' : 'Adoption Pipeline',
-                    onTap: () {
-                      Navigator.pop(context);
-                      context.push('/admin/adoptions');
-                    },
-                  ),
-                  _drawerItem(
-                    icon: Icons.people_outline_rounded,
-                    label: _isBangla ? 'ইউজার ম্যানেজমেন্ট' : 'User Management',
-                    onTap: () {
-                      Navigator.pop(context);
-                      context.push('/admin/users');
-                    },
-                  ),
-                  _drawerItem(
-                    icon: Icons.workspace_premium_outlined,
-                    label: _isBangla ? 'ভিআইপি সাবস্ক্রিপশন' : 'VIP Subscriptions',
-                    onTap: () {
-                      Navigator.pop(context);
-                      context.push('/admin/subscriptions');
-                    },
-                  ),
-                  _drawerItem(
-                    icon: Icons.history_rounded,
-                    label: _isBangla ? 'অডিট ট্রেইল লগ' : 'Audit Logs',
-                    onTap: () {
-                      Navigator.pop(context);
-                      context.push('/admin/audit-logs');
-                    },
-                  ),
-                  const Divider(color: Color(0xFF334155)),
-                  _drawerItem(
-                    icon: Icons.home_outlined,
-                    label: _isBangla ? 'ইউজার হোমপেজে ফিরে যান' : 'Back to User App',
-                    onTap: () {
-                      Navigator.pop(context);
-                      context.go('/home');
-                    },
-                  ),
-                ],
-              ),
-            ),
-
-            // Logout & Exit
-            const Divider(color: Color(0xFF334155), height: 1),
-            ListTile(
-              leading: const Icon(Icons.logout_rounded, color: Color(0xFFEF4444)),
-              title: Text(
-                _isBangla ? 'লগআউট' : 'Sign Out',
-                style: const TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                _showLogoutConfirmation();
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _drawerItem({
-    required IconData icon,
-    required String label,
-    bool selected = false,
-    required VoidCallback onTap,
-  }) {
-    return ListTile(
-      leading: Icon(icon, color: selected ? const Color(0xFF14B8A6) : const Color(0xFF94A3B8), size: 20),
-      title: Text(
-        label,
-        style: TextStyle(
-          color: selected ? Colors.white : const Color(0xFFCBD5E1),
-          fontWeight: selected ? FontWeight.bold : FontWeight.w500,
-          fontSize: 13.5,
-        ),
-      ),
-      selected: selected,
-      selectedTileColor: const Color(0xFF0D9488).withOpacity(0.15),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-      onTap: onTap,
     );
   }
 
@@ -831,7 +1074,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             children: [
               Flexible(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFE11D48),
                     borderRadius: BorderRadius.circular(20),
@@ -839,12 +1085,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.emergency_rounded, color: Colors.white, size: 12),
+                      const Icon(
+                        Icons.emergency_rounded,
+                        color: Colors.white,
+                        size: 12,
+                      ),
                       const SizedBox(width: 4),
                       Flexible(
                         child: Text(
-                          _isBangla ? '🚨 লাইভ ইমার্জেন্সি এসওএস • ৫ কিমি' : '🚨 LIVE EMERGENCY SOS • 5km',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 10),
+                          _isBangla
+                              ? '🚨 লাইভ ইমার্জেন্সি এসওএস • ৫ কিমি'
+                              : '🚨 LIVE EMERGENCY SOS • 5km',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 10,
+                          ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -856,7 +1112,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               IconButton(
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
-                icon: const Icon(Icons.close_rounded, size: 18, color: Color(0xFF94A3B8)),
+                icon: const Icon(
+                  Icons.close_rounded,
+                  size: 18,
+                  color: Color(0xFF94A3B8),
+                ),
                 onPressed: () => setState(() => _showEmergencySos = false),
               ),
             ],
@@ -866,7 +1126,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             _isBangla
                 ? 'আহত কুকুর ছানা মিরপুর ১০ গোলচত্বরের কাছে উদ্ধার করা হয়েছে। জরুরি চিকিৎসার সহায়তা প্রয়োজন।'
                 : 'Injured stray pup reported near Mirpur 10 circle • Urgent veterinary attention requested.',
-            style: const TextStyle(color: Color(0xFF881337), fontWeight: FontWeight.bold, fontSize: 13),
+            style: const TextStyle(
+              color: Color(0xFF881337),
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
           ),
           const SizedBox(height: 4),
           const Text(
@@ -882,26 +1146,49 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFE11D48),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   elevation: 0,
                 ),
                 icon: const Icon(Icons.local_hospital_rounded, size: 14),
-                label: Text(_isBangla ? 'রেসকিউ টিম পাঠান' : 'Dispatch Rescue Team', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                label: Text(
+                  _isBangla ? 'রেসকিউ টিম পাঠান' : 'Dispatch Rescue Team',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 onPressed: _handleEmergencyRescueDispatch,
               ),
               OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
                   foregroundColor: const Color(0xFF9F1239),
                   side: const BorderSide(color: Color(0xFFFDA4AF)),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
                 icon: const Icon(Icons.phone_rounded, size: 14),
-                label: Text(_isBangla ? 'কল দিন' : 'Call Reporter', style: const TextStyle(fontSize: 12)),
+                label: Text(
+                  _isBangla ? 'কল দিন' : 'Call Reporter',
+                  style: const TextStyle(fontSize: 12),
+                ),
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Caller relay is not configured. No call was placed.')),
+                    const SnackBar(
+                      content: Text(
+                        'Caller relay is not configured. No call was placed.',
+                      ),
+                    ),
                   );
                 },
               ),
@@ -920,7 +1207,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          _isBangla ? 'শেল্টার পারফরম্যান্স ওভারভিউ' : 'Shelter Performance Overview',
+          _isBangla
+              ? 'শেল্টার পারফরম্যান্স ওভারভিউ'
+              : 'Shelter Performance Overview',
           style: const TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w800,
@@ -978,7 +1267,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             icon: Icons.description_outlined,
             accentColor: const Color(0xFF6366F1),
             subtitle: _isBangla ? 'বিবেচনাধীন কিউ' : 'Review pending',
-            isSelected: _tabController.index == 0 && _appFilter == ApplicationStatus.underReview,
+            isSelected:
+                _tabController.index == 0 &&
+                _appFilter == ApplicationStatus.underReview,
             onTap: () {
               setState(() {
                 _appFilter = ApplicationStatus.underReview;
@@ -1011,7 +1302,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             icon: Icons.volunteer_activism_outlined,
             accentColor: const Color(0xFFF59E0B),
             subtitle: _isBangla ? '১৪ দিনের পর্যবেক্ষণ' : '14-day trials',
-            isSelected: _tabController.index == 0 && _appFilter == ApplicationStatus.fosterTrial,
+            isSelected:
+                _tabController.index == 0 &&
+                _appFilter == ApplicationStatus.fosterTrial,
             onTap: () {
               setState(() {
                 _appFilter = ApplicationStatus.fosterTrial;
@@ -1027,8 +1320,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             count: '$adoptionsCompleted',
             icon: Icons.check_circle_outline_rounded,
             accentColor: const Color(0xFF10B981),
-            subtitle: _isBangla ? 'লিগ্যাল চুক্তি ও রেকর্ড' : 'Completed archive',
-            isSelected: _tabController.index == 0 && _appFilter == ApplicationStatus.approved,
+            subtitle: _isBangla
+                ? 'লিগ্যাল চুক্তি ও রেকর্ড'
+                : 'Completed archive',
+            isSelected:
+                _tabController.index == 0 &&
+                _appFilter == ApplicationStatus.approved,
             onTap: () {
               setState(() {
                 _appFilter = ApplicationStatus.approved;
@@ -1045,74 +1342,100 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   // 5. GLOBAL SEARCH & QUICK FILTER BAR
   // ==========================================
   Widget _buildSearchAndFilterBar() {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFCBD5E1)),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFCBD5E1)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.02),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
                 ),
-                child: TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: _isBangla
-                        ? 'পেট আইডি, নাম, ফোন বা ব্রিড দিয়ে খুঁজুন...'
-                        : 'Search by Pet ID, adopter name, phone, or breed...',
-                    hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
-                    prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF64748B), size: 20),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear, size: 18),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() => _searchQuery = '');
-                            },
-                          )
-                        : null,
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  ),
-                  onChanged: (val) => setState(() => _searchQuery = val.trim().toLowerCase()),
+              ],
+            ),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: _isBangla
+                    ? 'পেট আইডি, নাম, ফোন বা ব্রিড দিয়ে খুঁজুন...'
+                    : 'Search by Pet ID, adopter name, phone, or breed...',
+                hintStyle: const TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF94A3B8),
+                ),
+                prefixIcon: const Icon(
+                  Icons.search_rounded,
+                  color: Color(0xFF64748B),
+                  size: 20,
+                ),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 18),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                      )
+                    : null,
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
                 ),
               ),
+              onChanged: (val) =>
+                  setState(() => _searchQuery = val.trim().toLowerCase()),
             ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        // Quick Date Filter Chips
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              _buildDateChip('all', _isBangla ? 'সকল সময়' : 'All Time'),
-              const SizedBox(width: 8),
-              _buildDateChip('today', _isBangla ? 'আজকের' : 'Today'),
-              const SizedBox(width: 8),
-              _buildDateChip('week', _isBangla ? 'এই সপ্তাহের' : 'This Week'),
-              const SizedBox(width: 8),
-              _buildDateChip('month', _isBangla ? 'এই মাসের' : 'This Month'),
-            ],
           ),
-        ),
-      ],
+          const SizedBox(height: 10),
+          // Quick Date Filter Chips
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildDateChip('all', _isBangla ? 'সকল সময়' : 'All Time'),
+                const SizedBox(width: 8),
+                _buildDateChip('today', _isBangla ? 'আজকের' : 'Today'),
+                const SizedBox(width: 8),
+                _buildDateChip('week', _isBangla ? 'এই সপ্তাহের' : 'This Week'),
+                const SizedBox(width: 8),
+                _buildDateChip('month', _isBangla ? 'এই মাসের' : 'This Month'),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildDateChip(String value, String label) {
     final isSelected = _dateFilter == value;
     return ChoiceChip(
-      label: Text(label, style: TextStyle(fontSize: 12, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+      label: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        ),
+      ),
       selected: isSelected,
       selectedColor: const Color(0xFF0D9488).withOpacity(0.15),
-      labelStyle: TextStyle(color: isSelected ? const Color(0xFF0D9488) : const Color(0xFF64748B)),
+      labelStyle: TextStyle(
+        color: isSelected ? const Color(0xFF0D9488) : const Color(0xFF64748B),
+      ),
       backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: isSelected ? const Color(0xFF0D9488) : const Color(0xFFE2E8F0)),
+        side: BorderSide(
+          color: isSelected ? const Color(0xFF0D9488) : const Color(0xFFE2E8F0),
+        ),
       ),
       onSelected: (selected) {
         if (selected) setState(() => _dateFilter = value);
@@ -1127,7 +1450,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     var filtered = _applications.where((app) {
       if (_appFilter != null && app.status != _appFilter) return false;
       if (_searchQuery.isNotEmpty) {
-        final matchesQuery = app.applicantName.toLowerCase().contains(_searchQuery) ||
+        final matchesQuery =
+            app.applicantName.toLowerCase().contains(_searchQuery) ||
             app.applicantPhone.toLowerCase().contains(_searchQuery) ||
             app.petName.toLowerCase().contains(_searchQuery) ||
             app.petBreed.toLowerCase().contains(_searchQuery) ||
@@ -1145,17 +1469,37 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           child: Row(
             children: [
-              _buildAppStatusChip(null, _isBangla ? 'সব (${_applications.length})' : 'All Apps (${_applications.length})'),
+              _buildAppStatusChip(
+                null,
+                _isBangla
+                    ? 'সব (${_applications.length})'
+                    : 'All Apps (${_applications.length})',
+              ),
               const SizedBox(width: 8),
-              _buildAppStatusChip(ApplicationStatus.underReview, _isBangla ? 'বিবেচনাধীন' : 'Under Review'),
+              _buildAppStatusChip(
+                ApplicationStatus.underReview,
+                _isBangla ? 'বিবেচনাধীন' : 'Under Review',
+              ),
               const SizedBox(width: 8),
-              _buildAppStatusChip(ApplicationStatus.homeVisitScheduled, _isBangla ? 'হোম ভিজিট' : 'Home Visits'),
+              _buildAppStatusChip(
+                ApplicationStatus.homeVisitScheduled,
+                _isBangla ? 'হোম ভিজিট' : 'Home Visits',
+              ),
               const SizedBox(width: 8),
-              _buildAppStatusChip(ApplicationStatus.fosterTrial, _isBangla ? 'ট্রায়াল ফস্টার' : 'Trial Foster'),
+              _buildAppStatusChip(
+                ApplicationStatus.fosterTrial,
+                _isBangla ? 'ট্রায়াল ফস্টার' : 'Trial Foster',
+              ),
               const SizedBox(width: 8),
-              _buildAppStatusChip(ApplicationStatus.approved, _isBangla ? 'অনুমোদিত' : 'Approved'),
+              _buildAppStatusChip(
+                ApplicationStatus.approved,
+                _isBangla ? 'অনুমোদিত' : 'Approved',
+              ),
               const SizedBox(width: 8),
-              _buildAppStatusChip(ApplicationStatus.rejected, _isBangla ? 'প্রত্যাখ্যাত' : 'Rejected'),
+              _buildAppStatusChip(
+                ApplicationStatus.rejected,
+                _isBangla ? 'প্রত্যাখ্যাত' : 'Rejected',
+              ),
             ],
           ),
         ),
@@ -1163,11 +1507,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         // List
         Expanded(
           child: filtered.isEmpty
-              ? _buildEmptyState(_isBangla ? 'কোনো আবেদন পাওয়া যায়নি' : 'No applications found in this filter.')
+              ? _buildEmptyState(
+                  _isBangla
+                      ? 'কোনো আবেদন পাওয়া যায়নি'
+                      : 'No applications found in this filter.',
+                )
               : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                   itemCount: filtered.length,
-                  separatorBuilder: (context, index) => const SizedBox(height: 12),
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final app = filtered[index];
                     final isChecked = _selectedAppIds.contains(app.id);
@@ -1186,9 +1535,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       label: Text(label, style: const TextStyle(fontSize: 12)),
       selected: isSelected,
       selectedColor: const Color(0xFF0D9488),
-      labelStyle: TextStyle(color: isSelected ? Colors.white : const Color(0xFF475569), fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
+      labelStyle: TextStyle(
+        color: isSelected ? Colors.white : const Color(0xFF475569),
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+      ),
       backgroundColor: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isSelected ? const Color(0xFF0D9488) : const Color(0xFFE2E8F0))),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(
+          color: isSelected ? const Color(0xFF0D9488) : const Color(0xFFE2E8F0),
+        ),
+      ),
       onSelected: (val) {
         setState(() => _appFilter = val ? status : null);
       },
@@ -1218,7 +1575,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: isChecked ? const Color(0xFF0D9488) : const Color(0xFFE2E8F0), width: isChecked ? 2 : 1),
+        border: Border.all(
+          color: isChecked ? const Color(0xFF0D9488) : const Color(0xFFE2E8F0),
+          width: isChecked ? 2 : 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.03),
@@ -1248,19 +1608,29 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 Expanded(
                   child: Text(
                     app.applicantName,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: statusColor.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     app.status.displayName,
-                    style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 10),
+                    style: TextStyle(
+                      color: statusColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 10,
+                    ),
                   ),
                 ),
               ],
@@ -1269,8 +1639,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 4),
-                Text('Pet: ${app.petName} (${app.petBreed}) • ${app.applicantPhone}', style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-                Text('Housing: ${app.housingType} • Budget: ৳${app.monthlyBudget}/mo', style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
+                Text(
+                  'Pet: ${app.petName} (${app.petBreed}) • ${app.applicantPhone}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF64748B),
+                  ),
+                ),
+                Text(
+                  'Housing: ${app.housingType} • Budget: ৳${app.monthlyBudget}/mo',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF94A3B8),
+                  ),
+                ),
               ],
             ),
             trailing: ClipRRect(
@@ -1294,28 +1676,51 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF0D9488),
                     side: const BorderSide(color: Color(0xFF0D9488)),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     minimumSize: const Size(60, 30),
                   ),
                   onPressed: () {
-                    _appRepo.updateApplicationStatus(app.id, ApplicationStatus.fosterTrial, notes: 'Moved to 14-day trial foster');
+                    _appRepo.updateApplicationStatus(
+                      app.id,
+                      ApplicationStatus.fosterTrial,
+                      notes: 'Moved to 14-day trial foster',
+                    );
 
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Placed on 14-day trial foster!')));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Placed on 14-day trial foster!'),
+                      ),
+                    );
                   },
-                  child: const Text('Trial Foster', style: TextStyle(fontSize: 11)),
+                  child: const Text(
+                    'Trial Foster',
+                    style: TextStyle(fontSize: 11),
+                  ),
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF0D9488),
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 4,
+                    ),
                     minimumSize: const Size(60, 30),
                   ),
                   onPressed: () {
-                    _appRepo.updateApplicationStatus(app.id, ApplicationStatus.approved, notes: 'Approved by admin dashboard');
+                    _appRepo.updateApplicationStatus(
+                      app.id,
+                      ApplicationStatus.approved,
+                      notes: 'Approved by admin dashboard',
+                    );
 
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Application Approved!')));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Application Approved!')),
+                    );
                   },
                   child: const Text('Approve', style: TextStyle(fontSize: 11)),
                 ),
@@ -1353,22 +1758,40 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           child: Row(
             children: [
-              _buildPetStatusChip('all', _isBangla ? 'সকল পোষ্য (${_pets.length})' : 'All Rescues (${_pets.length})'),
+              _buildPetStatusChip(
+                'all',
+                _isBangla
+                    ? 'সকল পোষ্য (${_pets.length})'
+                    : 'All Rescues (${_pets.length})',
+              ),
               const SizedBox(width: 8),
-              _buildPetStatusChip('available', _isBangla ? 'দত্তক উপযোগী' : 'Available (Active)'),
+              _buildPetStatusChip(
+                'available',
+                _isBangla ? 'দত্তক উপযোগী' : 'Available (Active)',
+              ),
               const SizedBox(width: 8),
-              _buildPetStatusChip('adopted', _isBangla ? 'দত্তক সম্পন্ন' : 'Adopted'),
+              _buildPetStatusChip(
+                'adopted',
+                _isBangla ? 'দত্তক সম্পন্ন' : 'Adopted',
+              ),
               const SizedBox(width: 8),
-              _buildPetStatusChip('urgent', _isBangla ? 'জরুরি কেয়ার' : 'Urgent Medical'),
+              _buildPetStatusChip(
+                'urgent',
+                _isBangla ? 'জরুরি কেয়ার' : 'Urgent Medical',
+              ),
             ],
           ),
         ),
 
         Expanded(
           child: filtered.isEmpty
-              ? _buildEmptyState(_isBangla ? 'কোনো পোষ্য পাওয়া যায়নি' : 'No pets found matching the criteria.')
+              ? _buildEmptyState(
+                  _isBangla
+                      ? 'কোনো পোষ্য পাওয়া যায়নি'
+                      : 'No pets found matching the criteria.',
+                )
               : GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                   gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                     maxCrossAxisExtent: 220,
                     mainAxisExtent: 260,
@@ -1392,9 +1815,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       label: Text(label, style: const TextStyle(fontSize: 12)),
       selected: isSelected,
       selectedColor: const Color(0xFF0D9488),
-      labelStyle: TextStyle(color: isSelected ? Colors.white : const Color(0xFF475569), fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
+      labelStyle: TextStyle(
+        color: isSelected ? Colors.white : const Color(0xFF475569),
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+      ),
       backgroundColor: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isSelected ? const Color(0xFF0D9488) : const Color(0xFFE2E8F0))),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(
+          color: isSelected ? const Color(0xFF0D9488) : const Color(0xFFE2E8F0),
+        ),
+      ),
       onSelected: (val) {
         if (val) setState(() => _petFilter = key);
       },
@@ -1421,7 +1852,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           Stack(
             children: [
               ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(16),
+                ),
                 child: SizedBox(
                   height: 120,
                   width: double.infinity,
@@ -1436,23 +1869,106 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   top: 8,
                   left: 8,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(color: const Color(0xFFE11D48), borderRadius: BorderRadius.circular(8)),
-                    child: const Text('URGENT', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE11D48),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'URGENT',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
               Positioned(
                 top: 8,
                 right: 8,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
-                    color: pet.isAdopted ? const Color(0xFF10B981) : const Color(0xFF0D9488),
+                    color: pet.isAdopted
+                        ? const Color(0xFF10B981)
+                        : const Color(0xFF0D9488),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     pet.isAdopted ? 'ADOPTED' : 'ACTIVE',
-                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 8,
+                right: 8,
+                child: Tooltip(
+                  message: _isBangla
+                      ? 'ছবি পরিবর্তন করুন'
+                      : 'Re-upload / Change Photo',
+                  child: Material(
+                    color: Colors.black.withOpacity(0.65),
+                    borderRadius: BorderRadius.circular(20),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(20),
+                      onTap: () {
+                        showAdminCreatePetDialog(
+                          context,
+                          existingPet: pet,
+                          onSaved: (updatedPet) {
+                            if (mounted) {
+                              setState(() {
+                                final idx = _pets.indexWhere(
+                                  (p) => p.id == updatedPet.id,
+                                );
+                                if (idx != -1) {
+                                  _pets[idx] = updatedPet;
+                                } else {
+                                  _pets.insert(0, updatedPet);
+                                }
+                              });
+                            }
+                          },
+                        );
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 5,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.photo_camera_outlined,
+                              size: 13,
+                              color: Colors.white,
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              'Change',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1465,13 +1981,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               children: [
                 Text(
                   pet.name,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   '${pet.species} • ${pet.breed}',
-                  style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
+                  style: const TextStyle(
+                    color: Color(0xFF64748B),
+                    fontSize: 11,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1484,30 +2006,79 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                           padding: EdgeInsets.zero,
                           minimumSize: const Size(0, 28),
                           side: const BorderSide(color: Color(0xFFCBD5E1)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
                         ),
                         onPressed: () {
-                          showAdminCreatePetDialog(context, existingPet: pet);
+                          showAdminCreatePetDialog(
+                            context,
+                            existingPet: pet,
+                            onSaved: (updatedPet) {
+                              if (mounted) {
+                                setState(() {
+                                  final idx = _pets.indexWhere(
+                                    (p) => p.id == updatedPet.id,
+                                  );
+                                  if (idx != -1) {
+                                    _pets[idx] = updatedPet;
+                                  } else {
+                                    _pets.insert(0, updatedPet);
+                                  }
+                                });
+                              }
+                            },
+                          );
                         },
-                        child: const Text('Edit / তথ্য', style: TextStyle(fontSize: 10, color: Color(0xFF0F172A))),
+                        child: const Text(
+                          'Edit / তথ্য',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Color(0xFF0F172A),
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 6),
                     IconButton(
-                      icon: Icon(pet.isAdopted ? Icons.undo_rounded : Icons.check_circle_outline, size: 18),
-                      color: pet.isAdopted ? Colors.orange : const Color(0xFF10B981),
-                      tooltip: pet.isAdopted ? 'Re-open for adoption' : 'Mark as Adopted',
+                      icon: Icon(
+                        pet.isAdopted
+                            ? Icons.undo_rounded
+                            : Icons.check_circle_outline,
+                        size: 18,
+                      ),
+                      color: pet.isAdopted
+                          ? Colors.orange
+                          : const Color(0xFF10B981),
+                      tooltip: pet.isAdopted
+                          ? 'Re-open for adoption'
+                          : 'Mark as Adopted',
                       onPressed: () {
                         final isNowAdopted = !pet.isAdopted;
                         final newStory = isNowAdopted
                             ? '[ADOPTED] ${pet.story}'
-                            : pet.story.replaceAll('[ADOPTED] ', '').replaceAll('[ADOPTED]', '');
+                            : pet.story
+                                  .replaceAll('[ADOPTED] ', '')
+                                  .replaceAll('[ADOPTED]', '');
                         final updated = pet.copyWith(story: newStory);
-                        _adminRepo.overridePetListing(updated, notes: 'Adoption status changed from admin dashboard')
-                          .then((_) { if (mounted) setState(() {}); })
-                          .catchError((Object e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(backgroundColor: const Color(0xFFE11D48), content: Text('Status not saved: $e'))); });
-
+                        _adminRepo
+                            .overridePetListing(
+                              updated,
+                              notes: 'Adoption status changed from admin dashboard',
+                            )
+                            .then((_) {
+                              if (mounted) setState(() {});
+                            })
+                            .catchError((Object e) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    backgroundColor: const Color(0xFFE11D48),
+                                    content: Text('Status not saved: $e'),
+                                  ),
+                                );
+                              }
+                            });
                       },
                     ),
                   ],
@@ -1524,22 +2095,53 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   // TAB 2: VISITS & APPOINTMENTS
   // ==========================================
   Widget _buildVisitsAndAppointmentsTab() {
-    final visits = _applications.where((a) =>
-      a.status == ApplicationStatus.homeVisitScheduled || a.status == ApplicationStatus.fosterTrial || a.homeVisitDate != null)
-      .where((a) => _searchQuery.isEmpty || a.applicantName.toLowerCase().contains(_searchQuery) || a.petName.toLowerCase().contains(_searchQuery)).toList();
-    if (visits.isEmpty) return _buildEmptyState('No server-recorded home visits or foster trials.');
-    return ListView.separated(padding: const EdgeInsets.all(16), itemCount: visits.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
+    final visits = _applications
+        .where(
+          (a) =>
+              a.status == ApplicationStatus.homeVisitScheduled ||
+              a.status == ApplicationStatus.fosterTrial ||
+              a.homeVisitDate != null,
+        )
+        .where(
+          (a) =>
+              _searchQuery.isEmpty ||
+              a.applicantName.toLowerCase().contains(_searchQuery) ||
+              a.petName.toLowerCase().contains(_searchQuery),
+        )
+        .toList();
+    if (visits.isEmpty) {
+      return _buildEmptyState(
+        'No server-recorded home visits or foster trials.',
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+      itemCount: visits.length,
+      separatorBuilder: (_, index) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final app = visits[index];
-        return Card(child: ListTile(
-          title: Text('${app.petName} • ${app.applicantName}', style: const TextStyle(fontWeight: FontWeight.bold)),
-          subtitle: Text('${app.status.displayName}${app.homeVisitDate == null ? '' : '\n${app.homeVisitDate!.toLocal()}'}'),
-          isThreeLine: true,
-          trailing: ElevatedButton(onPressed: () => _updateApplicationStatuses([app.id],
-            ApplicationStatus.underReview, notes: 'Visit/trial reviewed from admin dashboard'), child: const Text('Record Review')),
-        ));
-      });
+        return Card(
+          child: ListTile(
+            title: Text(
+              '${app.petName} • ${app.applicantName}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(
+              '${app.status.displayName}${app.homeVisitDate == null ? '' : '\n${app.homeVisitDate!.toLocal()}'}',
+            ),
+            isThreeLine: true,
+            trailing: ElevatedButton(
+              onPressed: () => _updateApplicationStatuses(
+                [app.id],
+                ApplicationStatus.underReview,
+                notes: 'Visit/trial reviewed from admin dashboard',
+              ),
+              child: const Text('Record Review'),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   // ==========================================
@@ -1549,7 +2151,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     final logs = _adminRepo.getAuditLogs();
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1564,22 +2166,50 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Adoption Conversion Health', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                const Text(
+                  'Adoption Conversion Health',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                ),
                 const SizedBox(height: 12),
-                Builder(builder: (context) {
-                  final total = _applications.length;
-                  final advanced = _applications.where((a) => a.status == ApplicationStatus.fosterTrial || a.status == ApplicationStatus.approved).length;
-                  final approved = _applications.where((a) => a.status == ApplicationStatus.approved).length;
-                  return Column(children: [
-                    _buildProgressMetric('Applications reaching trial/approval', total == 0 ? 0 : advanced / total,
-                      total == 0 ? 'No data' : '$advanced/$total', const Color(0xFF0D9488)),
-                    const SizedBox(height: 10),
-                    _buildProgressMetric('Applications approved', total == 0 ? 0 : approved / total,
-                      total == 0 ? 'No data' : '$approved/$total', const Color(0xFF10B981)),
-                    const SizedBox(height: 10),
-                    _buildProgressMetric('Average Review Time', 0, 'Not measured', const Color(0xFF6366F1)),
-                  ]);
-                }),
+                Builder(
+                  builder: (context) {
+                    final total = _applications.length;
+                    final advanced = _applications
+                        .where(
+                          (a) =>
+                              a.status == ApplicationStatus.fosterTrial ||
+                              a.status == ApplicationStatus.approved,
+                        )
+                        .length;
+                    final approved = _applications
+                        .where((a) => a.status == ApplicationStatus.approved)
+                        .length;
+                    return Column(
+                      children: [
+                        _buildProgressMetric(
+                          'Applications reaching trial/approval',
+                          total == 0 ? 0 : advanced / total,
+                          total == 0 ? 'No data' : '$advanced/$total',
+                          const Color(0xFF0D9488),
+                        ),
+                        const SizedBox(height: 10),
+                        _buildProgressMetric(
+                          'Applications approved',
+                          total == 0 ? 0 : approved / total,
+                          total == 0 ? 'No data' : '$approved/$total',
+                          const Color(0xFF10B981),
+                        ),
+                        const SizedBox(height: 10),
+                        _buildProgressMetric(
+                          'Average Review Time',
+                          0,
+                          'Not measured',
+                          const Color(0xFF6366F1),
+                        ),
+                      ],
+                    );
+                  },
+                ),
               ],
             ),
           ),
@@ -1589,11 +2219,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('System Audit Trail Log', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+              const Text(
+                'System Audit Trail Log',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+              ),
               TextButton.icon(
                 icon: const Icon(Icons.file_download_outlined, size: 16),
                 label: const Text('Export Logs'),
-                onPressed: () => _triggerExportFeedback('System_Audit_Trail_Export.csv'),
+                onPressed: () =>
+                    _triggerExportFeedback('System_Audit_Trail_Export.csv'),
               ),
             ],
           ),
@@ -1617,22 +2251,48 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   leading: CircleAvatar(
                     radius: 14,
                     backgroundColor: const Color(0xFF0D9488).withOpacity(0.12),
-                    child: const Icon(Icons.security, size: 14, color: Color(0xFF0D9488)),
+                    child: const Icon(
+                      Icons.security,
+                      size: 14,
+                      color: Color(0xFF0D9488),
+                    ),
                   ),
                   title: Row(
                     children: [
-                      Text(log.actorName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      Text(
+                        log.actorName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                        decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(4)),
-                        child: Text(log.action, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFF475569))),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          log.action,
+                          style: const TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF475569),
+                          ),
+                        ),
                       ),
                     ],
                   ),
                   subtitle: Text(
                     '${log.details} • ${log.timestamp.toLocal().toString().substring(0, 16)}',
-                    style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF64748B),
+                    ),
                   ),
                 );
               },
@@ -1643,15 +2303,30 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     );
   }
 
-  Widget _buildProgressMetric(String label, double value, String display, Color color) {
+  Widget _buildProgressMetric(
+    String label,
+    double value,
+    String display,
+    Color color,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFF475569))),
-            Text(display, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: color)),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
+            ),
+            Text(
+              display,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                color: color,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 6),
@@ -1691,20 +2366,32 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           children: [
             Text(
               '${_selectedAppIds.length} Selected',
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
             ),
             const Spacer(),
             TextButton(
               onPressed: () => setState(() => _selectedAppIds.clear()),
-              child: const Text('Clear', style: TextStyle(color: Colors.white70, fontSize: 12)),
+              child: const Text(
+                'Clear',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
             ),
             const SizedBox(width: 8),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFE11D48),
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
               icon: const Icon(Icons.close_rounded, size: 14),
               label: const Text('Reject', style: TextStyle(fontSize: 12)),
@@ -1715,11 +2402,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF0D9488),
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
               icon: const Icon(Icons.check_rounded, size: 14),
-              label: const Text('Approve', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              label: const Text(
+                'Approve',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
               onPressed: _batchApproveApplications,
             ),
           ],
@@ -1735,9 +2430,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.inbox_outlined, size: 48, color: Color(0xFFCBD5E1)),
+            const Icon(
+              Icons.inbox_outlined,
+              size: 48,
+              color: Color(0xFFCBD5E1),
+            ),
             const SizedBox(height: 12),
-            Text(message, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13), textAlign: TextAlign.center),
+            Text(
+              message,
+              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
       ),
@@ -1757,11 +2460,12 @@ class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
   double get maxExtent => _tabBar.preferredSize.height;
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return Container(
-      color: Colors.white,
-      child: _tabBar,
-    );
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return Container(color: Colors.white, child: _tabBar);
   }
 
   @override

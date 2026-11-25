@@ -42,40 +42,48 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     super.initState();
     _loadConversationAndMessages();
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
-      try { await _chatRepo.refreshRemote(); await _loadConversationAndMessages(); }
-      catch (e) { if (mounted) setState(() => _syncError = 'Messages may be stale: $e'); }
+      try {
+        await _chatRepo.refreshRemote();
+        await _loadConversationAndMessages();
+      } catch (e) {
+        if (mounted) setState(() => _syncError = 'Messages may be stale: $e');
+      }
     });
   }
 
   Future<void> _loadConversationAndMessages() async {
     try {
-    final conv = await _chatRepo.getConversationById(widget.conversationId);
-    final msgs = await _chatRepo.getMessages(widget.conversationId);
+      final conv = await _chatRepo.getConversationById(widget.conversationId);
+      final msgs = await _chatRepo.getMessages(widget.conversationId);
 
-    if (mounted) {
-      setState(() {
-        _conversation = conv;
-        _messages = List.from(msgs);
-        _isLoading = false;
-      });
-      _scrollToBottom();
-    }
-
-    _messageSub = _chatRepo.getMessagesStream(widget.conversationId).listen((
-      newMsgs,
-    ) {
       if (mounted) {
         setState(() {
-          _messages = List.from(newMsgs);
+          _conversation = conv;
+          _messages = List.from(msgs);
+          _isLoading = false;
         });
         _scrollToBottom();
       }
-    });
 
-    await _chatRepo.markConversationAsRead(widget.conversationId);
-    if (mounted) setState(() => _syncError = null);
+      _messageSub = _chatRepo.getMessagesStream(widget.conversationId).listen((
+        newMsgs,
+      ) {
+        if (mounted) {
+          setState(() {
+            _messages = List.from(newMsgs);
+          });
+          _scrollToBottom();
+        }
+      });
+
+      await _chatRepo.markConversationAsRead(widget.conversationId);
+      if (mounted) setState(() => _syncError = null);
     } catch (e) {
-      if (mounted) setState(() { _syncError = '$e'; _isLoading = false; });
+      if (mounted)
+        setState(() {
+          _syncError = '$e';
+          _isLoading = false;
+        });
     }
   }
 
@@ -100,7 +108,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     });
   }
 
-  Future<void> _sendText([String? predefinedText, String? attachmentUrl]) async {
+  Future<void> _sendText([
+    String? predefinedText,
+    String? attachmentUrl,
+  ]) async {
     final isRestricted = await GuestRestrictionDialog.checkAndShow(
       context,
       featureName: 'Direct Shelter Messaging',
@@ -116,7 +127,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     }
 
     try {
-      await _chatRepo.sendMessage(widget.conversationId, text, attachmentUrl: attachmentUrl);
+      await _chatRepo.sendMessage(
+        widget.conversationId,
+        text,
+        attachmentUrl: attachmentUrl,
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -130,31 +145,47 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   }
 
   Future<void> _sendHomePhoto() async {
-    final restricted = await GuestRestrictionDialog.checkAndShow(context,
-      featureName: 'Living Space Photo Sharing');
+    final restricted = await GuestRestrictionDialog.checkAndShow(
+      context,
+      featureName: 'Living Space Photo Sharing',
+    );
     if (restricted || !mounted) return;
     try {
       final file = await StorageService.pickImageFromGallery();
       if (file == null) return;
       final url = await StorageService.uploadPetImage(
-        bytes: await file.readAsBytes(), fileName: file.name);
+        bytes: await file.readAsBytes(),
+        fileName: file.name,
+      );
       await _sendText('Home / living area photo', url);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Photo was not sent: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Photo was not sent: $e')));
+      }
     }
   }
 
   void _showMaskedCallDialog() {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('Voice relay is not configured. No call was placed.')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Voice relay is not configured. No call was placed.'),
+      ),
+    );
   }
 
   Future<void> _retryMessage(ChatMessage message) async {
-    try { await _chatRepo.retryFailedMessage(message); }
-    catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: const Color(0xFFE11D48), content: Text('Retry failed: $e')));
+    try {
+      await _chatRepo.retryFailedMessage(message);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFFE11D48),
+            content: Text('Retry failed: $e'),
+          ),
+        );
+      }
     }
   }
 
@@ -284,9 +315,19 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                   ),
 
                 const Divider(height: 1, color: Color(0xFFE2E8F0)),
-                if (_syncError != null) Container(width: double.infinity,
-                  color: const Color(0xFFFFF1F2), padding: const EdgeInsets.all(8),
-                  child: Text(_syncError!, style: const TextStyle(color: Color(0xFFE11D48), fontSize: 12))),
+                if (_syncError != null)
+                  Container(
+                    width: double.infinity,
+                    color: const Color(0xFFFFF1F2),
+                    padding: const EdgeInsets.all(8),
+                    child: Text(
+                      _syncError!,
+                      style: const TextStyle(
+                        color: Color(0xFFE11D48),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
 
                 // Messages Stream List
                 Expanded(
@@ -393,22 +434,44 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                                         if (isMe) ...[
                                           const SizedBox(width: 4),
                                           Icon(
-                                            msg.deliveryStatus == MessageDeliveryStatus.failed
-                                              ? Icons.error_outline
-                                              : msg.deliveryStatus == MessageDeliveryStatus.sending
+                                            msg.deliveryStatus ==
+                                                    MessageDeliveryStatus.failed
+                                                ? Icons.error_outline
+                                                : msg.deliveryStatus ==
+                                                      MessageDeliveryStatus
+                                                          .sending
                                                 ? Icons.schedule_rounded
-                                                : msg.deliveryStatus == MessageDeliveryStatus.read ||
-                                                  msg.deliveryStatus == MessageDeliveryStatus.delivered
-                                                  ? Icons.done_all_rounded : Icons.done_rounded,
+                                                : msg.deliveryStatus ==
+                                                          MessageDeliveryStatus
+                                                              .read ||
+                                                      msg.deliveryStatus ==
+                                                          MessageDeliveryStatus
+                                                              .delivered
+                                                ? Icons.done_all_rounded
+                                                : Icons.done_rounded,
                                             size: 14,
-                                            color: msg.deliveryStatus == MessageDeliveryStatus.failed
-                                              ? const Color(0xFFFCA5A5)
-                                              : msg.deliveryStatus == MessageDeliveryStatus.read
-                                                ? const Color(0xFF93C5FD) : Colors.white70,
+                                            color:
+                                                msg.deliveryStatus ==
+                                                    MessageDeliveryStatus.failed
+                                                ? const Color(0xFFFCA5A5)
+                                                : msg.deliveryStatus ==
+                                                      MessageDeliveryStatus.read
+                                                ? const Color(0xFF93C5FD)
+                                                : Colors.white70,
                                           ),
-                                          if (msg.deliveryStatus == MessageDeliveryStatus.failed)
-                                            TextButton(onPressed: () => _retryMessage(msg),
-                                              child: const Text('Retry', style: TextStyle(fontSize: 10, color: Colors.white))),
+                                          if (msg.deliveryStatus ==
+                                              MessageDeliveryStatus.failed)
+                                            TextButton(
+                                              onPressed: () =>
+                                                  _retryMessage(msg),
+                                              child: const Text(
+                                                'Retry',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            ),
                                         ],
                                       ],
                                     ),

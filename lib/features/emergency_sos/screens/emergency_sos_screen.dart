@@ -1,3 +1,10 @@
+/// 24/7 Lost Pet SOS & Neighborhood Broadcast Hub
+///
+/// - Role: Dispatches and displays 5km community emergency broadcasts for lost or injured animals.
+/// - Design Pattern: Presentation Screen with Tabbed Material 3 UI & Realtime Alert Subscription.
+/// - Backend Integration: PostgREST `emergency_alerts` table & Realtime Postgres Changes.
+library;
+
 import 'package:flutter/material.dart';
 
 import '../../../core/models/emergency_alert_model.dart';
@@ -141,26 +148,32 @@ class _EmergencySosScreenState extends State<EmergencySosScreen>
                   onPressed: () async {
                     if (nameCtrl.text.isNotEmpty) {
                       try {
-                      await _emergencyRepo.broadcastAlert(
-                        petName: nameCtrl.text.trim(),
-                        petBreed: breedCtrl.text.trim().isNotEmpty
-                            ? breedCtrl.text.trim()
-                            : 'Dog',
-                        imageUrl: 'https://images.unsplash.com/photo-1558788353-f76d92427f16?auto=format&fit=crop&w=800&q=80',
-                        lastSeenLocation: locationCtrl.text.trim(),
-                        lat: 23.75,
-                        lng: 90.38,
-                        radiusKm: 5,
-                        rewardBdt: int.tryParse(rewardCtrl.text) ?? 5000,
-                        description: descCtrl.text.trim(),
-                        contactPhone: '+880 17•• ••••22',
-                      );
-                      if (!context.mounted) return;
-                      Navigator.pop(context);
-                      await _loadData();
+                        await _emergencyRepo.broadcastAlert(
+                          petName: nameCtrl.text.trim(),
+                          petBreed: breedCtrl.text.trim().isNotEmpty
+                              ? breedCtrl.text.trim()
+                              : 'Dog',
+                          imageUrl: 'https://images.unsplash.com/photo-1558788353-f76d92427f16?auto=format&fit=crop&w=800&q=80',
+                          lastSeenLocation: locationCtrl.text.trim(),
+                          lat: 23.75,
+                          lng: 90.38,
+                          radiusKm: 5,
+                          rewardBdt: int.tryParse(rewardCtrl.text) ?? 5000,
+                          description: descCtrl.text.trim(),
+                          contactPhone: '+880 17•• ••••22',
+                        );
+                        if (!context.mounted) return;
+                        Navigator.pop(context);
+                        await _loadData();
                       } catch (e) {
-                        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(backgroundColor: const Color(0xFFE11D48), content: Text('$e')));
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              backgroundColor: const Color(0xFFE11D48),
+                              content: Text('$e'),
+                            ),
+                          );
+                        }
                       }
                     }
                   },

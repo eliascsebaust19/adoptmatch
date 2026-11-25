@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../core/models/pet_model.dart';
 import '../../../core/repositories/pet_repository.dart';
 import '../../../shared/widgets/app_network_image.dart';
@@ -32,8 +33,14 @@ class _PetComparisonScreenState extends State<PetComparisonScreen> {
     setState(() {
       _allPets = pets;
       if (widget.initialPetId != null) {
-        _petA = pets.firstWhere((p) => p.id == widget.initialPetId, orElse: () => pets[0]);
-        _petB = pets.firstWhere((p) => p.id != _petA?.id, orElse: () => pets[1]);
+        _petA = pets.firstWhere(
+          (p) => p.id == widget.initialPetId,
+          orElse: () => pets[0],
+        );
+        _petB = pets.firstWhere(
+          (p) => p.id != _petA?.id,
+          orElse: () => pets[1],
+        );
       } else {
         _petA = pets.isNotEmpty ? pets[0] : null;
         _petB = pets.length > 1 ? pets[1] : null;
@@ -45,7 +52,9 @@ class _PetComparisonScreenState extends State<PetComparisonScreen> {
   void _selectPet(bool isSlotA) async {
     final selected = await showModalBottomSheet<Pet>(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (context) {
         return ListView.builder(
           padding: const EdgeInsets.all(16),
@@ -53,8 +62,13 @@ class _PetComparisonScreenState extends State<PetComparisonScreen> {
           itemBuilder: (context, index) {
             final p = _allPets[index];
             return ListTile(
-              leading: CircleAvatar(backgroundImage: AppNetworkImage.provider(p.imageUrl)),
-              title: Text('${p.name} (${p.breed})', style: const TextStyle(fontWeight: FontWeight.bold)),
+              leading: CircleAvatar(
+                backgroundImage: AppNetworkImage.provider(p.imageUrl),
+              ),
+              title: Text(
+                '${p.name} (${p.breed})',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
               subtitle: Text('${p.matchScore}% Match • ${p.ageDisplay}'),
               onTap: () => Navigator.pop(context, p),
             );
@@ -74,7 +88,12 @@ class _PetComparisonScreenState extends State<PetComparisonScreen> {
     }
   }
 
-  Widget _buildComparisonRow(String label, String valA, String valB, {bool isHighlight = false}) {
+  Widget _buildComparisonRow(
+    String label,
+    String valA,
+    String valB, {
+    bool isHighlight = false,
+  }) {
     const slateDark = Color(0xFF0F172A);
     const teal = Color(0xFF0D9488);
 
@@ -103,7 +122,11 @@ class _PetComparisonScreenState extends State<PetComparisonScreen> {
             child: Text(
               label,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                fontSize: 11,
+                color: Color(0xFF64748B),
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
           Expanded(
@@ -144,7 +167,11 @@ class _PetComparisonScreenState extends State<PetComparisonScreen> {
             child: Text(
               label,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                fontSize: 11,
+                color: Color(0xFF64748B),
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
           Expanded(
@@ -176,9 +203,7 @@ class _PetComparisonScreenState extends State<PetComparisonScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: const Text('Side-by-Side Comparison'),
-      ),
+      appBar: AppBar(title: const Text('Side-by-Side Comparison')),
       body: SingleChildScrollView(
         child: Column(
           children: [
@@ -206,21 +231,34 @@ class _PetComparisonScreenState extends State<PetComparisonScreen> {
                         const SizedBox(height: 8),
                         Text(
                           pA.name,
-                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: slateDark),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                            color: slateDark,
+                          ),
                         ),
                         Text(
                           pA.breed,
-                          style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF64748B),
+                          ),
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 4),
                         OutlinedButton(
                           style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
                             minimumSize: Size.zero,
                           ),
                           onPressed: () => _selectPet(true),
-                          child: const Text('Switch', style: TextStyle(fontSize: 11)),
+                          child: const Text(
+                            'Switch',
+                            style: TextStyle(fontSize: 11),
+                          ),
                         ),
                       ],
                     ),
@@ -234,7 +272,14 @@ class _PetComparisonScreenState extends State<PetComparisonScreen> {
                       shape: BoxShape.circle,
                     ),
                     alignment: Alignment.center,
-                    child: const Text('VS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF64748B))),
+                    child: const Text(
+                      'VS',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
                   ),
 
                   // Slot B
@@ -255,21 +300,34 @@ class _PetComparisonScreenState extends State<PetComparisonScreen> {
                         const SizedBox(height: 8),
                         Text(
                           pB.name,
-                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: slateDark),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                            color: slateDark,
+                          ),
                         ),
                         Text(
                           pB.breed,
-                          style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF64748B),
+                          ),
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 4),
                         OutlinedButton(
                           style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
                             minimumSize: Size.zero,
                           ),
                           onPressed: () => _selectPet(false),
-                          child: const Text('Switch', style: TextStyle(fontSize: 11)),
+                          child: const Text(
+                            'Switch',
+                            style: TextStyle(fontSize: 11),
+                          ),
                         ),
                       ],
                     ),
@@ -290,17 +348,50 @@ class _PetComparisonScreenState extends State<PetComparisonScreen> {
               ),
               child: Column(
                 children: [
-                  _buildComparisonRow('Compatibility', '${pA.matchScore}%', '${pB.matchScore}%', isHighlight: true),
+                  _buildComparisonRow(
+                    'Compatibility',
+                    '${pA.matchScore}%',
+                    '${pB.matchScore}%',
+                    isHighlight: true,
+                  ),
                   _buildComparisonRow('Species', pA.species, pB.species),
                   _buildComparisonRow('Age', pA.ageDisplay, pB.ageDisplay),
                   _buildComparisonRow('Gender', pA.gender, pB.gender),
-                  _buildComparisonRow('Weight', '${pA.weightKg} kg', '${pB.weightKg} kg'),
-                  _buildComparisonRow('Distance', '${pA.distanceLabel}', '${pB.distanceLabel}'),
-                  _buildCheckRow('Apartment Friendly', pA.isApartmentFriendly, pB.isApartmentFriendly),
-                  _buildCheckRow('Good with Children', pA.isKidSafe, pB.isKidSafe),
-                  _buildCheckRow('House Trained', pA.isHouseTrained, pB.isHouseTrained),
-                  _buildCheckRow('Spayed / Neutered', pA.isNeutered, pB.isNeutered),
-                  _buildCheckRow('Core Vaccinated', pA.isVaccinated, pB.isVaccinated),
+                  _buildComparisonRow(
+                    'Weight',
+                    '${pA.weightKg} kg',
+                    '${pB.weightKg} kg',
+                  ),
+                  _buildComparisonRow(
+                    'Distance',
+                    pA.distanceLabel,
+                    pB.distanceLabel,
+                  ),
+                  _buildCheckRow(
+                    'Apartment Friendly',
+                    pA.isApartmentFriendly,
+                    pB.isApartmentFriendly,
+                  ),
+                  _buildCheckRow(
+                    'Good with Children',
+                    pA.isKidSafe,
+                    pB.isKidSafe,
+                  ),
+                  _buildCheckRow(
+                    'House Trained',
+                    pA.isHouseTrained,
+                    pB.isHouseTrained,
+                  ),
+                  _buildCheckRow(
+                    'Spayed / Neutered',
+                    pA.isNeutered,
+                    pB.isNeutered,
+                  ),
+                  _buildCheckRow(
+                    'Core Vaccinated',
+                    pA.isVaccinated,
+                    pB.isVaccinated,
+                  ),
                 ],
               ),
             ),
@@ -316,11 +407,20 @@ class _PetComparisonScreenState extends State<PetComparisonScreen> {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: teal,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                       onPressed: () => context.push('/apply/${pA.id}'),
-                      child: Text('Apply for ${pA.name}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                      child: Text(
+                        'Apply for ${pA.name}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -328,11 +428,20 @@ class _PetComparisonScreenState extends State<PetComparisonScreen> {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: teal,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                       onPressed: () => context.push('/apply/${pB.id}'),
-                      child: Text('Apply for ${pB.name}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                      child: Text(
+                        'Apply for ${pB.name}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -345,4 +454,3 @@ class _PetComparisonScreenState extends State<PetComparisonScreen> {
     );
   }
 }
-

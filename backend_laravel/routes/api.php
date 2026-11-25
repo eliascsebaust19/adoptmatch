@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\PetController;
 use App\Http\Controllers\Api\AdoptionRequestController;
 use App\Http\Controllers\Api\MessageController;
 use App\Http\Controllers\Api\UploadController;
+use App\Http\Controllers\Api\AdminController;
 
 /*
 |--------------------------------------------------------------------------
@@ -72,5 +73,17 @@ Route::prefix('v1')->group(function () {
         Route::get('/messages/conversations', [MessageController::class, 'getConversations']);
         Route::get('/messages/{userId}', [MessageController::class, 'getMessages']);
         Route::post('/messages', [MessageController::class, 'sendMessage']);
+    });
+
+    // =====================================
+    // 3. ADMIN MANAGEMENT ROUTES
+    // =====================================
+    Route::prefix('admin')->group(function () {
+        Route::get('/stats', [AdminController::class, 'stats']);
+        Route::post('/stats', [AdminController::class, 'stats']);
+        Route::get('/users', [AdminController::class, 'users']);
+        Route::get('/shelters', [AdminController::class, 'shelters']);
+        Route::get('/pets', [AdminController::class, 'pets']);
+        Route::get('/audit-logs', [AdminController::class, 'auditLogs']);
     });
 });

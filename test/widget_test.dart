@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -17,31 +18,30 @@ import 'package:adoptmatch/core/repositories/admin_repository.dart';
 import 'package:adoptmatch/core/repositories/pet_repository.dart';
 import 'package:adoptmatch/core/services/laravel_pet_service.dart';
 import 'package:adoptmatch/core/network/api_client.dart';
+
 import 'helpers/secure_storage_mock.dart';
 import 'helpers/fake_dio_adapter.dart';
 import 'fixtures/sample_pets.dart';
 
 void main() {
-  testWidgets('PawLogo widget renders successfully', (WidgetTester tester) async {
+  testWidgets('PawLogo widget renders successfully', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       const MaterialApp(
-        home: Scaffold(
-          body: Center(child: PawLogo(size: 64)),
-        ),
+        home: Scaffold(body: Center(child: PawLogo(size: 64))),
       ),
     );
 
     expect(find.byType(PawLogo), findsOneWidget);
   });
 
-  testWidgets('MatchScoreBadge displays correct percentage', (WidgetTester tester) async {
+  testWidgets('MatchScoreBadge displays correct percentage', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       const MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: MatchScoreBadge(score: 95),
-          ),
-        ),
+        home: Scaffold(body: Center(child: MatchScoreBadge(score: 95))),
       ),
     );
 
@@ -49,7 +49,9 @@ void main() {
     expect(find.byIcon(Icons.bolt), findsOneWidget);
   });
 
-  testWidgets('CustomButton handles tap and displays text', (WidgetTester tester) async {
+  testWidgets('CustomButton handles tap and displays text', (
+    WidgetTester tester,
+  ) async {
     bool tapped = false;
 
     await tester.pumpWidget(
@@ -72,63 +74,100 @@ void main() {
     expect(tapped, isTrue);
   });
 
-  testWidgets('AdminDashboardScreen renders without error with KPI cards and tabs', (WidgetTester tester) async {
-    await installSecureStorageMock();
-    AdminRepository().configureForTesting(MockClient((request) async {
-      if (request.url.path.endsWith('/admin/stats')) return http.Response(jsonEncode({
-        'success': true, 'data': {'pendingShelters': 0, 'activeRescues': 0, 'flaggedListings': 0}}), 200);
-      return http.Response(jsonEncode({'success': true, 'data': []}), 200);
-    }), () async => 'admin-token');
-    final api = ApiClient(baseUrl: 'https://api.example.test/api/v1')
-      ..dio.httpClientAdapter = FakeDioAdapter((_) async => (200, {'status': 'success', 'data': {'data': []}}));
-    ApplicationRepository().configureForTesting(LaravelPetService(apiClient: api),
-      client: MockClient((_) async => http.Response('{}', 500)), tokenReader: () async => 'token');
-    final authBloc = AuthBloc(
-      initialUser: const UserProfile(
-        id: 'admin-test-01',
-        name: 'Admin Test',
-        email: 'admin@adoptmatch.com',
-        phone: '+880 1800 000000',
-        role: UserRole.admin,
-      ),
-    );
-
-    tester.view.physicalSize = const Size(400, 800);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-
-    await tester.pumpWidget(
-      BlocProvider<AuthBloc>.value(
-        value: authBloc,
-        child: const MaterialApp(
-          home: AdminDashboardScreen(),
+  testWidgets(
+    'AdminDashboardScreen renders without error with KPI cards and tabs',
+    (WidgetTester tester) async {
+      await installSecureStorageMock();
+      AdminRepository().configureForTesting(
+        MockClient((request) async {
+          if (request.url.path.endsWith('/admin/stats')) {
+            return http.Response(
+              jsonEncode({
+                'success': true,
+                'data': {
+                  'pendingShelters': 0,
+                  'activeRescues': 0,
+                  'flaggedListings': 0,
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response(jsonEncode({'success': true, 'data': []}), 200);
+        }),
+        () async => 'admin-token',
+      );
+      final api = ApiClient(baseUrl: 'https://api.example.test/api/v1')
+        ..dio.httpClientAdapter = FakeDioAdapter(
+          (_) async => (
+            200,
+            {
+              'status': 'success',
+              'data': {'data': []},
+            },
+          ),
+        );
+      ApplicationRepository().configureForTesting(
+        LaravelPetService(apiClient: api),
+        client: MockClient((_) async => http.Response('{}', 500)),
+        tokenReader: () async => 'token',
+      );
+      final authBloc = AuthBloc(
+        initialUser: const UserProfile(
+          id: 'admin-test-01',
+          name: 'Admin Test',
+          email: 'admin@adoptmatch.com',
+          phone: '+880 1800 000000',
+          role: UserRole.admin,
         ),
-      ),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+      );
 
-    expect(find.byType(AdminDashboardScreen), findsOneWidget);
-    expect(find.text('Shelter Management Admin'), findsOneWidget);
-  });
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
 
-  testWidgets('AdoptionApplicationScreen renders and advances to step 2', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        BlocProvider<AuthBloc>.value(
+          value: authBloc,
+          child: const MaterialApp(home: AdminDashboardScreen()),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byType(AdminDashboardScreen), findsOneWidget);
+      expect(find.text('AdoptMatch Admin'), findsOneWidget);
+    },
+  );
+
+  testWidgets('AdoptionApplicationScreen renders and advances to step 2', (
+    WidgetTester tester,
+  ) async {
     await installSecureStorageMock();
     LocalStorageService.instance.resetForTesting();
     PetRepository().setPetsForTesting(sampleTestPets);
     final api = ApiClient(baseUrl: 'https://api.example.test/api/v1')
-      ..dio.httpClientAdapter = FakeDioAdapter((_) async => (200, {'status': 'success', 'data': {'data': []}}));
-    ApplicationRepository().configureForTesting(LaravelPetService(apiClient: api),
-      client: MockClient((_) async => http.Response('{}', 500)), tokenReader: () async => null);
+      ..dio.httpClientAdapter = FakeDioAdapter(
+        (_) async => (
+          200,
+          {
+            'status': 'success',
+            'data': {'data': []},
+          },
+        ),
+      );
+    ApplicationRepository().configureForTesting(
+      LaravelPetService(apiClient: api),
+      client: MockClient((_) async => http.Response('{}', 500)),
+      tokenReader: () async => null,
+    );
     SharedPreferences.setMockInitialValues({});
     tester.view.physicalSize = const Size(400, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
 
     await tester.pumpWidget(
-      const MaterialApp(
-        home: AdoptionApplicationScreen(petId: 'p1'),
-      ),
+      const MaterialApp(home: AdoptionApplicationScreen(petId: 'p1')),
     );
     for (int i = 0; i < 10; i++) {
       await tester.pump(const Duration(milliseconds: 100));

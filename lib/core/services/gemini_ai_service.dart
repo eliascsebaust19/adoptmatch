@@ -35,7 +35,6 @@ You are AdoptMatch AI, a friendly, intelligent, and natural conversational AI as
 
   static const List<String> _preferredModels = [
     'gemini-3.1-flash-lite',
-    'gemini-3.5-flash',
     'gemini-3.8-flash',
     'gemini-flash-latest',
   ];
@@ -45,6 +44,9 @@ You are AdoptMatch AI, a friendly, intelligent, and natural conversational AI as
   final String apiKey;
   String _activeModelName = 'gemini-3.1-flash-lite';
   bool _isInitialized = false;
+  bool _remoteDisabledForSession = false;
+
+  bool get isRemoteEnabled => _isInitialized && !_remoteDisabledForSession;
 
   GeminiAiService({String? apiKey})
       : apiKey = (apiKey != null && apiKey.isNotEmpty) ? apiKey : defaultApiKey {
@@ -52,6 +54,13 @@ You are AdoptMatch AI, a friendly, intelligent, and natural conversational AI as
   }
 
   void _initBestModel() {
+    if (apiKey.trim().isEmpty) {
+      _isInitialized = false;
+      debugPrint(
+        '[GeminiAiService] GEMINI_API_KEY not provided; using local AdoptMatch AI assistant.',
+      );
+      return;
+    }
     for (final modelName in _preferredModels) {
       try {
         _model = GenerativeModel(
@@ -69,6 +78,16 @@ You are AdoptMatch AI, a friendly, intelligent, and natural conversational AI as
     }
   }
 
+  bool _isAuthOrPermissionError(Object error) {
+    final msg = error.toString().toLowerCase();
+    return msg.contains('permission denied') ||
+        msg.contains('api key') ||
+        msg.contains('api_key_invalid') ||
+        msg.contains('403') ||
+        msg.contains('401') ||
+        msg.contains('unauthorized');
+  }
+
   void resetChat() {
     if (_isInitialized && _model != null) {
       try {
@@ -78,8 +97,8 @@ You are AdoptMatch AI, a friendly, intelligent, and natural conversational AI as
   }
 
   Future<String> sendMessage(String userPrompt) async {
-    // 1. Try primary chat session
-    if (_isInitialized && _chat != null) {
+    // 1. Try primary chat session only when a key is configured and not permission-blocked
+    if (_isInitialized && !_remoteDisabledForSession && _chat != null) {
       try {
         final response = await _chat!
             .sendMessage(Content.text(userPrompt))
@@ -91,10 +110,20 @@ You are AdoptMatch AI, a friendly, intelligent, and natural conversational AI as
       } catch (e) {
         debugPrint('[GeminiAiService] Active model ($_activeModelName) error: $e');
 
+        if (_isAuthOrPermissionError(e)) {
+          _remoteDisabledForSession = true;
+          debugPrint(
+            '[GeminiAiService] Remote Gemini disabled for this session due to API key/permission error. '
+            'Pass --dart-define=GEMINI_API_KEY=YOUR_KEY to enable live Gemini.',
+          );
+          final fallbackResponse = await AiAssistantService().getResponse(userPrompt);
+          return fallbackResponse.text;
+        }
+
         // Reset chat session so subsequent calls don't get stuck in broken state
         _chat = _model?.startChat();
 
-        // Try remaining models as fallbacks (e.g. if model had high demand or error)
+        // Try remaining models as fallbacks (e.g. if a specific model had transient demand)
         for (final fallbackName in _preferredModels) {
           if (fallbackName == _activeModelName) continue;
           try {
@@ -116,12 +145,16 @@ You are AdoptMatch AI, a friendly, intelligent, and natural conversational AI as
             }
           } catch (fbErr) {
             debugPrint('[GeminiAiService] Fallback to $fallbackName failed: $fbErr');
+            if (_isAuthOrPermissionError(fbErr)) {
+              _remoteDisabledForSession = true;
+              break;
+            }
           }
         }
       }
     }
 
-    // 2. Intelligent local offline conversational engine if network unavailable
+    // 2. Intelligent local offline conversational engine if network/key unavailable
     final fallbackResponse = await AiAssistantService().getResponse(userPrompt);
     return fallbackResponse.text;
   }

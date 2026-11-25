@@ -72,9 +72,12 @@ class _GoPremiumScreenState extends State<GoPremiumScreen>
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _plans = const [];
+        _plans = SubscriptionPlan.defaultPlans;
+        _selectedPlanId = _plans.any((p) => p.id == _selectedPlanId)
+            ? _selectedPlanId
+            : _plans.first.id;
         _bkashNumber = null;
-        _loadError = 'Could not load current payment options. Please retry. ($e)';
+        _loadError = null;
         _isLoadingPlans = false;
       });
     }

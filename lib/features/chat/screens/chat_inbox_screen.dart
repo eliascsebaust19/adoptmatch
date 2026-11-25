@@ -111,9 +111,42 @@ class _ChatInboxScreenState extends State<ChatInboxScreen> {
           ? const Center(child: CircularProgressIndicator(color: teal))
           : Column(
               children: [
-                if (_loadError != null) Padding(padding: const EdgeInsets.all(12),
-                  child: Row(children: [Expanded(child: Text(_loadError!)),
-                    TextButton(onPressed: _loadConversations, child: const Text('Retry'))])),
+                if (_loadError != null)
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFFECACA)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.sync_problem_rounded, size: 20, color: Color(0xFFDC2626)),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'Unable to sync latest messages. Tap retry to reconnect.',
+                            style: TextStyle(
+                              color: Color(0xFF991B1B),
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: _loadConversations,
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFFDC2626),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Text('Retry', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                  ),
                 if (isGuest)
                   Container(
                     width: double.infinity,

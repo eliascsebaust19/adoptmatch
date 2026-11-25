@@ -8,13 +8,17 @@
       "args": [
         "-d",
         "chrome",
-        "--web-port=3913"
+        "--web-port=3913",
+        "--dart-define-from-file=.env"
       ]
     },
     {
       "name": "AdoptMatch (Mobile / Device)",
       "request": "launch",
-      "type": "dart"
+      "type": "dart",
+      "args": [
+        "--dart-define-from-file=.env"
+      ]
     }
   ]
 }

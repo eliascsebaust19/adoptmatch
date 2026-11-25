@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/widgets/root_back_scope.dart';
-import '../../adoption_match/screens/discover_screen.dart';
+import '../../adoption_match/screens/home_screen.dart';
 import '../../adoption_match/screens/swipe_match_screen.dart';
 import '../../chat/screens/chat_inbox_screen.dart';
 import '../../community/screens/happy_tails_feed_screen.dart';
@@ -26,7 +26,7 @@ class _MainNavScreenState extends State<MainNavScreen> {
   StreamSubscription? _chatSub;
 
   final List<Widget> _screens = const [
-    DiscoverScreen(),
+    HomeScreen(),
     SwipeMatchScreen(),
     ChatInboxScreen(),
     HappyTailsFeedScreen(),

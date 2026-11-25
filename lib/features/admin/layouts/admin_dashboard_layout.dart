@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../auth/bloc/auth_bloc.dart';
 import '../../../core/repositories/admin_repository.dart';
 import '../widgets/admin_create_pet_dialog.dart';
@@ -19,9 +20,18 @@ class _AdminDashboardLayoutState extends State<AdminDashboardLayout> {
   @override
   void initState() {
     super.initState();
-    _adminRepo.refresh().then((_) { if (mounted) setState(() {}); }).catchError((Object e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Admin data unavailable: $e')));
-    });
+    _adminRepo
+        .refresh()
+        .then((_) {
+          if (mounted) setState(() {});
+        })
+        .catchError((Object e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Admin data unavailable: $e')),
+            );
+          }
+        });
   }
 
   int _getSelectedIndex(String path) {
@@ -64,26 +74,95 @@ class _AdminDashboardLayoutState extends State<AdminDashboardLayout> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Confirm Admin Logout', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: const Text('Are you sure you want to end your administrative session?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFE11D48),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: Colors.white,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF1F2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.logout_rounded,
+                color: Color(0xFFE11D48),
+                size: 22,
+              ),
             ),
-            onPressed: () {
-              Navigator.pop(ctx);
-              context.read<AuthBloc>().add(LogoutEvent());
-              context.go('/admin/login');
-            },
-            child: const Text('Logout'),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Confirm Admin Logout',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to end your administrative session?',
+          style: TextStyle(color: Color(0xFF475569), fontSize: 14, height: 1.4),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF475569),
+                    side: const BorderSide(
+                      color: Color(0xFFCBD5E1),
+                      width: 1.2,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(
+                      color: Color(0xFF475569),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFE11D48),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    context.read<AuthBloc>().add(LogoutEvent());
+                    context.go('/admin/login');
+                  },
+                  child: const Text(
+                    'Logout',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -109,49 +188,80 @@ class _AdminDashboardLayoutState extends State<AdminDashboardLayout> {
         final isWide = constraints.maxWidth >= 960;
 
         return Scaffold(
-          backgroundColor: const Color(0xFF0F172A), // Dark slate enterprise background
+          backgroundColor: const Color(0xFFF8FAFC),
           appBar: isWide
               ? null
               : AppBar(
-                  backgroundColor: const Color(0xFF1E293B),
-                  elevation: 1,
+                  backgroundColor: Colors.white,
+                  surfaceTintColor: Colors.transparent,
+                  elevation: 0,
+                  bottom: PreferredSize(
+                    preferredSize: const Size.fromHeight(1),
+                    child: Container(color: const Color(0xFFE2E8F0), height: 1),
+                  ),
                   title: Row(
                     children: [
                       Container(
                         width: 30,
                         height: 30,
                         decoration: BoxDecoration(
+                          color: const Color(0xFF0D9488).withOpacity(0.12),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         clipBehavior: Clip.antiAlias,
                         child: Image.asset(
                           'assets/images/app_logo.png',
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => const Icon(Icons.shield_outlined, color: Color(0xFF6366F1), size: 18),
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Icon(
+                                Icons.pets_rounded,
+                                color: Color(0xFF0D9488),
+                                size: 16,
+                              ),
                         ),
                       ),
                       const SizedBox(width: 10),
                       const Text(
                         'AdoptMatch Admin',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0F172A),
+                          letterSpacing: -0.2,
+                        ),
                       ),
                     ],
                   ),
                   actions: [
                     IconButton(
-                      icon: const Icon(Icons.add_circle, color: Color(0xFF14B8A6), size: 24),
+                      icon: const Icon(
+                        Icons.add_circle_outline_rounded,
+                        color: Color(0xFF0D9488),
+                        size: 22,
+                      ),
                       tooltip: 'Add Pet / পোষ্য যোগ',
-                      onPressed: () => showAdminCreatePetDialog(context),
+                      onPressed: () => showAdminCreatePetDialog(
+                        context,
+                        onSaved: (_) => setState(() {}),
+                      ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.logout, color: Color(0xFFEF4444)),
+                      icon: const Icon(
+                        Icons.logout_rounded,
+                        color: Color(0xFFE11D48),
+                        size: 20,
+                      ),
                       tooltip: 'Logout',
                       onPressed: _handleLogout,
                     ),
+                    const SizedBox(width: 4),
                   ],
                 ),
           floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => showAdminCreatePetDialog(context),
+            onPressed: () => showAdminCreatePetDialog(
+              context,
+              onSaved: (_) => setState(() {}),
+            ),
             backgroundColor: const Color(0xFF0D9488),
             foregroundColor: Colors.white,
             elevation: 4,
@@ -210,7 +320,11 @@ class _AdminDashboardLayoutState extends State<AdminDashboardLayout> {
     );
   }
 
-  Widget _buildTopHeader(BuildContext context, String adminName, String roleName) {
+  Widget _buildTopHeader(
+    BuildContext context,
+    String adminName,
+    String roleName,
+  ) {
     return Container(
       height: 64,
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -236,10 +350,14 @@ class _AdminDashboardLayoutState extends State<AdminDashboardLayout> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: roleName == 'SUPER_ADMIN' ? const Color(0xFFFEF3C7) : const Color(0xFFE0E7FF),
+                  color: roleName == 'SUPER_ADMIN'
+                      ? const Color(0xFFFEF3C7)
+                      : const Color(0xFFE0E7FF),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
-                    color: roleName == 'SUPER_ADMIN' ? const Color(0xFFF59E0B) : const Color(0xFF6366F1),
+                    color: roleName == 'SUPER_ADMIN'
+                        ? const Color(0xFFF59E0B)
+                        : const Color(0xFF6366F1),
                     width: 0.5,
                   ),
                 ),
@@ -248,7 +366,9 @@ class _AdminDashboardLayoutState extends State<AdminDashboardLayout> {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
-                    color: roleName == 'SUPER_ADMIN' ? const Color(0xFFB45309) : const Color(0xFF4338CA),
+                    color: roleName == 'SUPER_ADMIN'
+                        ? const Color(0xFFB45309)
+                        : const Color(0xFF4338CA),
                   ),
                 ),
               ),
@@ -260,17 +380,31 @@ class _AdminDashboardLayoutState extends State<AdminDashboardLayout> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF0D9488),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 9,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   elevation: 1,
                 ),
                 icon: const Icon(Icons.add_photo_alternate_rounded, size: 16),
-                label: const Text('Add Rescue Pet / পোষ্য যোগ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                onPressed: () => showAdminCreatePetDialog(context),
+                label: const Text(
+                  'Add Rescue Pet / পোষ্য যোগ',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+                onPressed: () => showAdminCreatePetDialog(
+                  context,
+                  onSaved: (_) => setState(() {}),
+                ),
               ),
               const SizedBox(width: 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(20),
@@ -282,20 +416,32 @@ class _AdminDashboardLayoutState extends State<AdminDashboardLayout> {
                       backgroundColor: const Color(0xFF6366F1),
                       child: Text(
                         adminName.isNotEmpty ? adminName[0].toUpperCase() : 'A',
-                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Text(
                       adminName,
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1E293B),
+                      ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 14),
               IconButton(
-                icon: const Icon(Icons.logout, color: Color(0xFFE11D48), size: 20),
+                icon: const Icon(
+                  Icons.logout,
+                  color: Color(0xFFE11D48),
+                  size: 20,
+                ),
                 tooltip: 'Logout',
                 onPressed: _handleLogout,
               ),
@@ -336,7 +482,11 @@ class _AdminDashboardLayoutState extends State<AdminDashboardLayout> {
                     child: Image.asset(
                       'assets/images/app_logo.png',
                       fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => const Icon(Icons.pets, color: Color(0xFF6366F1), size: 20),
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                        Icons.pets,
+                        color: Color(0xFF6366F1),
+                        size: 20,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -345,11 +495,18 @@ class _AdminDashboardLayoutState extends State<AdminDashboardLayout> {
                     children: const [
                       Text(
                         'AdoptMatch',
-                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       Text(
                         'Admin Operations',
-                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                        style: TextStyle(
+                          color: Color(0xFF94A3B8),
+                          fontSize: 11,
+                        ),
                       ),
                     ],
                   ),
@@ -376,7 +533,9 @@ class _AdminDashboardLayoutState extends State<AdminDashboardLayout> {
                   _SidebarItem(
                     icon: Icons.domain_verification_rounded,
                     title: 'Shelter Approvals',
-                    badgeCount: pendingShelterCount > 0 ? pendingShelterCount : null,
+                    badgeCount: pendingShelterCount > 0
+                        ? pendingShelterCount
+                        : null,
                     badgeColor: const Color(0xFFF59E0B),
                     isSelected: selectedIndex == 1,
                     onTap: () {
@@ -403,14 +562,24 @@ class _AdminDashboardLayoutState extends State<AdminDashboardLayout> {
                       child: InkWell(
                         onTap: () {
                           if (isDrawer) Navigator.pop(context);
-                          showAdminCreatePetDialog(context);
+                          showAdminCreatePetDialog(
+                            context,
+                            onSaved: (_) => setState(() {}),
+                          );
                         },
                         borderRadius: BorderRadius.circular(10),
                         child: const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
                           child: Row(
                             children: [
-                              Icon(Icons.add_photo_alternate_rounded, color: Color(0xFF14B8A6), size: 18),
+                              Icon(
+                                Icons.add_photo_alternate_rounded,
+                                color: Color(0xFF14B8A6),
+                                size: 18,
+                              ),
                               SizedBox(width: 12),
                               Text(
                                 '+ Add Rescue Pet / পোষ্য যোগ',
@@ -475,7 +644,10 @@ class _AdminDashboardLayoutState extends State<AdminDashboardLayout> {
                     onTap: _handleLogout,
                     borderRadius: BorderRadius.circular(10),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.05),
                         borderRadius: BorderRadius.circular(10),
@@ -483,11 +655,19 @@ class _AdminDashboardLayoutState extends State<AdminDashboardLayout> {
                       ),
                       child: Row(
                         children: const [
-                          Icon(Icons.logout, color: Color(0xFFEF4444), size: 18),
+                          Icon(
+                            Icons.logout,
+                            color: Color(0xFFEF4444),
+                            size: 18,
+                          ),
                           SizedBox(width: 10),
                           Text(
                             'Sign Out',
-                            style: TextStyle(color: Color(0xFFF87171), fontWeight: FontWeight.w600, fontSize: 13),
+                            style: TextStyle(
+                              color: Color(0xFFF87171),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
                           ),
                         ],
                       ),
@@ -551,21 +731,32 @@ class _SidebarItem extends StatelessWidget {
                     title,
                     style: TextStyle(
                       fontSize: 13,
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                      color: isSelected ? Colors.white : const Color(0xFFCBD5E1),
+                      fontWeight: isSelected
+                          ? FontWeight.w700
+                          : FontWeight.w500,
+                      color: isSelected
+                          ? Colors.white
+                          : const Color(0xFFCBD5E1),
                     ),
                   ),
                 ),
                 if (badgeCount != null)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: badgeColor,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
                       '$badgeCount',
-                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
               ],
@@ -576,4 +767,3 @@ class _SidebarItem extends StatelessWidget {
     );
   }
 }
-

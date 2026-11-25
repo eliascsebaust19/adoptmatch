@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'config/demo_config.dart';
 import 'core/theme/app_theme.dart';
 import 'core/localization/app_locale.dart';
 import 'core/navigation/app_router.dart';
@@ -13,6 +14,11 @@ import 'core/storage/secure_storage_service.dart';
 import 'features/auth/bloc/auth_bloc.dart';
 import 'features/adoption_match/bloc/pet_match_bloc.dart';
 
+/// AdoptMatch Mobile Client Application Entry Point
+///
+/// - Role: Initializes core platform services, dependency injection, and auth lifecycle bridging.
+/// - Design Pattern: Composition Root + MultiRepositoryProvider / MultiBlocProvider.
+/// - Architecture: Clean Architecture with BLoC State Management Pattern.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Web must use path URLs (`/auth-callback?code=...`) so the Supabase OAuth
@@ -109,7 +115,7 @@ class _AdoptMatchAppState extends State<AdoptMatchApp> {
           language: _currentLanguage,
           onLanguageChanged: _onLanguageChanged,
           child: MaterialApp.router(
-            title: 'AdoptMatch',
+            title: DemoConfig.appTitleEnglish,
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,

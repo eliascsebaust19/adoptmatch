@@ -331,18 +331,43 @@ class SubscriptionRepository {
     String? token,
   }) async {
     if (_useSupabase) {
-      var query = Supabase.instance.client
-          .from('payments')
-          .select(
-            '*, user:profiles(id, full_name, email), plan:subscription_plans(id, name)',
+      try {
+        var query = Supabase.instance.client
+            .from('payments')
+            .select(
+              '*, user:profiles!payments_user_id_fkey(id, full_name, email), plan:subscription_plans(id, name)',
+            );
+        if (status != null && status != 'ALL') {
+          query = query.eq('status', status.toLowerCase());
+        }
+        final rows = await query.order('created_at', ascending: false);
+        return (rows as List)
+            .map((e) => PaymentRecord.fromJson(e as Map<String, dynamic>))
+            .toList();
+      } catch (postgrestErr) {
+        debugPrint(
+          '[SubscriptionRepository] PostgREST payments query error: $postgrestErr. Attempting flat query fallback.',
+        );
+        try {
+          var fallbackQuery = Supabase.instance.client
+              .from('payments')
+              .select('*');
+          if (status != null && status != 'ALL') {
+            fallbackQuery = fallbackQuery.eq('status', status.toLowerCase());
+          }
+          final fallbackRows = await fallbackQuery.order(
+            'created_at',
+            ascending: false,
           );
-      if (status != null && status != 'ALL') {
-        query = query.eq('status', status.toLowerCase());
+          return (fallbackRows as List)
+              .map((e) => PaymentRecord.fromJson(e as Map<String, dynamic>))
+              .toList();
+        } catch (flatErr) {
+          debugPrint(
+            '[SubscriptionRepository] Flat payments query failed: $flatErr',
+          );
+        }
       }
-      final rows = await query.order('created_at', ascending: false);
-      return (rows as List)
-          .map((e) => PaymentRecord.fromJson(e as Map<String, dynamic>))
-          .toList();
     }
     try {
       final queryParams = <String, String>{};
@@ -366,8 +391,9 @@ class SubscriptionRepository {
       }
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final rawList = data['data'] as List<dynamic>?;
-      if (rawList == null)
+      if (rawList == null) {
         throw Exception('The payment ledger response was invalid.');
+      }
       return rawList
           .map((e) => PaymentRecord.fromJson(e as Map<String, dynamic>))
           .toList();

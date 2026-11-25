@@ -31,8 +31,11 @@ class _ShelterApprovalScreenState extends State<ShelterApprovalScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(_adminRepo.lastSyncError ?? success)));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        backgroundColor: const Color(0xFFE11D48), content: Text('Action not saved: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          backgroundColor: const Color(0xFFE11D48), content: Text('Action not saved: $e'),
+        ));
+      }
     }
   }
 
@@ -229,16 +232,36 @@ class _ShelterApprovalScreenState extends State<ShelterApprovalScreen> {
     }).toList();
 
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 88),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_adminError != null) Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Row(children: [Expanded(child: Text(_adminError!,
-              style: const TextStyle(color: Color(0xFFE11D48)))),
-              TextButton(onPressed: _loadAdminData, child: const Text('Retry'))]),
-          ),
+          if (_adminError != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF1F2),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFECDD3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline_rounded, color: Color(0xFFE11D48), size: 16),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Live shelter queue partially synced. Displaying available local records.',
+                      style: TextStyle(color: Color(0xFF991B1B), fontSize: 12, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _loadAdminData,
+                    child: const Text('Retry', style: TextStyle(color: Color(0xFFE11D48), fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
           // Header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -330,7 +353,36 @@ class _ShelterApprovalScreenState extends State<ShelterApprovalScreen> {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
-                child: SingleChildScrollView(
+                child: filtered.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 20),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFF1F5F9),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.domain_disabled_rounded, size: 36, color: Color(0xFF64748B)),
+                              ),
+                              const SizedBox(height: 14),
+                              const Text(
+                                'No Shelter Registrations Found',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                              ),
+                              const SizedBox(height: 6),
+                              const Text(
+                                'No shelter applications match the selected filter.',
+                                style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : SingleChildScrollView(
                   scrollDirection: Axis.vertical,
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,

@@ -1,5 +1,15 @@
+/// Pet Match & Tinder-Style Swipe Decision BLoC
+///
+/// - Role: Manages state transitions for adoptable pet discovery, card swipes, and quiz matching.
+/// - Design Pattern: BLoC (Business Logic Component) Pattern + Event-Driven State Machine.
+/// - Backend Integration: PostgREST `pets` and `favorites` tables via PetRepository.
+library;
+
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
+
 import '../../../core/models/pet_model.dart';
 import '../../../core/repositories/pet_repository.dart';
 
@@ -29,13 +39,13 @@ class LoadPetsEvent extends PetMatchEvent {
 
   @override
   List<Object?> get props => [
-        category,
-        searchQuery,
-        maxDistanceKm,
-        kidSafeOnly,
-        apartmentOnly,
-        vaccinatedOnly,
-      ];
+    category,
+    searchQuery,
+    maxDistanceKm,
+    kidSafeOnly,
+    apartmentOnly,
+    vaccinatedOnly,
+  ];
 }
 
 // Alias for Report 2 consistency
@@ -94,11 +104,24 @@ class ApplyQuizFilterEvent extends PetMatchEvent {
   });
 
   @override
-  List<Object?> get props => [housing, hasKids, hasPets, hoursAlone, experience];
+  List<Object?> get props => [
+    housing,
+    hasKids,
+    hasPets,
+    hoursAlone,
+    experience,
+  ];
 }
 
 class ResetQuizFilterEvent extends PetMatchEvent {
   const ResetQuizFilterEvent();
+}
+
+class _SyncPetsFromRepositoryEvent extends PetMatchEvent {
+  final List<Pet> pets;
+  const _SyncPetsFromRepositoryEvent(this.pets);
+  @override
+  List<Object?> get props => [pets];
 }
 
 // --- States ---
@@ -147,13 +170,13 @@ class PetMatchLoaded extends PetMatchState {
 
   @override
   List<Object?> get props => [
-        pets,
-        selectedCategory,
-        searchQuery,
-        lastMatchedPet,
-        currentSwipeIndex,
-        hasCompletedQuiz,
-      ];
+    pets,
+    selectedCategory,
+    searchQuery,
+    lastMatchedPet,
+    currentSwipeIndex,
+    hasCompletedQuiz,
+  ];
 }
 
 class PetMatchSuccessDialog extends PetMatchState {
@@ -173,6 +196,8 @@ class PetMatchError extends PetMatchState {
 // --- BLoC ---
 class PetMatchBloc extends Bloc<PetMatchEvent, PetMatchState> {
   final PetRepository repository;
+  StreamSubscription<List<Pet>>? _petsSub;
+  LoadPetsEvent _lastLoadEvent = const LoadPetsEvent();
 
   PetMatchBloc({required this.repository}) : super(PetMatchLoading()) {
     on<LoadPetsEvent>(_onLoadPets);
@@ -182,9 +207,45 @@ class PetMatchBloc extends Bloc<PetMatchEvent, PetMatchState> {
     on<TogglePetFavoriteEvent>(_onToggleFavorite);
     on<ApplyQuizFilterEvent>(_onApplyQuiz);
     on<ResetQuizFilterEvent>(_onResetQuiz);
+    on<_SyncPetsFromRepositoryEvent>(_onSyncPetsFromRepository);
+
+    _petsSub = repository.petsStream.listen((pets) {
+      if (!isClosed) {
+        add(_SyncPetsFromRepositoryEvent(pets));
+      }
+    });
   }
 
-  Future<void> _onLoadPets(LoadPetsEvent event, Emitter<PetMatchState> emit) async {
+  @override
+  Future<void> close() async {
+    await _petsSub?.cancel();
+    return super.close();
+  }
+
+  Future<void> _onSyncPetsFromRepository(
+    _SyncPetsFromRepositoryEvent event,
+    Emitter<PetMatchState> emit,
+  ) async {
+    final currentState = state;
+    if (currentState is! PetMatchLoaded) return;
+
+    final filtered = repository.filterPetsSync(
+      event.pets,
+      category: _lastLoadEvent.category,
+      searchQuery: _lastLoadEvent.searchQuery,
+      maxDistanceKm: _lastLoadEvent.maxDistanceKm,
+      kidSafeOnly: _lastLoadEvent.kidSafeOnly,
+      apartmentOnly: _lastLoadEvent.apartmentOnly,
+      vaccinatedOnly: _lastLoadEvent.vaccinatedOnly,
+    );
+    emit(currentState.copyWith(pets: filtered));
+  }
+
+  Future<void> _onLoadPets(
+    LoadPetsEvent event,
+    Emitter<PetMatchState> emit,
+  ) async {
+    _lastLoadEvent = event;
     emit(PetMatchLoading());
     try {
       final pets = await repository.fetchAvailablePets(
@@ -201,56 +262,89 @@ class PetMatchBloc extends Bloc<PetMatchEvent, PetMatchState> {
       } catch (_) {
         quizDone = false;
       }
-      emit(PetMatchLoaded(
-        pets: pets,
-        selectedCategory: event.category ?? 'All Pets',
-        searchQuery: event.searchQuery ?? '',
-        hasCompletedQuiz: quizDone,
-      ));
+      emit(
+        PetMatchLoaded(
+          pets: pets,
+          selectedCategory: event.category ?? 'All Pets',
+          searchQuery: event.searchQuery ?? '',
+          hasCompletedQuiz: quizDone,
+        ),
+      );
     } catch (e) {
       emit(PetMatchError('Failed to load pets: ${e.toString()}'));
     }
   }
 
-  Future<void> _onSwipeLeft(SwipePetLeft event, Emitter<PetMatchState> emit) async {
+  Future<void> _onSwipeLeft(
+    SwipePetLeft event,
+    Emitter<PetMatchState> emit,
+  ) async {
     if (state is PetMatchLoaded) {
       final currentState = state as PetMatchLoaded;
-      try { await repository.recordSwipe(event.petId, isLike: false); }
-      catch (e) { emit(PetMatchError('Could not record swipe: $e')); return; }
+      try {
+        await repository.recordSwipe(event.petId, isLike: false);
+      } catch (e) {
+        emit(PetMatchError('Could not record swipe: $e'));
+        return;
+      }
       final nextIndex = currentState.currentSwipeIndex + 1;
       emit(currentState.copyWith(currentSwipeIndex: nextIndex));
     }
   }
 
-  Future<void> _onSwipeRight(SwipePetRight event, Emitter<PetMatchState> emit) async {
+  Future<void> _onSwipeRight(
+    SwipePetRight event,
+    Emitter<PetMatchState> emit,
+  ) async {
     if (state is PetMatchLoaded) {
       final currentState = state as PetMatchLoaded;
-      final pet = currentState.pets.firstWhere((p) => p.id == event.petId, orElse: () => currentState.pets.first);
-      try { await repository.recordSwipe(event.petId, isLike: true); }
-      catch (e) { emit(PetMatchError('Could not record swipe: $e')); return; }
+      final pet = currentState.pets.firstWhere(
+        (p) => p.id == event.petId,
+        orElse: () => currentState.pets.first,
+      );
+      try {
+        await repository.recordSwipe(event.petId, isLike: true);
+      } catch (e) {
+        emit(PetMatchError('Could not record swipe: $e'));
+        return;
+      }
       final nextIndex = currentState.currentSwipeIndex + 1;
-      emit(currentState.copyWith(
-        lastMatchedPet: pet,
-        currentSwipeIndex: nextIndex,
-      ));
+      emit(
+        currentState.copyWith(
+          lastMatchedPet: pet,
+          currentSwipeIndex: nextIndex,
+        ),
+      );
     }
   }
 
   Future<void> _onSwipeUp(SwipePetUp event, Emitter<PetMatchState> emit) async {
     if (state is PetMatchLoaded) {
       final currentState = state as PetMatchLoaded;
-      final pet = currentState.pets.firstWhere((p) => p.id == event.petId, orElse: () => currentState.pets.first);
-      try { await repository.recordSwipe(event.petId, isLike: true); }
-      catch (e) { emit(PetMatchError('Could not record swipe: $e')); return; }
+      final pet = currentState.pets.firstWhere(
+        (p) => p.id == event.petId,
+        orElse: () => currentState.pets.first,
+      );
+      try {
+        await repository.recordSwipe(event.petId, isLike: true);
+      } catch (e) {
+        emit(PetMatchError('Could not record swipe: $e'));
+        return;
+      }
       final nextIndex = currentState.currentSwipeIndex + 1;
-      emit(currentState.copyWith(
-        lastMatchedPet: pet,
-        currentSwipeIndex: nextIndex,
-      ));
+      emit(
+        currentState.copyWith(
+          lastMatchedPet: pet,
+          currentSwipeIndex: nextIndex,
+        ),
+      );
     }
   }
 
-  Future<void> _onToggleFavorite(TogglePetFavoriteEvent event, Emitter<PetMatchState> emit) async {
+  Future<void> _onToggleFavorite(
+    TogglePetFavoriteEvent event,
+    Emitter<PetMatchState> emit,
+  ) async {
     if (state is PetMatchLoaded) {
       final currentState = state as PetMatchLoaded;
       try {
@@ -269,7 +363,10 @@ class PetMatchBloc extends Bloc<PetMatchEvent, PetMatchState> {
     }
   }
 
-  Future<void> _onApplyQuiz(ApplyQuizFilterEvent event, Emitter<PetMatchState> emit) async {
+  Future<void> _onApplyQuiz(
+    ApplyQuizFilterEvent event,
+    Emitter<PetMatchState> emit,
+  ) async {
     emit(PetMatchLoading());
     repository.updateCompatibilityScoreFromQuiz(
       housing: event.housing,
@@ -279,20 +376,16 @@ class PetMatchBloc extends Bloc<PetMatchEvent, PetMatchState> {
       experience: event.experience,
     );
     final pets = await repository.fetchAvailablePets();
-    emit(PetMatchLoaded(
-      pets: pets,
-      hasCompletedQuiz: true,
-    ));
+    emit(PetMatchLoaded(pets: pets, hasCompletedQuiz: true));
   }
 
-  Future<void> _onResetQuiz(ResetQuizFilterEvent event, Emitter<PetMatchState> emit) async {
+  Future<void> _onResetQuiz(
+    ResetQuizFilterEvent event,
+    Emitter<PetMatchState> emit,
+  ) async {
     emit(PetMatchLoading());
     await repository.resetQuiz();
     final pets = await repository.fetchAvailablePets();
-    emit(PetMatchLoaded(
-      pets: pets,
-      hasCompletedQuiz: false,
-    ));
+    emit(PetMatchLoaded(pets: pets, hasCompletedQuiz: false));
   }
 }
-

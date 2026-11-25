@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -25,11 +27,28 @@ class _PetDetailScreenState extends State<PetDetailScreen> {
   Pet? _pet;
   bool _isLoading = true;
   int _activeImageIndex = 0;
+  StreamSubscription<List<Pet>>? _petsSub;
 
   @override
   void initState() {
     super.initState();
     _loadPet();
+    _petsSub = _petRepo.petsStream.listen((pets) {
+      if (!mounted) return;
+      final idx = pets.indexWhere((p) => p.id == widget.petId);
+      if (idx != -1 && pets[idx] != _pet) {
+        setState(() {
+          _pet = pets[idx];
+          _activeImageIndex = 0;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _petsSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadPet() async {
@@ -75,9 +94,7 @@ class _PetDetailScreenState extends State<PetDetailScreen> {
                 expandedHeight: 340,
                 pinned: true,
                 backgroundColor: Colors.white,
-                leading: const AdoptMatchBackButton(
-                  fallbackPath: '/home',
-                ),
+                leading: const AdoptMatchBackButton(fallbackPath: '/home'),
                 actions: [
                   Container(
                     margin: const EdgeInsets.all(8),
@@ -96,10 +113,21 @@ class _PetDetailScreenState extends State<PetDetailScreen> {
                       onPressed: () async {
                         try {
                           await _petRepo.toggleFavorite(pet.id);
-                          if (mounted) setState(() => _pet = pet.copyWith(isFavorite: !pet.isFavorite));
+                          if (mounted) {
+                            setState(
+                              () => _pet = pet.copyWith(
+                                isFavorite: !pet.isFavorite,
+                              ),
+                            );
+                          }
                         } catch (e) {
-                          if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Favorite was not saved: $e')));
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Favorite was not saved: $e'),
+                              ),
+                            );
+                          }
                         }
                       },
                     ),
@@ -187,22 +215,35 @@ class _PetDetailScreenState extends State<PetDetailScreen> {
                             ),
                           ),
                           if (_petRepo.hasCompletedQuiz)
-                            MatchScoreBadge(score: pet.matchScore, isLarge: true)
+                            MatchScoreBadge(
+                              score: pet.matchScore,
+                              isLarge: true,
+                            )
                           else
                             InkWell(
                               onTap: () => context.push('/quiz'),
                               borderRadius: BorderRadius.circular(16),
                               child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFFEFF6FF),
                                   borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(color: const Color(0xFF3B82F6).withOpacity(0.3)),
+                                  border: Border.all(
+                                    color: const Color(0xFF3B82F6)
+                                        .withOpacity(0.3),
+                                  ),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: const [
-                                    Icon(Icons.quiz_rounded, size: 14, color: Color(0xFF2563EB)),
+                                    Icon(
+                                      Icons.quiz_rounded,
+                                      size: 14,
+                                      color: Color(0xFF2563EB),
+                                    ),
                                     SizedBox(width: 4),
                                     Text(
                                       'Quiz for Match %',
@@ -496,11 +537,12 @@ class _PetDetailScreenState extends State<PetDetailScreen> {
                                 ),
                               ),
                               onPressed: () async {
-                                final isRestricted = await GuestRestrictionDialog.checkAndShow(
-                                  context,
-                                  featureName: 'Shelter Visit Appointment',
-                                  customMessage: 'Scheduling a physical shelter visit requires a verified profile to confirm your contact info with the shelter coordinator.\n\nসেল্টার ভিজিটের সময় বুক করতে অনুগ্রহ করে সাইন ইন করুন।',
-                                );
+                                final isRestricted =
+                                    await GuestRestrictionDialog.checkAndShow(
+                                      context,
+                                      featureName: 'Shelter Visit Appointment',
+                                      customMessage: 'Scheduling a physical shelter visit requires a verified profile to confirm your contact info with the shelter coordinator.\n\nসেল্টার ভিজিটের সময় বুক করতে অনুগ্রহ করে সাইন ইন করুন।',
+                                    );
                                 if (isRestricted || !context.mounted) return;
 
                                 showModalBottomSheet(
@@ -582,19 +624,23 @@ class _PetDetailScreenState extends State<PetDetailScreen> {
                     // Chat Button
                     InkWell(
                       onTap: () async {
-                        final isRestricted = await GuestRestrictionDialog.checkAndShow(
-                          context,
-                          featureName: 'Direct Shelter Messaging',
-                          customMessage: 'Direct communication with shelter managers is restricted in demo mode. Please sign in or register to message.\n\nসেল্টারের সাথে সরাসরি চ্যাট করতে সাইন ইন করুন।',
-                        );
+                        final isRestricted =
+                            await GuestRestrictionDialog.checkAndShow(
+                              context,
+                              featureName: 'Direct Shelter Messaging',
+                              customMessage: 'Direct communication with shelter managers is restricted in demo mode. Please sign in or register to message.\n\nসেল্টারের সাথে সরাসরি চ্যাট করতে সাইন ইন করুন।',
+                            );
                         if (isRestricted || !context.mounted) return;
 
                         try {
-                          final conv = await ChatRepository().getOrCreateConversationForPet(pet);
+                          final conv = await ChatRepository()
+                              .getOrCreateConversationForPet(pet);
                           if (context.mounted) context.push('/chat/${conv.id}');
                         } catch (e) {
-                          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('$e')));
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context)
+                                .showSnackBar(SnackBar(content: Text('$e')));
+                          }
                         }
                       },
                       borderRadius: BorderRadius.circular(14),
@@ -618,11 +664,12 @@ class _PetDetailScreenState extends State<PetDetailScreen> {
                         text: 'Apply for Adoption',
                         backgroundColor: teal,
                         onPressed: () async {
-                          final isRestricted = await GuestRestrictionDialog.checkAndShow(
-                            context,
-                            featureName: 'Adoption Application',
-                            customMessage: 'Submitting a legal adoption application requires an active account to review your application status and sign adoption agreements.\n\nঅ্যাডপশন আবেদন জমা দেওয়ার জন্য একটি একাউন্ট প্রয়োজন। ডেমো মোডে শুধু পেট দেখা যাবে।',
-                          );
+                          final isRestricted =
+                              await GuestRestrictionDialog.checkAndShow(
+                                context,
+                                featureName: 'Adoption Application',
+                                customMessage: 'Submitting a legal adoption application requires an active account to review your application status and sign adoption agreements.\n\nঅ্যাডপশন আবেদন জমা দেওয়ার জন্য একটি একাউন্ট প্রয়োজন। ডেমো মোডে শুধু পেট দেখা যাবে।',
+                              );
                           if (isRestricted || !context.mounted) return;
 
                           context.push('/apply/${pet.id}');

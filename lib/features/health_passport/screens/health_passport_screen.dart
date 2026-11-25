@@ -1,3 +1,10 @@
+/// Digital Health Passport & Cryptographic QR Verification
+///
+/// - Role: Displays verifiable pet medical history, vaccination records, and QR code passport.
+/// - Design Pattern: Presentation Screen with Dynamic QR Matrix Generation (`qr_flutter`).
+/// - Backend Integration: PostgREST `pets` table (`medical_history`, `vaccination_status`, `qr_hash`).
+library;
+
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -85,8 +92,12 @@ class _HealthPassportScreenState extends State<HealthPassportScreen> {
                     fontSize: 16,
                   ),
                 ),
-                Text('Registered Owner: ${widget.petName != null ? 'Verified Adopter' : (_pet?.shelterName ?? 'AdoptMatch Community')}'),
-                const Text('Allergies: None known (Diet: Standard Hypoallergenic)'),
+                Text(
+                  'Registered Owner: ${widget.petName != null ? 'Verified Adopter' : (_pet?.shelterName ?? 'AdoptMatch Community')}',
+                ),
+                const Text(
+                  'Allergies: None known (Diet: Standard Hypoallergenic)',
+                ),
                 const Text(
                   'Primary Hospital: Central Veterinary Hospital, Farmgate',
                 ),
@@ -126,7 +137,9 @@ class _HealthPassportScreenState extends State<HealthPassportScreen> {
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         leading: AdoptMatchBackButton(
-          fallbackPath: widget.petId.isNotEmpty ? '/pets/${widget.petId}' : '/home',
+          fallbackPath: widget.petId.isNotEmpty
+              ? '/pets/${widget.petId}'
+              : '/home',
         ),
         title: Text('$petName’s Health Passport'),
         actions: [

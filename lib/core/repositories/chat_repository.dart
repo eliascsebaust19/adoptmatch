@@ -111,7 +111,7 @@ class ChatRepository {
             .from('conversations')
             .select('''
               id, pet_id, adopter_id, owner_id, last_message, last_message_at, created_at,
-              pets (id, name, species, breed, primary_image_url),
+              pets (id, name, species, breed, image_url),
               adopter:profiles!conversations_adopter_id_fkey(id, full_name, avatar_url),
               owner:profiles!conversations_owner_id_fkey(id, full_name, avatar_url)
             ''')
@@ -159,12 +159,12 @@ class ChatRepository {
             petId: pet['id']?.toString() ?? item['pet_id']?.toString() ?? '',
             petName: pet['name']?.toString() ?? 'General inquiry',
             petBreed: (pet['breed'] ?? pet['species'] ?? '').toString(),
-            petImageUrl: pet['primary_image_url']?.toString() ?? '',
+            petImageUrl: (pet['image_url'] ?? pet['primary_image_url'])?.toString() ?? '',
             shelterName: (other['full_name'] ?? 'Shelter').toString(),
             shelterUserId: otherId,
             isOnline: false,
             lastMessage: (item['last_message'] ?? '').toString(),
-            lastMessageTime: DateTime.parse(item['last_message_at'].toString()),
+            lastMessageTime: DateTime.tryParse(item['last_message_at']?.toString() ?? '') ?? DateTime.now(),
             unreadCount: messages.where((m) => !m.isFromUser && !m.isRead).length,
           ));
 
@@ -223,7 +223,7 @@ class ChatRepository {
         id: id, petId: pet['id']?.toString() ?? '',
         petName: pet['name']?.toString() ?? 'General inquiry',
         petBreed: pet['species']?.toString() ?? '',
-        petImageUrl: pet['primary_image_url']?.toString() ?? '',
+        petImageUrl: (pet['image_url'] ?? pet['primary_image_url'])?.toString() ?? '',
         shelterName: (other['name'] ?? 'Shelter').toString(),
         shelterUserId: other['id'].toString(), isOnline: false,
         lastMessage: (item['last_message'] ?? '').toString(),
@@ -373,7 +373,9 @@ class ChatRepository {
       final response = await _client.post(_uri('/messages'), headers: await _headers(),
         body: jsonEncode({'receiver_id': recipient,
           if (int.tryParse(conv.petId) != null) 'pet_id': int.parse(conv.petId),
-          'message_text': text, if (attachmentUrl != null) 'attachment_url': attachmentUrl}),
+          'message_text': text,
+          'attachment_url': ?attachmentUrl,
+        }),
       ).timeout(const Duration(seconds: 15));
       if (response.statusCode != 201 && response.statusCode != 200) _responseError(response);
       final data = jsonDecode(response.body)['data'];

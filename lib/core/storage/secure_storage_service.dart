@@ -31,8 +31,9 @@ class SecureStorageService {
         return;
       }
     } catch (_) {}
-    if (token.trim().isEmpty)
+    if (token.trim().isEmpty) {
       throw Exception('Refusing to store an empty session token.');
+    }
     await _storage.write(key: _keyAuthToken, value: token);
   }
 

@@ -11,3 +11,5 @@ export 'brand_icons.dart';
 export 'custom_button.dart';
 export 'premium_badge.dart';
 export 'premium_upgrade_dialog.dart';
+export 'logout_confirmation_dialog.dart';
+export 'auth_loading_overlay.dart';

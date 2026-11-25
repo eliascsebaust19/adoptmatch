@@ -39,63 +39,7 @@ class ProfileScreen extends StatelessWidget {
   }
 
   void _showLogoutConfirmation(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.card),
-        ),
-        title: Row(
-          children: const [
-            Icon(Icons.logout_rounded, color: AppColors.error, size: 24),
-            SizedBox(width: 10),
-            Text(
-              'Sign Out',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-          ],
-        ),
-        content: const Text(
-          'Are you sure you want to log out of AdoptMatch? You will need to sign back in to access saved pets and applications.',
-          style: TextStyle(
-            fontSize: 13,
-            color: AppColors.textSecondary,
-            height: 1.4,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppRadius.button),
-              ),
-              elevation: 0,
-            ),
-            onPressed: () {
-              Navigator.pop(ctx);
-              context.read<AuthBloc>().add(LogoutEvent());
-              context.go('/auth/login');
-            },
-            child: const Text(
-              'Sign Out',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
-    );
+    showAdoptMatchLogoutDialog(context);
   }
 
   Color _getRoleColor(UserRole role) {

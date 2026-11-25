@@ -8,7 +8,7 @@
 /// Auth model: Supabase owns the session. `Supabase.instance.client.auth`
 /// refreshes the access token, and the JWT carries `app_role`, so RLS enforces
 /// permissions without the app re-checking anything.
-library adoptmatch_supabase;
+library;
 
 import 'dart:typed_data';
 
@@ -173,8 +173,9 @@ class AdoptMatchBackend {
         .from('pets_feed')
         .select()
         .eq('moderation_status', 'approved');
-    if (species != null && species.isNotEmpty)
+    if (species != null && species.isNotEmpty) {
       query = query.eq('species', species);
+    }
     if (city != null && city.isNotEmpty) query = query.eq('city', city);
     if (urgentOnly) query = query.eq('is_urgent', true);
     final rows = await query.order('created_at', ascending: false).limit(limit);

@@ -44,6 +44,9 @@ class SubscriptionPlan extends Equatable {
   }
 
   factory SubscriptionPlan.fromJson(Map<String, dynamic> json) {
+    final rawFeatures = (json['features'] as List?) ?? const [];
+    final rawFeaturesBn = ((json['featuresBn'] ?? json['features_bn']) as List?) ?? const [];
+
     return SubscriptionPlan(
       id: json['id'] as String? ?? 'plan-monthly',
       name: json['name'] as String? ?? 'Supporter Plan',
@@ -54,8 +57,8 @@ class SubscriptionPlan extends Equatable {
       tag: json['tag'] as String? ?? 'Starter',
       isBestValue: (json['isBestValue'] ?? json['is_best_value']) as bool? ?? false,
       isActive: (json['isActive'] ?? json['is_active']) as bool? ?? true,
-      features: (json['features'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
-      featuresBn: (json['featuresBn'] ?? json['features_bn'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      features: rawFeatures.map<String>((e) => e.toString()).toList(),
+      featuresBn: rawFeaturesBn.map<String>((e) => e.toString()).toList(),
     );
   }
 
@@ -64,14 +67,19 @@ class SubscriptionPlan extends Equatable {
       'id': id,
       'name': name,
       'nameBn': nameBn,
+      'name_bn': nameBn,
       'price': price,
       'currency': currency,
       'durationDays': durationDays,
+      'duration_days': durationDays,
       'tag': tag,
       'isBestValue': isBestValue,
+      'is_best_value': isBestValue,
       'isActive': isActive,
+      'is_active': isActive,
       'features': features,
       'featuresBn': featuresBn,
+      'features_bn': featuresBn,
     };
   }
 

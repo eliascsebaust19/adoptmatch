@@ -44,11 +44,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const method = req.method;
     const url = new URL(req.url);
 
-    if (method === 'GET' && resource === 'stats') return await stats(req);
+    if ((method === 'GET' || method === 'POST') && resource === 'stats') return await stats(req);
     if (resource === 'users' && method === 'GET' && !id) return await listUsers(req, url);
     if (resource === 'users' && method === 'PATCH' && id) return await patchUser(req, id);
     if (resource === 'pets' && method === 'GET' && !id) return await listPets(req, url);
-    if (resource === 'pets' && method === 'PATCH' && id) return await patchPet(req, id);
+    if (resource === 'pets' && method === 'POST' && !id) return await createPet(req);
+    if (resource === 'pets' && (method === 'PATCH' || method === 'PUT') && id) return await patchPet(req, id);
     if (resource === 'shelters' && method === 'GET' && !id) return await listShelters(req, url);
     if (resource === 'shelters' && method === 'PATCH' && id) return await patchShelter(req, id);
     if (resource === 'payments' && method === 'GET' && !id) return await listPayments(req, url);
@@ -170,12 +171,77 @@ async function listPets(req: Request, url: URL): Promise<Response> {
   return json({ status: 'success', data: data ?? [] });
 }
 
+async function createPet(req: Request): Promise<Response> {
+  const actor = await requireStaff(req, ROLES);
+  const body = await readJson<Record<string, unknown>>(req);
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  const species = typeof body.species === 'string' ? body.species.trim() : '';
+  if (!name || !species) {
+    throw new ApiError(400, 'INVALID_PET', 'Name and species are required.');
+  }
+
+  const rawGender = typeof body.gender === 'string' ? body.gender.toLowerCase().trim() : 'unknown';
+  const gender = rawGender === 'male' || rawGender === 'female' ? rawGender : 'unknown';
+
+  const insertPayload: Record<string, unknown> = {
+    owner_id: actor.id,
+    name,
+    species,
+    breed: typeof body.breed === 'string' && body.breed.trim() ? body.breed.trim() : 'Mixed',
+    age_months: typeof body.age_months === 'number' && body.age_months >= 0 ? body.age_months : 12,
+    gender,
+    weight_kg: typeof body.weight_kg === 'number' ? body.weight_kg : null,
+    story: typeof body.story === 'string' ? body.story : '',
+    medical_history: typeof body.medical_history === 'string' ? body.medical_history : '',
+    image_url: typeof body.image_url === 'string' ? body.image_url : null,
+    is_vaccinated: Boolean(body.is_vaccinated),
+    is_neutered: Boolean(body.is_neutered),
+    is_house_trained: Boolean(body.is_house_trained),
+    is_kid_safe: Boolean(body.is_kid_safe),
+    is_apartment_friendly: Boolean(body.is_apartment_friendly),
+    is_urgent: Boolean(body.is_urgent),
+    is_featured: Boolean(body.is_featured),
+    moderation_status: 'approved',
+    adoption_status: 'available',
+  };
+
+  const { data, error } = await serviceClient().from('pets').insert(insertPayload).select().single();
+  if (error || !data) throw new ApiError(500, 'PET_CREATE_FAILED', 'Could not create this listing.');
+
+  const gallery = Array.isArray(body.gallery_urls)
+    ? body.gallery_urls.filter((u): u is string => typeof u === 'string' && u.length > 0)
+    : [];
+  if (gallery.length > 0) {
+    const rows = gallery.map((url, idx) => ({ pet_id: data.id, url, sort_order: idx }));
+    await serviceClient().from('pet_images').insert(rows);
+  }
+
+  await audit(actor.id, 'pet.create', 'pets', String(data.id), { name, species });
+  return json({ status: 'success', data });
+}
+
 async function patchPet(req: Request, petId: string): Promise<Response> {
   const actor = await requireStaff(req, ROLES);
   const body = await readJson<{
     moderation_status?: string;
     is_featured?: boolean;
+    is_urgent?: boolean;
+    is_vaccinated?: boolean;
+    is_neutered?: boolean;
+    is_house_trained?: boolean;
+    is_kid_safe?: boolean;
+    is_apartment_friendly?: boolean;
     adoption_status?: string;
+    name?: string;
+    species?: string;
+    breed?: string;
+    age_months?: number;
+    gender?: string;
+    weight_kg?: number;
+    story?: string;
+    medical_history?: string;
+    image_url?: string;
+    gallery_urls?: string[];
     reason?: string;
   }>(req);
 
@@ -192,17 +258,41 @@ async function patchPet(req: Request, petId: string): Promise<Response> {
     }
     patch.adoption_status = body.adoption_status;
   }
+  if (body.name !== undefined) patch.name = body.name;
+  if (body.species !== undefined) patch.species = body.species;
+  if (body.breed !== undefined) patch.breed = body.breed;
+  if (body.age_months !== undefined) patch.age_months = body.age_months;
+  if (body.gender !== undefined) {
+    const g = body.gender.toLowerCase().trim();
+    patch.gender = g === 'male' || g === 'female' ? g : 'unknown';
+  }
+  if (body.weight_kg !== undefined) patch.weight_kg = body.weight_kg;
+  if (body.story !== undefined) patch.story = body.story;
+  if (body.medical_history !== undefined) patch.medical_history = body.medical_history;
+  if (body.image_url !== undefined) patch.image_url = body.image_url;
   if (body.is_featured !== undefined) patch.is_featured = Boolean(body.is_featured);
+  if (body.is_urgent !== undefined) patch.is_urgent = Boolean(body.is_urgent);
+  if (body.is_vaccinated !== undefined) patch.is_vaccinated = Boolean(body.is_vaccinated);
+  if (body.is_neutered !== undefined) patch.is_neutered = Boolean(body.is_neutered);
+  if (body.is_house_trained !== undefined) patch.is_house_trained = Boolean(body.is_house_trained);
+  if (body.is_kid_safe !== undefined) patch.is_kid_safe = Boolean(body.is_kid_safe);
+  if (body.is_apartment_friendly !== undefined) patch.is_apartment_friendly = Boolean(body.is_apartment_friendly);
 
   if (Object.keys(patch).length === 0) {
     throw new ApiError(400, 'NOTHING_TO_UPDATE', 'Send at least one field to change.');
   }
 
-  const { error } = await serviceClient().from('pets').update(patch).eq('id', petId);
-  if (error) throw new ApiError(500, 'PET_UPDATE_FAILED', 'Could not update this listing.');
+  const { data, error } = await serviceClient().from('pets').update(patch).eq('id', petId).select().maybeSingle();
+  if (error || !data) throw new ApiError(500, 'PET_UPDATE_FAILED', 'Could not update this listing.');
+
+  if (Array.isArray(body.gallery_urls) && body.gallery_urls.length > 0) {
+    await serviceClient().from('pet_images').delete().eq('pet_id', petId);
+    const rows = body.gallery_urls.map((url, idx) => ({ pet_id: petId, url, sort_order: idx }));
+    await serviceClient().from('pet_images').insert(rows);
+  }
 
   await audit(actor.id, 'pet.moderate', 'pets', petId, { ...patch, reason: body.reason ?? null });
-  return json({ status: 'success', data: { id: petId, ...patch } });
+  return json({ status: 'success', data });
 }
 
 async function listShelters(req: Request, url: URL): Promise<Response> {

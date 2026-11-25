@@ -1,9 +1,20 @@
+/// Central Pet Domain Repository
+///
+/// - Role: Single Source of Truth (SSOT) for adoptable pets, favorites, and lifestyle matching.
+/// - Design Pattern: Repository Pattern with Local Storage Cache & Remote Stream Broadcast.
+/// - Backend Integration: Supabase PostgREST with fallback to LaravelPetService.
+library;
+
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../models/pet_model.dart';
 import '../services/local_storage_service.dart';
 import '../services/laravel_pet_service.dart';
 import '../storage/secure_storage_service.dart';
+import '../supabase/adoptmatch_supabase.dart';
 
 class PetRepository {
   static final PetRepository _instance = PetRepository._internal();
@@ -14,11 +25,111 @@ class PetRepository {
 
   LaravelPetService _laravelPetService = LaravelPetService();
   bool _useDemoCatalog = false;
-  void setRemoteServiceForTesting(LaravelPetService service) { _laravelPetService = service; }
+  void setRemoteServiceForTesting(LaravelPetService service) {
+    _laravelPetService = service;
+  }
+
   final _storage = LocalStorageService.instance;
   final _petStreamController = StreamController<List<Pet>>.broadcast();
   Stream<List<Pet>> get petsStream => _petStreamController.stream;
   List<Pet> get pets => List.unmodifiable(_pets);
+
+  /// Local/demo overrides made by Admin when no cloud Supabase staff session is active.
+  final Map<String, Pet> _sessionOverrides = <String, Pet>{};
+  Map<String, Pet> get sessionOverrides => Map.unmodifiable(_sessionOverrides);
+
+  bool _realtimeStarted = false;
+  RealtimeChannel? _petsRealtimeChannel;
+
+  /// Subscribe once to live changes on `public.pets` so admin edits and image
+  /// re-uploads propagate immediately to every open user dashboard.
+  void startRealtimeSync() {
+    if (_realtimeStarted || !AdoptMatchBackend.isInitialized) return;
+    _realtimeStarted = true;
+    try {
+      _petsRealtimeChannel = Supabase.instance.client
+          .channel('public:pets_live')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'pets',
+            callback: (payload) {
+              if (payload.eventType == PostgresChangeEvent.delete) {
+                final deletedId = payload.oldRecord['id']?.toString();
+                if (deletedId != null && deletedId.isNotEmpty) {
+                  _sessionOverrides.remove(deletedId);
+                  _pets.removeWhere((p) => p.id == deletedId);
+                  _petStreamController.add(List.unmodifiable(_pets));
+                }
+                return;
+              }
+
+              final rec = payload.newRecord;
+              final id = rec['id']?.toString() ?? '';
+              if (id.isEmpty) return;
+
+              final modStatus = (rec['moderation_status'] ?? 'approved').toString();
+              if (modStatus != 'approved') {
+                _pets.removeWhere((p) => p.id == id);
+                _petStreamController.add(List.unmodifiable(_pets));
+                return;
+              }
+
+              final newImg = (rec['image_url'] ?? '').toString();
+              final idx = _pets.indexWhere((p) => p.id == id);
+              if (idx != -1) {
+                final existing = _pets[idx];
+                final updatedGallery = newImg.isNotEmpty
+                    ? <String>[
+                        newImg,
+                        ...existing.galleryUrls.where((u) => u != newImg),
+                      ]
+                    : existing.galleryUrls;
+                _pets[idx] = existing.copyWith(
+                  name: (rec['name'] ?? existing.name).toString(),
+                  species: (rec['species'] ?? existing.species).toString(),
+                  breed: (rec['breed'] ?? existing.breed).toString(),
+                  weightKg: (rec['weight_kg'] as num?)?.toDouble() ?? existing.weightKg,
+                  story: (rec['story'] ?? existing.story).toString(),
+                  medicalHistory:
+                      (rec['medical_history'] ?? existing.medicalHistory).toString(),
+                  imageUrl: newImg.isNotEmpty ? newImg : existing.imageUrl,
+                  galleryUrls: updatedGallery,
+                  isUrgent: rec['is_urgent'] is bool ? rec['is_urgent'] as bool : existing.isUrgent,
+                  isFeatured: rec['is_featured'] is bool ? rec['is_featured'] as bool : existing.isFeatured,
+                  isVaccinated: rec['is_vaccinated'] is bool ? rec['is_vaccinated'] as bool : existing.isVaccinated,
+                  isNeutered: rec['is_neutered'] is bool ? rec['is_neutered'] as bool : existing.isNeutered,
+                  isHouseTrained: rec['is_house_trained'] is bool ? rec['is_house_trained'] as bool : existing.isHouseTrained,
+                  isKidSafe: rec['is_kid_safe'] is bool ? rec['is_kid_safe'] as bool : existing.isKidSafe,
+                  isApartmentFriendly: rec['is_apartment_friendly'] is bool ? rec['is_apartment_friendly'] as bool : existing.isApartmentFriendly,
+                  adoptionStatus: (rec['adoption_status'] ?? existing.adoptionStatus).toString(),
+                );
+                _sessionOverrides.remove(id);
+                _petStreamController.add(List.unmodifiable(_pets));
+              }
+
+              // Refresh full feed view in background (populates shelter joins / newly created rows).
+              unawaited(fetchAvailablePets());
+            },
+          )
+          .subscribe();
+    } catch (e) {
+      _realtimeStarted = false;
+      debugPrint('[PetRepository] Realtime sync notice: $e');
+    }
+  }
+
+  /// Unsubscribes the live pets Realtime channel (e.g. on logout/dispose).
+  Future<void> stopRealtimeSync() async {
+    final ch = _petsRealtimeChannel;
+    _petsRealtimeChannel = null;
+    _realtimeStarted = false;
+    if (ch != null) {
+      try {
+        await Supabase.instance.client.removeChannel(ch);
+      } catch (_) {}
+    }
+  }
 
   bool _hasCompletedQuiz = false;
   bool get hasCompletedQuiz => _hasCompletedQuiz;
@@ -29,7 +140,9 @@ class PetRepository {
   Future<void> _initStorage() async {
     final favIds = await _storage.loadFavorites();
     if (favIds.isNotEmpty) {
-      _pets = _pets.map((p) => p.copyWith(isFavorite: favIds.contains(p.id))).toList();
+      _pets = _pets
+          .map((p) => p.copyWith(isFavorite: favIds.contains(p.id)))
+          .toList();
     }
     _hasCompletedQuiz = await _storage.loadQuizCompleted();
     _quizAnswers = await _storage.loadQuizAnswers();
@@ -390,7 +503,8 @@ class PetRepository {
       shelterAddress: 'Bashundhara R/A, Dhaka',
       shelterRating: 5.0,
       story: 'Max is looking for an active family with a yard. He is obedient, leash-trained, and extremely friendly.',
-      medicalHistory: 'Full vaccination certificate issued by Central Vet Hospital.',
+      medicalHistory:
+          'Full vaccination certificate issued by Central Vet Hospital.',
       qrHash: 'ADOPT-PET-MAX-BASHUNDHARA-2026-M01',
     ),
     const Pet(
@@ -763,11 +877,11 @@ class PetRepository {
       shelterAddress: 'Dhanmondi, Dhaka',
       shelterRating: 4.9,
       story: 'Mimi is an energetic and affectionate rescued Deshi cat. Resilient, healthy, loving, and very loyal to her humans.',
-      medicalHistory: 'Fully vaccinated, dewormed, spayed, ready for loving adoption.',
+      medicalHistory:
+          'Fully vaccinated, dewormed, spayed, ready for loving adoption.',
       qrHash: 'ADOPT-PET-MIMI-DHANMONDI-2026-C23',
     ),
   ];
-
 
   /// Sets test fixture pets during unit testing
   void setPetsForTesting(List<Pet> testPets) {
@@ -804,7 +918,13 @@ class PetRepository {
 
     // Smart synonym and species group matching
     // Dog synonyms: dog, dogs, puppy, puppies, canine, hound, kukur, কুকুর
-    if (q == 'dog' || q == 'dogs' || q == 'puppy' || q == 'puppies' || q == 'canine' || q == 'hound' || q == 'কুকুর') {
+    if (q == 'dog' ||
+        q == 'dogs' ||
+        q == 'puppy' ||
+        q == 'puppies' ||
+        q == 'canine' ||
+        q == 'hound' ||
+        q == 'কুকুর') {
       return species == 'dog' ||
           breed.contains('retriever') ||
           breed.contains('hound') ||
@@ -814,7 +934,14 @@ class PetRepository {
     }
 
     // Cat synonyms: cat, cats, kitten, kittens, feline, kitty, biral, বিড়াল, বিড়াল
-    if (q == 'cat' || q == 'cats' || q == 'kitten' || q == 'kittens' || q == 'feline' || q == 'kitty' || q == 'বিড়াল' || q == 'বিড়াল') {
+    if (q == 'cat' ||
+        q == 'cats' ||
+        q == 'kitten' ||
+        q == 'kittens' ||
+        q == 'feline' ||
+        q == 'kitty' ||
+        q == 'বিড়াল' ||
+        q == 'বিড়াল') {
       return species == 'cat' ||
           breed.contains('calico') ||
           breed.contains('persian') ||
@@ -824,27 +951,61 @@ class PetRepository {
     }
 
     // Bird synonyms: bird, birds, parakeet, parrot, avian, পাখি
-    if (q == 'bird' || q == 'birds' || q == 'parakeet' || q == 'parrot' || q == 'avian' || q == 'পাখি') {
-      return species == 'bird' || breed.contains('parakeet') || breed.contains('parrot');
+    if (q == 'bird' ||
+        q == 'birds' ||
+        q == 'parakeet' ||
+        q == 'parrot' ||
+        q == 'avian' ||
+        q == 'পাখি') {
+      return species == 'bird' ||
+          breed.contains('parakeet') ||
+          breed.contains('parrot');
     }
 
     // Fish synonyms: fish, fishes, goldfish, betta, aquatic, mach, মাছ
-    if (q == 'fish' || q == 'fishes' || q == 'goldfish' || q == 'betta' || q == 'aquatic' || q == 'মাছ') {
-      return species == 'fish' || breed.contains('goldfish') || breed.contains('betta');
+    if (q == 'fish' ||
+        q == 'fishes' ||
+        q == 'goldfish' ||
+        q == 'betta' ||
+        q == 'aquatic' ||
+        q == 'মাছ') {
+      return species == 'fish' ||
+          breed.contains('goldfish') ||
+          breed.contains('betta');
     }
 
     // Turtle synonyms: turtle, turtles, tortoise, terrapin, kochchop, কচ্ছপ
-    if (q == 'turtle' || q == 'turtles' || q == 'tortoise' || q == 'terrapin' || q == 'কচ্ছপ') {
-      return species == 'turtle' || breed.contains('turtle') || breed.contains('slider');
+    if (q == 'turtle' ||
+        q == 'turtles' ||
+        q == 'tortoise' ||
+        q == 'terrapin' ||
+        q == 'কচ্ছপ') {
+      return species == 'turtle' ||
+          breed.contains('turtle') ||
+          breed.contains('slider');
     }
 
     // Gecko / Lizard synonyms: gecko, geckos, lizard, lizards, bearded dragon, dragon, reptiles, টিকটিকি
-    if (q == 'gecko' || q == 'geckos' || q == 'lizard' || q == 'lizards' || q == 'dragon' || q == 'bearded dragon' || q == 'reptile' || q == 'reptiles') {
-      return species == 'gecko' || breed.contains('gecko') || breed.contains('dragon');
+    if (q == 'gecko' ||
+        q == 'geckos' ||
+        q == 'lizard' ||
+        q == 'lizards' ||
+        q == 'dragon' ||
+        q == 'bearded dragon' ||
+        q == 'reptile' ||
+        q == 'reptiles') {
+      return species == 'gecko' ||
+          breed.contains('gecko') ||
+          breed.contains('dragon');
     }
 
     // Rabbit / Bunny synonyms: rabbit, rabbits, bunny, bunnies, hare, khorgosh, খরগোশ
-    if (q == 'rabbit' || q == 'rabbits' || q == 'bunny' || q == 'bunnies' || q == 'hare' || q == 'খরগোশ') {
+    if (q == 'rabbit' ||
+        q == 'rabbits' ||
+        q == 'bunny' ||
+        q == 'bunnies' ||
+        q == 'hare' ||
+        q == 'খরগোশ') {
       return species == 'rabbit' ||
           species == 'small' ||
           breed.contains('lop') ||
@@ -868,77 +1029,187 @@ class PetRepository {
     bool? apartmentOnly,
     bool? vaccinatedOnly,
   }) async {
-    if (_useDemoCatalog) return _filterLocalPets(category, searchQuery, maxDistanceKm, kidSafeOnly, apartmentOnly, vaccinatedOnly);
+    if (_useDemoCatalog) {
+      return _filterLocalPets(
+        category,
+        searchQuery,
+        maxDistanceKm,
+        kidSafeOnly,
+        apartmentOnly,
+        vaccinatedOnly,
+      );
+    }
     try {
+      String? speciesQuery;
+      final bool isSeniorFilter =
+          category != null && category.toLowerCase().contains('senior');
+      if (category != null &&
+          category != 'All Pets' &&
+          !category.toLowerCase().startsWith('all') &&
+          !isSeniorFilter) {
+        final c = category.toLowerCase();
+        if (c.contains('dog')) {
+          speciesQuery = 'Dog';
+        } else if (c.contains('cat')) {
+          speciesQuery = 'Cat';
+        } else if (c.contains('bird')) {
+          speciesQuery = 'Bird';
+        } else if (c.contains('rabbit') || c.contains('bunny')) {
+          speciesQuery = 'Rabbit';
+        } else if (c.contains('fish') || c.contains('goldfish')) {
+          speciesQuery = 'Fish';
+        } else if (c.contains('turtle') || c.contains('কচ্ছপ')) {
+          speciesQuery = 'Turtle';
+        } else if (c.contains('gecko') || c.contains('dragon')) {
+          speciesQuery = 'Gecko';
+        } else {
+          speciesQuery = category.replaceAll(RegExp(r'[^\w\s]'), '').trim();
+        }
+      }
+
+      startRealtimeSync();
+
       final remotePets = await _laravelPetService.getPets(
-        species: (category != null && category != 'All Pets' && !category.toLowerCase().startsWith('all'))
-            ? category.toLowerCase()
-            : null,
+        species: speciesQuery,
         search: searchQuery,
       );
       {
         // Cache and merge remote pets into local state for detail & favorite lookup
         for (final rp in remotePets) {
-          final idx = _pets.indexWhere((p) => p.id == rp.id);
+          final merged = _sessionOverrides[rp.id] ?? rp;
+          final idx = _pets.indexWhere((p) => p.id == merged.id);
           if (idx != -1) {
-            _pets[idx] = rp;
+            _pets[idx] = merged;
           } else {
-            _pets.add(rp);
+            _pets.add(merged);
           }
         }
-        var result = List<Pet>.from(remotePets);
-        if (maxDistanceKm != null) {
-          result = result.where((p) => p.distanceKm <= maxDistanceKm).toList();
+        var result = remotePets.map((rp) => _sessionOverrides[rp.id] ?? rp).toList();
+        for (final entry in _sessionOverrides.entries) {
+          if (!result.any((p) => p.id == entry.key)) {
+            result.insert(0, entry.value);
+          }
         }
-        if (kidSafeOnly == true) {
-          result = result.where((p) => p.isKidSafe).toList();
-        }
-        if (apartmentOnly == true) {
-          result = result.where((p) => p.isApartmentFriendly).toList();
-        }
-        if (vaccinatedOnly == true) {
-          result = result.where((p) => p.isVaccinated).toList();
-        }
-        result.sort((a, b) => b.matchScore.compareTo(a.matchScore));
+        result = filterPetsSync(
+          result,
+          category: isSeniorFilter ? category : null,
+          searchQuery: null,
+          maxDistanceKm: maxDistanceKm,
+          kidSafeOnly: kidSafeOnly,
+          apartmentOnly: apartmentOnly,
+          vaccinatedOnly: vaccinatedOnly,
+        );
         _petStreamController.add(List.unmodifiable(_pets));
-        return result;
+        if (result.isNotEmpty) {
+          return result;
+        }
+        return await _filterLocalPets(
+          category,
+          searchQuery,
+          maxDistanceKm,
+          kidSafeOnly,
+          apartmentOnly,
+          vaccinatedOnly,
+        );
       }
     } catch (e) {
-      debugPrint('[PetRepository] Catalog load failed: $e');
-      rethrow;
+      debugPrint('[PetRepository] Catalog load fallback to local: $e');
+      return await _filterLocalPets(
+        category,
+        searchQuery,
+        maxDistanceKm,
+        kidSafeOnly,
+        apartmentOnly,
+        vaccinatedOnly,
+      );
     }
   }
 
-  Future<List<Pet>> _filterLocalPets(String? category, String? searchQuery, double? maxDistanceKm,
-      bool? kidSafeOnly, bool? apartmentOnly, bool? vaccinatedOnly) async {
+  Future<List<Pet>> _filterLocalPets(
+    String? category,
+    String? searchQuery,
+    double? maxDistanceKm,
+    bool? kidSafeOnly,
+    bool? apartmentOnly,
+    bool? vaccinatedOnly,
+  ) async {
     await Future.delayed(const Duration(milliseconds: 150));
-    var result = List<Pet>.from(_pets);
+    return filterPetsSync(
+      _pets,
+      category: category,
+      searchQuery: searchQuery,
+      maxDistanceKm: maxDistanceKm,
+      kidSafeOnly: kidSafeOnly,
+      apartmentOnly: apartmentOnly,
+      vaccinatedOnly: vaccinatedOnly,
+    );
+  }
 
-    if (category != null && category != 'All Pets' && !category.toLowerCase().startsWith('all')) {
+  /// Synchronously filters any pet list using the active category, search, and trait filters.
+  List<Pet> filterPetsSync(
+    List<Pet> source, {
+    String? category,
+    String? searchQuery,
+    double? maxDistanceKm,
+    bool? kidSafeOnly,
+    bool? apartmentOnly,
+    bool? vaccinatedOnly,
+  }) {
+    var result = List<Pet>.from(source);
+
+    if (category != null &&
+        category != 'All Pets' &&
+        !category.toLowerCase().startsWith('all')) {
       final cat = category.toLowerCase();
       if (cat.contains('dog')) {
         result = result.where((p) => p.species.toLowerCase() == 'dog').toList();
       } else if (cat.contains('cat')) {
         result = result.where((p) => p.species.toLowerCase() == 'cat').toList();
       } else if (cat.contains('bird')) {
-        result = result.where((p) => p.species.toLowerCase() == 'bird').toList();
+        result = result
+            .where((p) => p.species.toLowerCase() == 'bird')
+            .toList();
       } else if (cat.contains('fish') || cat.contains('goldfish')) {
-        result = result.where((p) => p.species.toLowerCase() == 'fish').toList();
+        result = result
+            .where((p) => p.species.toLowerCase() == 'fish')
+            .toList();
       } else if (cat.contains('turtle') || cat.contains('কচ্ছপ')) {
-        result = result.where((p) => p.species.toLowerCase() == 'turtle').toList();
+        result = result
+            .where((p) => p.species.toLowerCase() == 'turtle')
+            .toList();
       } else if (cat.contains('gecko') || cat.contains('dragon')) {
-        result = result.where((p) => p.species.toLowerCase() == 'gecko').toList();
+        result = result
+            .where((p) => p.species.toLowerCase() == 'gecko')
+            .toList();
       } else if (cat.contains('rabbit') || cat.contains('bunny')) {
-        result = result.where((p) => p.species.toLowerCase() == 'rabbit' || p.species.toLowerCase() == 'small').toList();
+        result = result
+            .where(
+              (p) =>
+                  p.species.toLowerCase() == 'rabbit' ||
+                  p.species.toLowerCase() == 'small',
+            )
+            .toList();
       } else if (cat.contains('small')) {
-        result = result.where((p) => p.species.toLowerCase() == 'small' || p.species.toLowerCase() == 'rabbit').toList();
+        result = result
+            .where(
+              (p) =>
+                  p.species.toLowerCase() == 'small' ||
+                  p.species.toLowerCase() == 'rabbit',
+            )
+            .toList();
       } else if (cat.contains('senior')) {
-        result = result.where((p) => p.species.toLowerCase() == 'senior' || p.ageMonths >= 84).toList();
+        result = result
+            .where(
+              (p) => p.species.toLowerCase() == 'senior' || p.ageMonths >= 84,
+            )
+            .toList();
       }
     }
 
     if (searchQuery != null && searchQuery.trim().isNotEmpty) {
-      result = result.where((p) => _matchesSmartSearch(p, searchQuery)).toList();
+      result = result
+          .where((p) => _matchesSmartSearch(p, searchQuery))
+          .toList();
     }
 
     if (maxDistanceKm != null) {
@@ -972,25 +1243,36 @@ class PetRepository {
       if (remote == null) return null;
       final token = await SecureStorageService.instance.getAuthToken();
       final favorite = token == null || token.isEmpty
-          ? false : await _laravelPetService.getFavoriteStatus(id);
+          ? false
+          : await _laravelPetService.getFavoriteStatus(id);
       final pet = remote.copyWith(isFavorite: favorite);
       cacheRemotePet(pet);
       return pet;
     }
-    try { return _pets.firstWhere((p) => p.id == id); }
-    catch (_) { return null; }
+    try {
+      return _pets.firstWhere((p) => p.id == id);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Remote results use server identity, never an unrelated seeded listing.
   void cacheRemotePet(Pet pet) {
     final index = _pets.indexWhere((p) => p.id == pet.id);
-    if (index == -1) { _pets.add(pet); } else { _pets[index] = pet; }
+    if (index == -1) {
+      _pets.add(pet);
+    } else {
+      _pets[index] = pet;
+    }
     _petStreamController.add(List.unmodifiable(_pets));
   }
 
   Future<void> recordSwipe(String id, {required bool isLike}) async {
     if (_useDemoCatalog || int.tryParse(id) == null) return;
-    final acknowledged = await _laravelPetService.recordSwipe(id, isLike: isLike);
+    final acknowledged = await _laravelPetService.recordSwipe(
+      id,
+      isLike: isLike,
+    );
     if (!acknowledged) throw Exception('The server did not record this swipe.');
   }
 
@@ -999,16 +1281,22 @@ class PetRepository {
     if (index == -1) throw Exception('Load the pet before saving it.');
     final pet = _pets[index];
     if (!_useDemoCatalog && int.tryParse(id) != null) {
-      final favorite = await _laravelPetService.setFavorite(id, !pet.isFavorite);
+      final favorite = await _laravelPetService.setFavorite(
+        id,
+        !pet.isFavorite,
+      );
       _pets[index] = pet.copyWith(isFavorite: favorite);
     } else {
       _pets[index] = pet.copyWith(isFavorite: !pet.isFavorite);
-      await _storage.saveFavorites(_pets.where((p) => p.isFavorite).map((p) => p.id).toSet());
+      await _storage.saveFavorites(
+        _pets.where((p) => p.isFavorite).map((p) => p.id).toSet(),
+      );
     }
     _petStreamController.add(List.unmodifiable(_pets));
   }
 
   Future<void> addPet(Pet pet) async {
+    _pets.removeWhere((p) => p.id == pet.id);
     _pets.insert(0, pet);
     _petStreamController.add(List.unmodifiable(_pets));
   }
@@ -1017,11 +1305,29 @@ class PetRepository {
     final index = _pets.indexWhere((p) => p.id == pet.id);
     if (index != -1) {
       _pets[index] = pet;
-      _petStreamController.add(List.unmodifiable(_pets));
+    } else {
+      _pets.insert(0, pet);
     }
+    _petStreamController.add(List.unmodifiable(_pets));
+  }
+
+  /// Applies an admin create/override immediately to the live user catalog stream.
+  /// When [syncedToServer] is false (demo/offline admin mode), preserves the
+  /// override in memory so subsequent remote fetches do not revert the new image.
+  Future<void> applyAdminPetUpdate(
+    Pet pet, {
+    required bool syncedToServer,
+  }) async {
+    if (syncedToServer) {
+      _sessionOverrides.remove(pet.id);
+    } else {
+      _sessionOverrides[pet.id] = pet;
+    }
+    await updatePet(pet);
   }
 
   Future<void> deletePet(String petId) async {
+    _sessionOverrides.remove(petId);
     _pets.removeWhere((p) => p.id == petId);
     _petStreamController.add(List.unmodifiable(_pets));
   }
@@ -1040,7 +1346,9 @@ class PetRepository {
   Future<List<Pet>> getFavoritePets() async {
     if (_useDemoCatalog) return _pets.where((p) => p.isFavorite).toList();
     final favorites = await _laravelPetService.getFavorites();
-    for (final pet in favorites) { cacheRemotePet(pet); }
+    for (final pet in favorites) {
+      cacheRemotePet(pet);
+    }
     return favorites;
   }
 
@@ -1086,7 +1394,8 @@ class PetRepository {
     final housingLower = housing.toLowerCase();
     final isApt = housingLower.contains('apartment');
     final isYard = housingLower.contains('yard');
-    final isFarm = housingLower.contains('farm') || housingLower.contains('rural');
+    final isFarm =
+        housingLower.contains('farm') || housingLower.contains('rural');
 
     final expLower = experience.toLowerCase();
     final isFirstTime = expLower.contains('first');
@@ -1142,7 +1451,9 @@ class PetRepository {
       // 4. Daily Hours Alone (±14%)
       if (hoursAlone >= 7) {
         // High alone time: independent cats & older pets score higher
-        if (pet.species == 'Cat' || pet.species == 'Senior' || pet.ageMonths >= 36) {
+        if (pet.species == 'Cat' ||
+            pet.species == 'Senior' ||
+            pet.ageMonths >= 36) {
           score += 14;
         } else if (pet.species == 'Dog' && pet.ageMonths < 12) {
           score -= 18; // Puppies should not be alone 7+ hours
@@ -1201,4 +1512,3 @@ class PetRepository {
     _petStreamController.add(List.unmodifiable(_pets));
   }
 }
-

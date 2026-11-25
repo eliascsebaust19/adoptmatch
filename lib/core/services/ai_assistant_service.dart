@@ -117,14 +117,48 @@ class AiAssistantService {
       replyText = 'Adopting with children requires gentle, highly socialized pets that have passed shelter temperament assessments.\n\n'
           'These loving rescues have been certified child-friendly by our partner shelters:';
     }
+    // 2.1 Vaccination schedule queries (EN / BN)
+    else if (normalized.contains('vaccin') ||
+        normalized.contains('টিকা') ||
+        normalized.contains('ভ্যাকসিন')) {
+      final isBangla = RegExp(r'[\u0980-\u09FF]').hasMatch(userPrompt);
+      replyText = isBangla
+          ? '💉 **পোষা প্রাণীর প্রাথমিক ভ্যাকসিন সময়সূচি**:\n\n'
+              '• **বিড়াল ছানা (Kitten):** ৬–৮ সপ্তাহ বয়সে প্রথম FVRCP (Flu/Panleukopenia) টিকা, ৩–৪ সপ্তাহ পর বুস্টার, এবং ১২–১৬ সপ্তাহ বয়সে Rabies (জলাতঙ্ক) টিকা।\n'
+              '• **কুকুর ছানা (Puppy):** ৬–৮ সপ্তাহে DHPP প্রথম ডোজ, ১০–১২ ও ১৪–১৬ সপ্তাহে বুস্টার এবং Rabies টিকা।\n'
+              '• **বার্ষিক বুস্টার:** প্রতি বছর ১ বার নিয়মিত বুস্টার ও ৩ মাস পরপর কৃমিনাশক (Deworming) দিন। 🐾'
+          : '💉 **Core Vaccination Schedule**:\n\n'
+              '• **Puppies:** First DHPP dose at 6–8 weeks, boosters at 10–12 & 14–16 weeks, plus Rabies at 12–16 weeks.\n'
+              '• **Kittens:** First FVRCP dose at 6–8 weeks, booster 3–4 weeks later, and Rabies at 12–16 weeks.\n'
+              '• **Annual Care:** Yearly booster shots and deworming every 3 months. 🐾';
+    }
+    // 2.2 Monthly pet budget queries (Dhaka)
+    else if (normalized.contains('budget') ||
+        normalized.contains('khroch') ||
+        normalized.contains('বাজেট') ||
+        normalized.contains('খরচ')) {
+      replyText = '💰 **Estimated Monthly Pet Budget in Dhaka (BDT)**:\n\n'
+          '• **Cats:** ৳2,000 – ৳4,500/month (dry/wet food, litter, treats & routine deworming).\n'
+          '• **Dogs:** ৳3,500 – ৳7,500/month depending on size (kibble/home-cooked protein, grooming & flea care).\n'
+          '• **Annual Vet Fund:** Keep ~৳3,000–৳5,000/year aside for annual boosters and routine checkups.';
+    }
     // 3. Cat queries
-    else if (normalized.contains('cat') || normalized.contains('kitten') || normalized.contains('feline')) {
+    else if (normalized.contains('cat') ||
+        normalized.contains('kitten') ||
+        normalized.contains('feline') ||
+        normalized.contains('beral') ||
+        normalized.contains('বিড়াল') ||
+        normalized.contains('বিড়াল')) {
       matchedPets = availablePets.where((p) => p.species == 'Cat').take(2).toList();
       replyText = 'Cats make wonderful, low-maintenance companions that thrive indoors. Most are already litter-trained and spayed/neutered.\n\n'
           'Meet some of our adorable feline friends:';
     }
     // 4. Dog queries
-    else if (normalized.contains('dog') || normalized.contains('puppy') || normalized.contains('canine')) {
+    else if (normalized.contains('dog') ||
+        normalized.contains('puppy') ||
+        normalized.contains('canine') ||
+        normalized.contains('kukur') ||
+        normalized.contains('কুকুর')) {
       matchedPets = availablePets.where((p) => p.species == 'Dog').take(2).toList();
       replyText = 'Dogs provide unconditional companionship, loyal loyalty, and healthy daily exercise routines.\n\n'
           'Here are loving dogs ready for a forever home:';
