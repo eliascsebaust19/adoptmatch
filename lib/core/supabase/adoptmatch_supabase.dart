@@ -11,8 +11,6 @@ library;
 // refreshes the access token, and the JWT carries `app_role`, so RLS enforces
 // permissions without the app re-checking anything.
 
-import 'dart:typed_data';
-
 import 'package:flutter/foundation.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';

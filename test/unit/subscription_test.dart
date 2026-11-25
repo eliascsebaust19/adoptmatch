@@ -102,8 +102,9 @@ void main() {
         final repo = SubscriptionRepository()
           ..configureForTesting(
             MockClient((request) async {
-              if (request.url.path.endsWith('/plans'))
+              if (request.url.path.endsWith('/plans')) {
                 return http.Response('{}', 503);
+              }
               if (request.url.path.endsWith('/bkash-number')) {
                 return http.Response(
                   jsonEncode({'success': false, 'configured': false}),
@@ -159,10 +160,12 @@ void main() {
                   200,
                 );
               }
-              if (request.url.path.endsWith('/approve'))
+              if (request.url.path.endsWith('/approve')) {
                 return http.Response('{"success":true}', 200);
-              if (request.url.path.endsWith('/reject'))
+              }
+              if (request.url.path.endsWith('/reject')) {
                 return http.Response('{"success":false}', 409);
+              }
               return http.Response('{}', 404);
             }),
           );

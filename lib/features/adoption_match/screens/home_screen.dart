@@ -14,7 +14,7 @@ import '../../auth/bloc/auth_bloc.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../shared/widgets/app_network_image.dart';
 import '../../../shared/widgets/logout_confirmation_dialog.dart';
-import '../../../config/demo_config.dart';
+import '../../../core/config/demo_config.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});

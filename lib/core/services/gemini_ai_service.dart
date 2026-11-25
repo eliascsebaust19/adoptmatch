@@ -1,8 +1,14 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
-import 'ai_assistant_service.dart';
 
+import 'local_ai_fallback_service.dart';
+
+// ── Gemini AI Companion Service ──────────────────────────────────────────────
+
+/// Primary conversational AI assistant backed by Google Gemini, falling back
+/// to [AiAssistantService] when no API key is present or remote quotas fail.
 class GeminiAiService {
   static const String defaultApiKey = String.fromEnvironment(
     'GEMINI_API_KEY',
@@ -49,7 +55,7 @@ You are AdoptMatch AI, a friendly, intelligent, and natural conversational AI as
   bool get isRemoteEnabled => _isInitialized && !_remoteDisabledForSession;
 
   GeminiAiService({String? apiKey})
-      : apiKey = (apiKey != null && apiKey.isNotEmpty) ? apiKey : defaultApiKey {
+    : apiKey = (apiKey != null && apiKey.isNotEmpty) ? apiKey : defaultApiKey {
     _initBestModel();
   }
 
@@ -108,7 +114,9 @@ You are AdoptMatch AI, a friendly, intelligent, and natural conversational AI as
           return response.text!.trim();
         }
       } catch (e) {
-        debugPrint('[GeminiAiService] Active model ($_activeModelName) error: $e');
+        debugPrint(
+          '[GeminiAiService] Active model ($_activeModelName) error: $e',
+        );
 
         if (_isAuthOrPermissionError(e)) {
           _remoteDisabledForSession = true;
@@ -116,7 +124,9 @@ You are AdoptMatch AI, a friendly, intelligent, and natural conversational AI as
             '[GeminiAiService] Remote Gemini disabled for this session due to API key/permission error. '
             'Pass --dart-define=GEMINI_API_KEY=YOUR_KEY to enable live Gemini.',
           );
-          final fallbackResponse = await AiAssistantService().getResponse(userPrompt);
+          final fallbackResponse = await AiAssistantService().getResponse(
+            userPrompt,
+          );
           return fallbackResponse.text;
         }
 
@@ -136,7 +146,8 @@ You are AdoptMatch AI, a friendly, intelligent, and natural conversational AI as
                 .generateContent([Content.text(userPrompt)])
                 .timeout(const Duration(seconds: 5));
 
-            if (fallbackResponse.text != null && fallbackResponse.text!.trim().isNotEmpty) {
+            if (fallbackResponse.text != null &&
+                fallbackResponse.text!.trim().isNotEmpty) {
               // Switch to working model
               _model = fallbackModel;
               _chat = _model!.startChat();
@@ -144,7 +155,9 @@ You are AdoptMatch AI, a friendly, intelligent, and natural conversational AI as
               return fallbackResponse.text!.trim();
             }
           } catch (fbErr) {
-            debugPrint('[GeminiAiService] Fallback to $fallbackName failed: $fbErr');
+            debugPrint(
+              '[GeminiAiService] Fallback to $fallbackName failed: $fbErr',
+            );
             if (_isAuthOrPermissionError(fbErr)) {
               _remoteDisabledForSession = true;
               break;

@@ -95,8 +95,9 @@ void main() {
 
   test('failed admin write does not mutate local state', () async {
     final client = MockClient((request) async {
-      if (request.method == 'PATCH')
+      if (request.method == 'PATCH') {
         return http.Response('{"success":false,"error":"denied"}', 403);
+      }
       if (request.url.path.endsWith('/admin/users')) {
         return http.Response(
           jsonEncode({

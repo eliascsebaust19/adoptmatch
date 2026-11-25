@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'config/demo_config.dart';
+import 'core/config/demo_config.dart';
 import 'core/theme/app_theme.dart';
 import 'core/localization/app_locale.dart';
 import 'core/navigation/app_router.dart';

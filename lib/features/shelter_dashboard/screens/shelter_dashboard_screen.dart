@@ -5,12 +5,12 @@ import 'package:go_router/go_router.dart';
 import '../../../core/models/application_model.dart';
 import '../../../core/models/pet_model.dart';
 import '../../../core/repositories/application_repository.dart';
-import '../../../core/services/laravel_pet_service.dart';
+import '../../../core/services/api_pet_service.dart';
 import '../../../core/services/storage_service.dart';
 import '../../../shared/widgets/shared_widgets.dart';
 import '../../auth/bloc/auth_bloc.dart';
 
-/// Shelter desk backed by received applications and the owner's Laravel listings.
+/// Shelter coordinator workspace backed by received applications and shelter pet listings.
 class ShelterDashboardScreen extends StatefulWidget {
   const ShelterDashboardScreen({super.key});
   @override
@@ -21,7 +21,7 @@ class _ShelterDashboardScreenState extends State<ShelterDashboardScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs = TabController(length: 4, vsync: this);
   final _applications = ApplicationRepository();
-  final _petsApi = LaravelPetService();
+  final _petsApi = ApiPetService();
   final _email = TextEditingController();
   final _password = TextEditingController();
 
@@ -60,18 +60,20 @@ class _ShelterDashboardScreenState extends State<ShelterDashboardScreen>
     try {
       final apps = await _applications.getApplications(received: true);
       final pets = await _petsApi.getMyPets();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _apps = apps;
           _pets = pets;
           _loading = false;
         });
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _error = '$e';
           _loading = false;
         });
+      }
     }
   }
 
@@ -396,13 +398,14 @@ class _ShelterDashboardScreenState extends State<ShelterDashboardScreen>
         listener: (context, state) {
           if (state is Authenticated && _authorized(state.user.role)) {
             _load();
-          } else if (state is AuthFailure)
+          } else if (state is AuthFailure) {
             setState(() {
               _verifying = false;
               _error = state.errorMessage;
             });
-          else if (state is AuthLoading)
+          } else if (state is AuthLoading) {
             setState(() => _verifying = true);
+          }
         },
         child: _lockScreen(),
       );

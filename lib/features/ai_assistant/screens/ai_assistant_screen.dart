@@ -4,7 +4,7 @@ import '../../../shared/widgets/app_network_image.dart';
 
 import '../../../core/models/pet_model.dart';
 import '../../../core/repositories/pet_repository.dart';
-import '../../../core/services/ai_assistant_service.dart';
+import '../../../core/services/local_ai_fallback_service.dart';
 import '../../../core/services/gemini_ai_service.dart';
 
 class AiAssistantScreen extends StatefulWidget {

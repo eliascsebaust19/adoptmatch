@@ -5,11 +5,11 @@ import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:adoptmatch/core/models/pet_model.dart';
 import 'package:adoptmatch/core/repositories/pet_repository.dart';
-import 'package:adoptmatch/core/services/laravel_pet_service.dart';
+import 'package:adoptmatch/core/services/api_pet_service.dart';
 import 'package:adoptmatch/core/services/storage_service.dart';
 import 'package:adoptmatch/features/adoption_match/bloc/pet_match_bloc.dart';
 
-class _MockLaravelPetService extends Mock implements LaravelPetService {}
+class _MockApiPetService extends Mock implements ApiPetService {}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -19,7 +19,7 @@ void main() {
   });
 
   test('PetMatchBloc updates live when PetRepository applies admin image update', () async {
-    final mockRemote = _MockLaravelPetService();
+    final mockRemote = _MockApiPetService();
     const initialPet = Pet(
       id: 'pet-live-1',
       name: 'Leo',

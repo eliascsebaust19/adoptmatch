@@ -5,21 +5,21 @@ import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:adoptmatch/features/auth/bloc/auth_bloc.dart';
 import 'package:adoptmatch/features/auth/repositories/auth_repository.dart';
-import 'package:adoptmatch/core/services/laravel_auth_service.dart';
+import 'package:adoptmatch/core/services/api_auth_service.dart';
 import '../helpers/secure_storage_mock.dart';
 
 class MockAuthRepository extends Mock implements AuthRepository {}
-class MockLaravelAuthService extends Mock implements LaravelAuthService {}
+class MockApiAuthService extends Mock implements ApiAuthService {}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late MockAuthRepository auth;
-  late MockLaravelAuthService laravel;
+  late MockApiAuthService laravel;
 
   setUp(() async {
     await installSecureStorageMock();
     SharedPreferences.setMockInitialValues({});
-    auth = MockAuthRepository(); laravel = MockLaravelAuthService();
+    auth = MockAuthRepository(); laravel = MockApiAuthService();
     when(() => auth.logout()).thenAnswer((_) async {});
   });
 

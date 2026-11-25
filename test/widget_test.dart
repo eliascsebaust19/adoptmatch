@@ -16,7 +16,7 @@ import 'package:adoptmatch/shared/widgets/status_badge.dart';
 import 'package:adoptmatch/shared/widgets/custom_button.dart';
 import 'package:adoptmatch/core/repositories/admin_repository.dart';
 import 'package:adoptmatch/core/repositories/pet_repository.dart';
-import 'package:adoptmatch/core/services/laravel_pet_service.dart';
+import 'package:adoptmatch/core/services/api_pet_service.dart';
 import 'package:adoptmatch/core/network/api_client.dart';
 
 import 'helpers/secure_storage_mock.dart';
@@ -108,7 +108,7 @@ void main() {
           ),
         );
       ApplicationRepository().configureForTesting(
-        LaravelPetService(apiClient: api),
+        ApiPetService(apiClient: api),
         client: MockClient((_) async => http.Response('{}', 500)),
         tokenReader: () async => 'token',
       );
@@ -157,7 +157,7 @@ void main() {
         ),
       );
     ApplicationRepository().configureForTesting(
-      LaravelPetService(apiClient: api),
+      ApiPetService(apiClient: api),
       client: MockClient((_) async => http.Response('{}', 500)),
       tokenReader: () async => null,
     );

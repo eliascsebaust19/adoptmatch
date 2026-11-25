@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -9,13 +10,13 @@ import '../../../core/storage/secure_storage_service.dart';
 import '../../auth/bloc/auth_bloc.dart';
 import '../../auth/repositories/auth_repository.dart';
 
+// ── Email 6-Digit OTP Verification Screen ────────────────────────────────────
+
+/// Verifies the 6-digit email OTP code issued through Supabase Auth.
 class VerifyOtpScreen extends StatefulWidget {
   final String email;
 
-  const VerifyOtpScreen({
-    super.key,
-    required this.email,
-  });
+  const VerifyOtpScreen({super.key, required this.email});
 
   @override
   State<VerifyOtpScreen> createState() => _VerifyOtpScreenState();
@@ -24,8 +25,10 @@ class VerifyOtpScreen extends StatefulWidget {
 class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
   static const int _initialTimerDuration = 60;
 
-  final List<TextEditingController> _controllers =
-      List.generate(6, (_) => TextEditingController());
+  final List<TextEditingController> _controllers = List.generate(
+    6,
+    (_) => TextEditingController(),
+  );
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
 
   Timer? _countdownTimer;
@@ -83,10 +86,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
   Future<void> _handleVerify() async {
     final code = _otpCode;
     if (code.length != 6) {
-      _showFeedback(
-        'Please enter all 6 digits of the code.',
-        isError: true,
-      );
+      _showFeedback('Please enter all 6 digits of the code.', isError: true);
       return;
     }
 
@@ -162,10 +162,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      _showFeedback(
-        e.toString().replaceAll('Exception: ', ''),
-        isError: true,
-      );
+      _showFeedback(e.toString().replaceAll('Exception: ', ''), isError: true);
     } finally {
       if (mounted) {
         setState(() {
@@ -182,7 +179,9 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
           message,
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
-        backgroundColor: isError ? const Color(0xFFE11D48) : const Color(0xFF0D9488),
+        backgroundColor: isError
+            ? const Color(0xFFE11D48)
+            : const Color(0xFF0D9488),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         duration: const Duration(seconds: 4),
@@ -227,8 +226,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
     const slateDark = Color(0xFF0F172A);
     const slateLight = Color(0xFF64748B);
 
-    final timerDisplay =
-        '00:${_secondsRemaining.toString().padLeft(2, '0')}';
+    final timerDisplay = '00:${_secondsRemaining.toString().padLeft(2, '0')}';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -236,7 +234,11 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: slateDark, size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: slateDark,
+            size: 20,
+          ),
           onPressed: () => context.pop(),
         ),
       ),
@@ -457,10 +459,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                                       ),
                                     ),
                                     SizedBox(width: 8),
-                                    Icon(
-                                      Icons.arrow_forward_rounded,
-                                      size: 18,
-                                    ),
+                                    Icon(Icons.arrow_forward_rounded, size: 18),
                                   ],
                                 ),
                         ),
@@ -473,10 +472,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                         children: [
                           Text(
                             "Didn't receive the code? ",
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: slateLight,
-                            ),
+                            style: TextStyle(fontSize: 13, color: slateLight),
                           ),
                           if (_secondsRemaining > 0)
                             Text(

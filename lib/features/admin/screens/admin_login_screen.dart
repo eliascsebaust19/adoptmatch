@@ -5,7 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../auth/bloc/auth_bloc.dart';
-import '../../../config/demo_config.dart';
+import '../../../core/config/demo_config.dart';
 import '../../../core/network/api_client.dart';
 import '../../../shared/widgets/shared_widgets.dart';
 

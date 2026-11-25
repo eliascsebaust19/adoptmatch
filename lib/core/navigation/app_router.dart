@@ -8,8 +8,8 @@ import '../../features/splash/screens/splash_screen.dart';
 import '../../features/onboarding/screens/onboarding_screen.dart';
 import '../../features/auth/bloc/auth_bloc.dart';
 import '../../features/auth/screens/login_screen.dart';
-import '../../features/auth/screens/otp_screen.dart';
-import '../../features/auth/screens/verify_otp_screen.dart';
+import '../../features/auth/screens/phone_otp_screen.dart';
+import '../../features/auth/screens/email_otp_verification_screen.dart';
 import '../../features/auth/screens/auth_callback_screen.dart';
 import '../../features/auth/screens/reset_password_screen.dart';
 
@@ -353,7 +353,7 @@ class AppRouter {
           path: '/auth/otp',
           builder: (context, state) {
             final phone = state.extra as String? ?? '+880 1711 234567';
-            return OtpVerificationScreen(phoneNumber: phone);
+            return PhoneOtpVerificationScreen(phoneNumber: phone);
           },
         ),
         GoRoute(

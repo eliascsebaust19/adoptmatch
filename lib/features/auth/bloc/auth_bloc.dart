@@ -3,12 +3,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
-import '../../../config/demo_config.dart';
+import '../../../core/config/demo_config.dart';
 import '../../../core/models/user_subscription_model.dart';
 import '../../../core/network/network_error.dart';
 import '../../../core/repositories/subscription_repository.dart';
 import '../../../core/services/google_auth_service.dart';
-import '../../../core/services/laravel_auth_service.dart';
+import '../../../core/services/api_auth_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/storage/secure_storage_service.dart';
 import '../../../core/supabase/adoptmatch_supabase.dart';
@@ -517,15 +517,15 @@ class AuthFailure extends AuthState {
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   UserProfile? _currentUser;
   final AuthRepository _authRepository;
-  final LaravelAuthService _laravelAuthService;
+  final ApiAuthService _laravelAuthService;
 
   AuthBloc({
     UserProfile? initialUser,
     AuthRepository? authRepository,
-    LaravelAuthService? laravelAuthService,
+    ApiAuthService? laravelAuthService,
   }) : _currentUser = initialUser,
        _authRepository = authRepository ?? AuthRepository(),
-       _laravelAuthService = laravelAuthService ?? LaravelAuthService(),
+       _laravelAuthService = laravelAuthService ?? ApiAuthService(),
        super(initialUser != null ? Authenticated(initialUser) : AuthInitial()) {
     on<CheckSessionEvent>(_onCheckSession);
     on<SignUpWithEmailEvent>(_onSignUpWithEmail);
@@ -767,7 +767,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     emit(AuthLoading());
     try {
-      final phone = LaravelAuthService.normalizePhone(event.phoneNumber);
+      final phone = ApiAuthService.normalizePhone(event.phoneNumber);
       await _laravelAuthService.requestPhoneOtp(phone);
       emit(AuthOtpSent(phone));
     } catch (e) {
@@ -802,8 +802,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         otp,
       );
       final token = data['access_token']?.toString();
-      if (token == null || token.isEmpty)
+      if (token == null || token.isEmpty) {
         throw Exception('The server did not issue a session token.');
+      }
       final user = UserProfile.fromJson(
         Map<String, dynamic>.from(data['user'] as Map),
       );

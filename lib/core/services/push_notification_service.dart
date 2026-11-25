@@ -1,29 +1,37 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../network/api_client.dart';
 
-class FcmNotificationService {
-  static final FcmNotificationService instance = FcmNotificationService._internal();
-  factory FcmNotificationService() => instance;
-  FcmNotificationService._internal();
+// ── Push Notification Token Registration Service ─────────────────────────────
+
+/// Caches the device push token locally and synchronizes it with `/auth/fcm-token`.
+class PushNotificationService {
+  static final PushNotificationService instance =
+      PushNotificationService._internal();
+  factory PushNotificationService() => instance;
+  PushNotificationService._internal();
 
   final ApiClient _apiClient = ApiClient();
   static const String _fcmTokenPrefKey = 'user_fcm_device_token';
 
-  /// Register or synchronize device FCM token with Laravel 11 Backend
+  /// Registers or updates the device push token with the AdoptMatch API.
   Future<bool> registerDeviceToken(String fcmToken) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_fcmTokenPrefKey, fcmToken);
 
-      final response = await _apiClient.dio.post('/auth/fcm-token', data: {
-        'fcm_token': fcmToken,
-      });
+      final response = await _apiClient.dio.post(
+        '/auth/fcm-token',
+        data: {'fcm_token': fcmToken},
+      );
 
-      debugPrint('[FcmNotificationService] Token registered successfully: ${response.data}');
+      debugPrint(
+        '[PushNotificationService] Token registered successfully: ${response.data}',
+      );
       return response.statusCode == 200;
     } catch (e) {
-      debugPrint('[FcmNotificationService] Token sync notice: $e');
+      debugPrint('[PushNotificationService] Token sync notice: $e');
       return false;
     }
   }
@@ -46,8 +54,7 @@ class FcmNotificationService {
         }
       }
     } catch (e) {
-      debugPrint('[FcmNotificationService] Initialization notice: $e');
+      debugPrint('[PushNotificationService] Initialization notice: $e');
     }
   }
 }
-

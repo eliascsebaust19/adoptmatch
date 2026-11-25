@@ -8,7 +8,7 @@ import '../bloc/auth_bloc.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/services/supabase_auth_service.dart';
 import '../../../core/supabase/adoptmatch_supabase.dart';
-import '../../../config/demo_config.dart';
+import '../../../core/config/demo_config.dart';
 import '../../../shared/widgets/shared_widgets.dart';
 
 class LoginScreen extends StatefulWidget {

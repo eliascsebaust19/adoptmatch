@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:adoptmatch/core/network/api_client.dart';
-import 'package:adoptmatch/core/services/laravel_pet_service.dart';
+import 'package:adoptmatch/core/services/api_pet_service.dart';
 import '../helpers/fake_dio_adapter.dart';
 
 void main() {
@@ -17,7 +17,7 @@ void main() {
         {'id': 7, 'name': 'Luna', 'species': 'dog', 'breed': 'Mixed', 'age_months': 12,
          'gender': 'female', 'adoption_status': 'available', 'images': []}]}});
     });
-    final service = LaravelPetService(apiClient: ApiClient(baseUrl: 'https://api.example.test/api/v1')
+    final service = ApiPetService(apiClient: ApiClient(baseUrl: 'https://api.example.test/api/v1')
       ..dio.httpClientAdapter = adapter);
     final pets = await service.getPets();
     expect(pets.single.id, '7');
@@ -40,7 +40,7 @@ void main() {
       }
       return (200, {'status': 'success', 'data': {'is_favorite': false}});
     });
-    final service = LaravelPetService(apiClient: ApiClient(baseUrl: 'https://api.example.test/api/v1')
+    final service = ApiPetService(apiClient: ApiClient(baseUrl: 'https://api.example.test/api/v1')
       ..dio.httpClientAdapter = adapter);
     expect(await service.setFavorite('7', true), true);
     expect(await service.setFavorite('7', false), false);

@@ -1,6 +1,9 @@
 import '../models/pet_model.dart';
 import '../repositories/pet_repository.dart';
 
+// ── Offline Pet Assistant Models & Fallback Engine ───────────────────────────
+
+/// Represents a single message bubble in the AdoptMatch AI chat screen.
 class AiAssistantMessage {
   final String id;
   final String text;
@@ -17,6 +20,8 @@ class AiAssistantMessage {
   });
 }
 
+/// Rule-based offline pet care and adoption companion used when the remote
+/// Gemini API is unconfigured, offline, or rate-limited.
 class AiAssistantService {
   static final AiAssistantService _instance = AiAssistantService._internal();
   factory AiAssistantService() => _instance;
@@ -25,7 +30,10 @@ class AiAssistantService {
   final PetRepository _petRepo = PetRepository();
 
   // If the user configures GEMINI_API_KEY via env, it will be picked up here
-  static const String _geminiApiKey = String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
+  static const String _geminiApiKey = String.fromEnvironment(
+    'GEMINI_API_KEY',
+    defaultValue: '',
+  );
   bool get hasCustomApiKey => _geminiApiKey.isNotEmpty;
 
   Future<AiAssistantMessage> getResponse(String userPrompt) async {
@@ -36,12 +44,30 @@ class AiAssistantService {
 
     // 0. Out-of-Scope Protection (Non-Pet Topics)
     final outOfScopeKeywords = [
-      'politics', 'election', 'minister', 'government',
-      'coding', 'python', 'flutter', 'dart', 'javascript', 'program',
-      'football', 'cricket', 'messi', 'ronaldo', 'sports',
-      'calculus', 'algebra', 'solve equation', 'stock market', 'crypto'
+      'politics',
+      'election',
+      'minister',
+      'government',
+      'coding',
+      'python',
+      'flutter',
+      'dart',
+      'javascript',
+      'program',
+      'football',
+      'cricket',
+      'messi',
+      'ronaldo',
+      'sports',
+      'calculus',
+      'algebra',
+      'solve equation',
+      'stock market',
+      'crypto',
     ];
-    final isOutOfScope = outOfScopeKeywords.any((kw) => normalized.contains(kw));
+    final isOutOfScope = outOfScopeKeywords.any(
+      (kw) => normalized.contains(kw),
+    );
     if (isOutOfScope) {
       final isBangla = RegExp(r'[\u0980-\u09FF]').hasMatch(userPrompt);
       return AiAssistantMessage(
@@ -55,7 +81,8 @@ class AiAssistantService {
     }
 
     // 0.1 Friendly conversational greetings & small talk
-    final isGreeting = normalized == 'hi' ||
+    final isGreeting =
+        normalized == 'hi' ||
         normalized == 'hello' ||
         normalized == 'hey' ||
         normalized.contains('kmn acho') ||
@@ -66,7 +93,8 @@ class AiAssistantService {
         normalized.contains('namaste');
 
     if (isGreeting) {
-      final isBangla = RegExp(r'[\u0980-\u09FF]').hasMatch(userPrompt) ||
+      final isBangla =
+          RegExp(r'[\u0980-\u09FF]').hasMatch(userPrompt) ||
           normalized.contains('kmn') ||
           normalized.contains('acho') ||
           normalized.contains('bhalo');
@@ -86,7 +114,8 @@ class AiAssistantService {
         normalized.contains('ঘণ্টা') ||
         normalized.contains('alone') ||
         normalized.contains('schedule')) {
-      final isBangla = RegExp(r'[\u0980-\u09FF]').hasMatch(userPrompt) ||
+      final isBangla =
+          RegExp(r'[\u0980-\u09FF]').hasMatch(userPrompt) ||
           normalized.contains('ghonta') ||
           normalized.contains('koto') ||
           normalized.contains('thakte');
@@ -106,15 +135,25 @@ class AiAssistantService {
     String replyText = '';
 
     // 1. Apartment or Flat living queries
-    if (normalized.contains('apartment') || normalized.contains('flat') || normalized.contains('indoor')) {
-      matchedPets = availablePets.where((p) => p.isApartmentFriendly).take(2).toList();
-      replyText = 'For apartment or flat living, we look for calm, adaptable companions with low barking or litter-trained habits.\n\n'
+    if (normalized.contains('apartment') ||
+        normalized.contains('flat') ||
+        normalized.contains('indoor')) {
+      matchedPets = availablePets
+          .where((p) => p.isApartmentFriendly)
+          .take(2)
+          .toList();
+      replyText =
+          'For apartment or flat living, we look for calm, adaptable companions with low barking or litter-trained habits.\n\n'
           'Here are verified apartment-friendly rescues currently waiting in Dhaka:';
     }
     // 2. Kids or Family safety queries
-    else if (normalized.contains('kid') || normalized.contains('child') || normalized.contains('family') || normalized.contains('baby')) {
+    else if (normalized.contains('kid') ||
+        normalized.contains('child') ||
+        normalized.contains('family') ||
+        normalized.contains('baby')) {
       matchedPets = availablePets.where((p) => p.isKidSafe).take(2).toList();
-      replyText = 'Adopting with children requires gentle, highly socialized pets that have passed shelter temperament assessments.\n\n'
+      replyText =
+          'Adopting with children requires gentle, highly socialized pets that have passed shelter temperament assessments.\n\n'
           'These loving rescues have been certified child-friendly by our partner shelters:';
     }
     // 2.1 Vaccination schedule queries (EN / BN)
@@ -124,20 +163,21 @@ class AiAssistantService {
       final isBangla = RegExp(r'[\u0980-\u09FF]').hasMatch(userPrompt);
       replyText = isBangla
           ? '💉 **পোষা প্রাণীর প্রাথমিক ভ্যাকসিন সময়সূচি**:\n\n'
-              '• **বিড়াল ছানা (Kitten):** ৬–৮ সপ্তাহ বয়সে প্রথম FVRCP (Flu/Panleukopenia) টিকা, ৩–৪ সপ্তাহ পর বুস্টার, এবং ১২–১৬ সপ্তাহ বয়সে Rabies (জলাতঙ্ক) টিকা।\n'
-              '• **কুকুর ছানা (Puppy):** ৬–৮ সপ্তাহে DHPP প্রথম ডোজ, ১০–১২ ও ১৪–১৬ সপ্তাহে বুস্টার এবং Rabies টিকা।\n'
-              '• **বার্ষিক বুস্টার:** প্রতি বছর ১ বার নিয়মিত বুস্টার ও ৩ মাস পরপর কৃমিনাশক (Deworming) দিন। 🐾'
+                '• **বিড়াল ছানা (Kitten):** ৬–৮ সপ্তাহ বয়সে প্রথম FVRCP (Flu/Panleukopenia) টিকা, ৩–৪ সপ্তাহ পর বুস্টার, এবং ১২–১৬ সপ্তাহ বয়সে Rabies (জলাতঙ্ক) টিকা।\n'
+                '• **কুকুর ছানা (Puppy):** ৬–৮ সপ্তাহে DHPP প্রথম ডোজ, ১০–১২ ও ১৪–১৬ সপ্তাহে বুস্টার এবং Rabies টিকা।\n'
+                '• **বার্ষিক বুস্টার:** প্রতি বছর ১ বার নিয়মিত বুস্টার ও ৩ মাস পরপর কৃমিনাশক (Deworming) দিন। 🐾'
           : '💉 **Core Vaccination Schedule**:\n\n'
-              '• **Puppies:** First DHPP dose at 6–8 weeks, boosters at 10–12 & 14–16 weeks, plus Rabies at 12–16 weeks.\n'
-              '• **Kittens:** First FVRCP dose at 6–8 weeks, booster 3–4 weeks later, and Rabies at 12–16 weeks.\n'
-              '• **Annual Care:** Yearly booster shots and deworming every 3 months. 🐾';
+                '• **Puppies:** First DHPP dose at 6–8 weeks, boosters at 10–12 & 14–16 weeks, plus Rabies at 12–16 weeks.\n'
+                '• **Kittens:** First FVRCP dose at 6–8 weeks, booster 3–4 weeks later, and Rabies at 12–16 weeks.\n'
+                '• **Annual Care:** Yearly booster shots and deworming every 3 months. 🐾';
     }
     // 2.2 Monthly pet budget queries (Dhaka)
     else if (normalized.contains('budget') ||
         normalized.contains('khroch') ||
         normalized.contains('বাজেট') ||
         normalized.contains('খরচ')) {
-      replyText = '💰 **Estimated Monthly Pet Budget in Dhaka (BDT)**:\n\n'
+      replyText =
+          '💰 **Estimated Monthly Pet Budget in Dhaka (BDT)**:\n\n'
           '• **Cats:** ৳2,000 – ৳4,500/month (dry/wet food, litter, treats & routine deworming).\n'
           '• **Dogs:** ৳3,500 – ৳7,500/month depending on size (kibble/home-cooked protein, grooming & flea care).\n'
           '• **Annual Vet Fund:** Keep ~৳3,000–৳5,000/year aside for annual boosters and routine checkups.';
@@ -149,8 +189,12 @@ class AiAssistantService {
         normalized.contains('beral') ||
         normalized.contains('বিড়াল') ||
         normalized.contains('বিড়াল')) {
-      matchedPets = availablePets.where((p) => p.species == 'Cat').take(2).toList();
-      replyText = 'Cats make wonderful, low-maintenance companions that thrive indoors. Most are already litter-trained and spayed/neutered.\n\n'
+      matchedPets = availablePets
+          .where((p) => p.species == 'Cat')
+          .take(2)
+          .toList();
+      replyText =
+          'Cats make wonderful, low-maintenance companions that thrive indoors. Most are already litter-trained and spayed/neutered.\n\n'
           'Meet some of our adorable feline friends:';
     }
     // 4. Dog queries
@@ -159,8 +203,12 @@ class AiAssistantService {
         normalized.contains('canine') ||
         normalized.contains('kukur') ||
         normalized.contains('কুকুর')) {
-      matchedPets = availablePets.where((p) => p.species == 'Dog').take(2).toList();
-      replyText = 'Dogs provide unconditional companionship, loyal loyalty, and healthy daily exercise routines.\n\n'
+      matchedPets = availablePets
+          .where((p) => p.species == 'Dog')
+          .take(2)
+          .toList();
+      replyText =
+          'Dogs provide unconditional companionship, loyal loyalty, and healthy daily exercise routines.\n\n'
           'Here are loving dogs ready for a forever home:';
     }
     // 5. Aquatic & Exotic pet queries (Goldfish, Turtles, Geckos, Rabbits)
@@ -173,20 +221,28 @@ class AiAssistantService {
         normalized.contains('rabbit') ||
         normalized.contains('bunny')) {
       matchedPets = availablePets
-          .where((p) =>
-              p.species == 'Fish' ||
-              p.species == 'Turtle' ||
-              p.species == 'Gecko' ||
-              p.species == 'Rabbit' ||
-              p.species == 'Small')
+          .where(
+            (p) =>
+                p.species == 'Fish' ||
+                p.species == 'Turtle' ||
+                p.species == 'Gecko' ||
+                p.species == 'Rabbit' ||
+                p.species == 'Small',
+          )
           .take(2)
           .toList();
-      replyText = 'Aquatic and exotic companions bring serene joy to your home! 🐠🐢🦎\n\n'
+      replyText =
+          'Aquatic and exotic companions bring serene joy to your home! 🐠🐢🦎\n\n'
           'Here are wonderful exotic companions currently looking for a loving home:';
     }
     // 5. Adoption process & requirements
-    else if (normalized.contains('process') || normalized.contains('how to adopt') || normalized.contains('cost') || normalized.contains('fee') || normalized.contains('requirement')) {
-      replyText = '📋 **AdoptMatch 5-Step Adoption Protocol**:\n\n'
+    else if (normalized.contains('process') ||
+        normalized.contains('how to adopt') ||
+        normalized.contains('cost') ||
+        normalized.contains('fee') ||
+        normalized.contains('requirement')) {
+      replyText =
+          '📋 **AdoptMatch 5-Step Adoption Protocol**:\n\n'
           '1. **Browse & Match**: Explore vetted rescue pets and check lifestyle compatibility.\n'
           '2. **Apply Online**: Complete the 5-step application (housing, landlord verification, vet readiness, e-signature).\n'
           '3. **Shelter Screening**: Shelter coordinators review your housing and pet history within 24-48 hours.\n'
@@ -195,13 +251,20 @@ class AiAssistantService {
           '💡 *AdoptMatch charges ZERO breeding or commercial fees. Only standard nominal shelter vetting fees apply.*';
     }
     // 6. Medical & Vet disclaimer
-    else if (normalized.contains('sick') || normalized.contains('vomit') || normalized.contains('medicine') || normalized.contains('vet') || normalized.contains('pain') || normalized.contains('doctor')) {
-      replyText = '⚠️ **Veterinary Notice**:\n\n'
+    else if (normalized.contains('sick') ||
+        normalized.contains('vomit') ||
+        normalized.contains('medicine') ||
+        normalized.contains('vet') ||
+        normalized.contains('pain') ||
+        normalized.contains('doctor')) {
+      replyText =
+          '⚠️ **Veterinary Notice**:\n\n'
           'I am an AI adoption guide and cannot diagnose or prescribe treatments for medical conditions. If your pet is showing acute symptoms, lethargy, vomiting, or breathing distress, please immediately contact an emergency 24/7 clinic via the **Emergency SOS** section in the app.';
     }
     // 7. General fallback response
     else {
-      final isBangla = RegExp(r'[\u0980-\u09FF]').hasMatch(userPrompt) ||
+      final isBangla =
+          RegExp(r'[\u0980-\u09FF]').hasMatch(userPrompt) ||
           normalized.contains('kmn') ||
           normalized.contains('beral') ||
           normalized.contains('kukur') ||

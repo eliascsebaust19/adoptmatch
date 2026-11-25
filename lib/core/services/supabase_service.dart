@@ -1,8 +1,14 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../config/auth_config.dart';
 
+// ── Supabase Client & OAuth Callback Lifecycle ───────────────────────────────
+
+/// Manages Supabase initialization state, PKCE OAuth redirect exchange, and
+/// password recovery session guards across mobile and web.
 class SupabaseService {
   static const String defaultUrl = String.fromEnvironment(
     'SUPABASE_URL',
@@ -11,8 +17,7 @@ class SupabaseService {
 
   static const String defaultAnonKey = String.fromEnvironment(
     'SUPABASE_ANON_KEY',
-    defaultValue:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndnenRkaGFiZ2VkaGthaXBwa3BkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3ODAzMTksImV4cCI6MjEwODM1NjMxOX0.KolY1dw6NuDxZAt14bCcJz0NLLmMa05HHixz4TFtZMM',
+    defaultValue: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndnenRkaGFiZ2VkaGthaXBwa3BkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3ODAzMTksImV4cCI6MjEwODM1NjMxOX0.KolY1dw6NuDxZAt14bCcJz0NLLmMa05HHixz4TFtZMM',
   );
 
   static String get googleClientId => AuthConfig.googleWebClientId;
@@ -63,7 +68,9 @@ class SupabaseService {
 
   static SupabaseClient get client {
     if (!isInitialized) {
-      throw StateError('Supabase has not been initialized. Call SupabaseService.initialize() first.');
+      throw StateError(
+        'Supabase has not been initialized. Call SupabaseService.initialize() first.',
+      );
     }
     return Supabase.instance.client;
   }
@@ -114,14 +121,18 @@ class SupabaseService {
       // If user exists but email is not confirmed, block access
       if (user != null && user.emailConfirmedAt == null) {
         await auth.signOut();
-        throw const AuthException('Please verify your email address before logging in.');
+        throw const AuthException(
+          'Please verify your email address before logging in.',
+        );
       }
 
       return response;
     } on AuthException catch (e) {
       if (e.message.toLowerCase().contains('email not confirmed') ||
           e.message.toLowerCase().contains('email_not_confirmed')) {
-        throw const AuthException('Please verify your email address before logging in.');
+        throw const AuthException(
+          'Please verify your email address before logging in.',
+        );
       }
       rethrow;
     } catch (e) {
@@ -228,4 +239,3 @@ class SupabaseService {
     }
   }
 }
-

@@ -1,14 +1,21 @@
 import 'package:flutter/material.dart';
 
+// ── Supported Languages & Scope ──────────────────────────────────────────────
+
 enum AppLanguage { en, bn }
 
+/// Supported locale definitions (`en_US` and `bn_BD`) for AdoptMatch.
 class AppLocale {
   static const Locale english = Locale('en', 'US');
   static const Locale bengali = Locale('bn', 'BD');
 }
 
-final ValueNotifier<Locale> appLocaleNotifier = ValueNotifier<Locale>(AppLocale.english);
+/// Global locale notifier read at the application root.
+final ValueNotifier<Locale> appLocaleNotifier = ValueNotifier<Locale>(
+  AppLocale.english,
+);
 
+/// Exposes the active [AppLanguage] and switch callback down the widget tree.
 class AppLocaleScope extends InheritedWidget {
   final AppLanguage language;
   final Function(AppLanguage) onLanguageChanged;
@@ -25,9 +32,13 @@ class AppLocaleScope extends InheritedWidget {
   }
 
   @override
-  bool updateShouldNotify(AppLocaleScope oldWidget) => language != oldWidget.language;
+  bool updateShouldNotify(AppLocaleScope oldWidget) =>
+      language != oldWidget.language;
 }
 
+// ── Localized String Dictionary ──────────────────────────────────────────────
+
+/// Central English/Bengali string lookup helper (`AppStrings.tr(context, key)`).
 class AppStrings {
   static const Map<String, Map<AppLanguage, String>> _localizedValues = {
     // App Bar & Welcome
@@ -36,7 +47,7 @@ class AppStrings {
       AppLanguage.bn: 'অ্যাডপ্টম্যাচ',
     },
     'hero_title': {
-      AppLanguage.en: 'Find your new best friend.',
+      AppLanguage.en: 'Find your new Pet today.',
       AppLanguage.bn: 'খুঁজে নিন আপনার নতুন প্রিয় সঙ্গী।',
     },
     'search_hint': {
@@ -44,30 +55,12 @@ class AppStrings {
       AppLanguage.bn: 'পোষা প্রাণী খুঁজুন...',
     },
     // Tabs & Categories
-    'all_pets': {
-      AppLanguage.en: 'All Pets',
-      AppLanguage.bn: 'সব প্রাণী',
-    },
-    'dogs': {
-      AppLanguage.en: 'Dogs',
-      AppLanguage.bn: 'কুকুর',
-    },
-    'cats': {
-      AppLanguage.en: 'Cats',
-      AppLanguage.bn: 'বিড়াল',
-    },
-    'birds': {
-      AppLanguage.en: 'Birds',
-      AppLanguage.bn: 'পাখি',
-    },
-    'small': {
-      AppLanguage.en: 'Small',
-      AppLanguage.bn: 'ছোট প্রাণী',
-    },
-    'seniors': {
-      AppLanguage.en: 'Seniors',
-      AppLanguage.bn: 'সিনিয়র',
-    },
+    'all_pets': {AppLanguage.en: 'All Pets', AppLanguage.bn: 'সব প্রাণী'},
+    'dogs': {AppLanguage.en: 'Dogs', AppLanguage.bn: 'কুকুর'},
+    'cats': {AppLanguage.en: 'Cats', AppLanguage.bn: 'বিড়াল'},
+    'birds': {AppLanguage.en: 'Birds', AppLanguage.bn: 'পাখি'},
+    'small': {AppLanguage.en: 'Small', AppLanguage.bn: 'ছোট প্রাণী'},
+    'seniors': {AppLanguage.en: 'Seniors', AppLanguage.bn: 'সিনিয়র'},
     // Sections
     'recommended_for_you': {
       AppLanguage.en: 'Recommended for You',
@@ -77,35 +70,17 @@ class AppStrings {
       AppLanguage.en: 'Nearby Pets',
       AppLanguage.bn: 'কাছাকাছি পোষা প্রাণী',
     },
-    'view_all': {
-      AppLanguage.en: 'View All',
-      AppLanguage.bn: 'সব দেখুন',
-    },
-    'match_suffix': {
-      AppLanguage.en: 'Match',
-      AppLanguage.bn: 'ম্যাচ',
-    },
+    'view_all': {AppLanguage.en: 'View All', AppLanguage.bn: 'সব দেখুন'},
+    'match_suffix': {AppLanguage.en: 'Match', AppLanguage.bn: 'ম্যাচ'},
     // Navigation
-    'nav_home': {
-      AppLanguage.en: 'Home',
-      AppLanguage.bn: 'হোম',
-    },
+    'nav_home': {AppLanguage.en: 'Home', AppLanguage.bn: 'হোম'},
     'nav_find': {
       AppLanguage.en: 'Swipe Match',
       AppLanguage.bn: 'সোয়াইপ ম্যাচ',
     },
-    'nav_favorites': {
-      AppLanguage.en: 'Favorites',
-      AppLanguage.bn: 'পছন্দের',
-    },
-    'nav_inbox': {
-      AppLanguage.en: 'Inbox',
-      AppLanguage.bn: 'মেসেজ',
-    },
-    'nav_profile': {
-      AppLanguage.en: 'Profile',
-      AppLanguage.bn: 'প্রোফাইল',
-    },
+    'nav_favorites': {AppLanguage.en: 'Favorites', AppLanguage.bn: 'পছন্দের'},
+    'nav_inbox': {AppLanguage.en: 'Inbox', AppLanguage.bn: 'মেসেজ'},
+    'nav_profile': {AppLanguage.en: 'Profile', AppLanguage.bn: 'প্রোফাইল'},
     // Application
     'adoption_application': {
       AppLanguage.en: 'Adoption Application',
@@ -115,18 +90,12 @@ class AppStrings {
       AppLanguage.en: 'Your Information',
       AppLanguage.bn: 'আপনার তথ্য',
     },
-    'full_name': {
-      AppLanguage.en: 'Full Name',
-      AppLanguage.bn: 'পুরো নাম',
-    },
+    'full_name': {AppLanguage.en: 'Full Name', AppLanguage.bn: 'পুরো নাম'},
     'phone_number': {
       AppLanguage.en: 'Phone Number',
       AppLanguage.bn: 'মোবাইল নম্বর',
     },
-    'address': {
-      AppLanguage.en: 'Address',
-      AppLanguage.bn: 'ঠিকানা',
-    },
+    'address': {AppLanguage.en: 'Address', AppLanguage.bn: 'ঠিকানা'},
     'enter_address': {
       AppLanguage.en: 'Enter your address',
       AppLanguage.bn: 'আপনার ঠিকানা লিখুন',
@@ -177,4 +146,3 @@ class AppStrings {
     return _localizedValues[key]?[language] ?? key;
   }
 }
-

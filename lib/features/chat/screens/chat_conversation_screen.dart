@@ -77,13 +77,16 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       });
 
       await _chatRepo.markConversationAsRead(widget.conversationId);
-      if (mounted) setState(() => _syncError = null);
+      if (mounted) {
+        setState(() => _syncError = null);
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _syncError = '$e';
           _isLoading = false;
         });
+      }
     }
   }
 

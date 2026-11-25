@@ -2,7 +2,7 @@
 ///
 /// - Role: Single Source of Truth (SSOT) for adoptable pets, favorites, and lifestyle matching.
 /// - Design Pattern: Repository Pattern with Local Storage Cache & Remote Stream Broadcast.
-/// - Backend Integration: Supabase PostgREST with fallback to LaravelPetService.
+/// - Backend Integration: Supabase PostgREST with fallback to ApiPetService.
 library;
 
 import 'dart:async';
@@ -12,7 +12,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/pet_model.dart';
 import '../services/local_storage_service.dart';
-import '../services/laravel_pet_service.dart';
+import '../services/api_pet_service.dart';
 import '../storage/secure_storage_service.dart';
 import '../supabase/adoptmatch_supabase.dart';
 
@@ -23,9 +23,9 @@ class PetRepository {
     _initStorage();
   }
 
-  LaravelPetService _laravelPetService = LaravelPetService();
+  ApiPetService _laravelPetService = ApiPetService();
   bool _useDemoCatalog = false;
-  void setRemoteServiceForTesting(LaravelPetService service) {
+  void setRemoteServiceForTesting(ApiPetService service) {
     _laravelPetService = service;
   }
 

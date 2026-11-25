@@ -1,16 +1,17 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 
+// ── Authentication Configuration ─────────────────────────────────────────────
+
 /// Single source of truth for authentication configuration.
 ///
-/// Every layer (Google Sign-In, Supabase, Laravel/Node token exchange) must use
-/// the SAME Google **Web** OAuth client ID. On Android/iOS it is passed as
-/// `serverClientId` so the returned ID token has `aud = <web client id>`, which is
-/// exactly what the backends verify. A mismatch produces HTTP 401.
+/// Every layer (Google Sign-In, Supabase, Backend token exchange) must use the
+/// same Google **Web** OAuth client ID. On Android/iOS it is passed as
+/// `serverClientId` so the returned ID token has `aud = <web client id>`, which
+/// matches what the backend verifies. A mismatch produces HTTP 401.
 ///
 /// Override at build time:
-///   flutter run --dart-define=GOOGLE_CLIENT_ID=<web-client-id>
-///   flutter build apk --dart-define=GOOGLE_CLIENT_ID=<web-client-id> \
-///     --dart-define=GOOGLE_IOS_CLIENT_ID=<ios-client-id>
+/// `flutter run --dart-define=GOOGLE_CLIENT_ID=<web-client-id>`
+/// `flutter build apk --dart-define=GOOGLE_CLIENT_ID=<web-client-id> --dart-define=GOOGLE_IOS_CLIENT_ID=<ios-client-id>`
 class AuthConfig {
   const AuthConfig._();
 

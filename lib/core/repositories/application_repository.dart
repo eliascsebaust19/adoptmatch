@@ -6,7 +6,7 @@ import '../models/application_model.dart';
 import '../services/local_storage_service.dart';
 import '../storage/secure_storage_service.dart';
 import '../network/api_client.dart';
-import '../services/laravel_pet_service.dart';
+import '../services/api_pet_service.dart';
 
 class ApplicationRepository {
   static final ApplicationRepository _instance = ApplicationRepository._internal();
@@ -14,10 +14,10 @@ class ApplicationRepository {
   ApplicationRepository._internal();
 
   final _storage = LocalStorageService.instance;
-  LaravelPetService _remote = LaravelPetService();
+  ApiPetService _remote = ApiPetService();
   http.Client _client = http.Client();
   Future<String?> Function() _readToken = SecureStorageService.instance.getAuthToken;
-  void configureForTesting(LaravelPetService remote, {http.Client? client,
+  void configureForTesting(ApiPetService remote, {http.Client? client,
       Future<String?> Function()? tokenReader}) {
     _remote = remote;
     if (client != null) _client = client;

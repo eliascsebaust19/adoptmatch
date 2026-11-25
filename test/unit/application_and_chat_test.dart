@@ -9,7 +9,7 @@ import 'package:adoptmatch/core/models/pet_model.dart';
 import 'package:adoptmatch/core/network/api_client.dart';
 import 'package:adoptmatch/core/repositories/application_repository.dart';
 import 'package:adoptmatch/core/repositories/chat_repository.dart';
-import 'package:adoptmatch/core/services/laravel_pet_service.dart';
+import 'package:adoptmatch/core/services/api_pet_service.dart';
 
 import '../helpers/secure_storage_mock.dart';
 import '../helpers/fake_dio_adapter.dart';
@@ -97,7 +97,7 @@ void main() {
       );
       final repo = ApplicationRepository()
         ..configureForTesting(
-          LaravelPetService(apiClient: api),
+          ApiPetService(apiClient: api),
           client: client,
           tokenReader: () async => 'token',
         );
@@ -133,7 +133,7 @@ void main() {
     );
     final repo = ApplicationRepository()
       ..configureForTesting(
-        LaravelPetService(apiClient: api),
+        ApiPetService(apiClient: api),
         client: client,
         tokenReader: () async => 'token',
       );
@@ -190,8 +190,9 @@ void main() {
           200,
         );
       }
-      if (request.url.path.endsWith('/messages/7'))
+      if (request.url.path.endsWith('/messages/7')) {
         return http.Response(jsonEncode({'data': []}), 200);
+      }
       return http.Response('{}', 404);
     });
     final repo = ChatRepository()

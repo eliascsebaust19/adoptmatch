@@ -7,11 +7,14 @@ import '../models/pet_model.dart';
 import '../models/application_model.dart';
 import '../supabase/adoptmatch_supabase.dart';
 
-class LaravelPetService {
+// ── Pet Catalog, Swipe & Adoption API Service ────────────────────────────────
+
+/// Communicates with AdoptMatch REST `/pets/*` & adoption endpoints, falling
+/// back to Supabase PostgREST queries when `AdoptMatchBackend` is active.
+class ApiPetService {
   final ApiClient _apiClient;
 
-  LaravelPetService({ApiClient? apiClient})
-    : _apiClient = apiClient ?? ApiClient();
+  ApiPetService({ApiClient? apiClient}) : _apiClient = apiClient ?? ApiClient();
 
   /// Fetch public pet catalog
   Future<List<Pet>> getPets({
@@ -38,7 +41,7 @@ class LaravelPetService {
         }
         return pets;
       } catch (e) {
-        debugPrint('[LaravelPetService] Supabase getPets error: $e');
+        debugPrint('[ApiPetService] Supabase getPets error: $e');
         rethrow;
       }
     }
@@ -69,7 +72,7 @@ class LaravelPetService {
       }
       throw Exception('The pet catalog response was invalid.');
     } catch (e) {
-      debugPrint('[LaravelPetService] getPets error: $e');
+      debugPrint('[ApiPetService] getPets error: $e');
       rethrow;
     }
   }
@@ -88,7 +91,7 @@ class LaravelPetService {
             .map((r) => _petFromJson(Map<String, dynamic>.from(r as Map)))
             .toList();
       } catch (e) {
-        debugPrint('[LaravelPetService] Supabase getMyPets error: $e');
+        debugPrint('[ApiPetService] Supabase getMyPets error: $e');
         rethrow;
       }
     }
@@ -165,7 +168,7 @@ class LaravelPetService {
         if (row == null) return null;
         return _petFromJson(Map<String, dynamic>.from(row as Map));
       } catch (e) {
-        debugPrint('[LaravelPetService] Supabase getPetDetails error: $e');
+        debugPrint('[ApiPetService] Supabase getPetDetails error: $e');
         rethrow;
       }
     }
@@ -182,7 +185,7 @@ class LaravelPetService {
       if (e.response?.statusCode == 404) return null;
       rethrow;
     } catch (e) {
-      debugPrint('[LaravelPetService] getPetDetails error: $e');
+      debugPrint('[ApiPetService] getPetDetails error: $e');
       rethrow;
     }
   }
@@ -214,7 +217,7 @@ class LaravelPetService {
         if (swipedIds.isEmpty) return list.toList();
         return list.where((p) => !swipedIds.contains(p.id)).toList();
       } catch (e) {
-        debugPrint('[LaravelPetService] Supabase getSwipeStack error: $e');
+        debugPrint('[ApiPetService] Supabase getSwipeStack error: $e');
         rethrow;
       }
     }
@@ -230,7 +233,7 @@ class LaravelPetService {
       }
       throw Exception('The swipe catalog response was invalid.');
     } catch (e) {
-      debugPrint('[LaravelPetService] getSwipeStack error: $e');
+      debugPrint('[ApiPetService] getSwipeStack error: $e');
       rethrow;
     }
   }
@@ -242,7 +245,7 @@ class LaravelPetService {
         await AdoptMatchBackend.instance.swipe(petId, like: isLike);
         return true;
       } catch (e) {
-        debugPrint('[LaravelPetService] Supabase recordSwipe error: $e');
+        debugPrint('[ApiPetService] Supabase recordSwipe error: $e');
         return false;
       }
     }
@@ -254,7 +257,7 @@ class LaravelPetService {
       return response.data['status'] == 'success' ||
           response.data['success'] == true;
     } catch (e) {
-      debugPrint('[LaravelPetService] recordSwipe error: $e');
+      debugPrint('[ApiPetService] recordSwipe error: $e');
       return false;
     }
   }
@@ -274,7 +277,7 @@ class LaravelPetService {
         );
         return rows.map((r) => _petFromJson(r)).toList();
       } catch (e) {
-        debugPrint('[LaravelPetService] Supabase getNearbyPets error: $e');
+        debugPrint('[ApiPetService] Supabase getNearbyPets error: $e');
         rethrow;
       }
     }
@@ -301,7 +304,7 @@ class LaravelPetService {
       }
       throw Exception('The nearby catalog response was invalid.');
     } catch (e) {
-      debugPrint('[LaravelPetService] getNearbyPets error: $e');
+      debugPrint('[ApiPetService] getNearbyPets error: $e');
       rethrow;
     }
   }
@@ -321,9 +324,7 @@ class LaravelPetService {
         );
         return {'id': id, 'reference_no': id};
       } catch (e) {
-        debugPrint(
-          '[LaravelPetService] Supabase submitAdoptionRequest error: $e',
-        );
+        debugPrint('[ApiPetService] Supabase submitAdoptionRequest error: $e');
         rethrow;
       }
     }
@@ -345,7 +346,7 @@ class LaravelPetService {
       throw Exception('The server did not confirm the application.');
     } on DioException catch (e) {
       debugPrint(
-        '[LaravelPetService] submitAdoptionRequest Dio error: ${e.response?.data ?? e.message}',
+        '[ApiPetService] submitAdoptionRequest Dio error: ${e.response?.data ?? e.message}',
       );
       rethrow;
     }
@@ -393,9 +394,7 @@ class LaravelPetService {
           });
         }).toList();
       } catch (e) {
-        debugPrint(
-          '[LaravelPetService] Supabase getMyAdoptionRequests error: $e',
-        );
+        debugPrint('[ApiPetService] Supabase getMyAdoptionRequests error: $e');
         rethrow;
       }
     }
@@ -452,7 +451,7 @@ class LaravelPetService {
       }
       throw Exception('The application list response was invalid.');
     } catch (e) {
-      debugPrint('[LaravelPetService] getMyAdoptionRequests error: $e');
+      debugPrint('[ApiPetService] getMyAdoptionRequests error: $e');
       rethrow;
     }
   }
@@ -581,10 +580,9 @@ class LaravelPetService {
         [];
 
     final rawPrimary = json['primary_image_url'] ?? json['image_url'];
-    final primaryUrl =
-        (rawPrimary != null && rawPrimary.toString().isNotEmpty)
-            ? rawPrimary.toString()
-            : (images.isNotEmpty ? images.first : '');
+    final primaryUrl = (rawPrimary != null && rawPrimary.toString().isNotEmpty)
+        ? rawPrimary.toString()
+        : (images.isNotEmpty ? images.first : '');
     final ageMonths = (json['age_months'] as num?)?.toInt() ?? 0;
     final ageDisplay = ageMonths <= 0
         ? 'Age not provided'

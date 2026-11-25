@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import '../../adoption_match/bloc/pet_match_bloc.dart';
-import '../../adoption_match/widgets/pet_card_grid_item.dart';
 
-class FavoritesScreen extends StatelessWidget {
-  const FavoritesScreen({super.key});
+import '../bloc/pet_match_bloc.dart';
+import '../widgets/pet_card_grid_item.dart';
+
+// ── Saved & Favorite Pets Screen ─────────────────────────────────────────────
+
+/// Displays all pets bookmarked by the adopter from [PetMatchBloc].
+class SavedPetsScreen extends StatelessWidget {
+  const SavedPetsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -13,9 +17,7 @@ class FavoritesScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: const Text('Saved & Favorite Pets'),
-      ),
+      appBar: AppBar(title: const Text('Saved & Favorite Pets')),
       body: BlocBuilder<PetMatchBloc, PetMatchState>(
         builder: (context, state) {
           if (state is PetMatchLoading) {
@@ -32,11 +34,18 @@ class FavoritesScreen extends StatelessWidget {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.favorite_border, size: 64, color: Colors.grey),
+                      const Icon(
+                        Icons.favorite_border,
+                        size: 64,
+                        color: Colors.grey,
+                      ),
                       const SizedBox(height: 16),
                       const Text(
                         'No favorites yet',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       const Text(
@@ -65,7 +74,9 @@ class FavoritesScreen extends StatelessWidget {
                   pet: pet,
                   onTap: () => context.push('/pets/${pet.id}'),
                   onFavoriteToggle: () {
-                    context.read<PetMatchBloc>().add(TogglePetFavoriteEvent(pet.id));
+                    context.read<PetMatchBloc>().add(
+                      TogglePetFavoriteEvent(pet.id),
+                    );
                   },
                 );
               },
@@ -78,4 +89,3 @@ class FavoritesScreen extends StatelessWidget {
     );
   }
 }
-

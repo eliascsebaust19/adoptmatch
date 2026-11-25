@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:adoptmatch/core/services/supabase_auth_service.dart';
-import 'package:adoptmatch/features/auth/screens/verify_otp_screen.dart';
+import 'package:adoptmatch/features/auth/screens/email_otp_verification_screen.dart';
 import 'package:adoptmatch/features/auth/bloc/auth_bloc.dart';
 import 'package:adoptmatch/features/auth/repositories/auth_repository.dart';
 import 'package:adoptmatch/core/network/api_client.dart';
-import 'package:adoptmatch/core/services/laravel_auth_service.dart';
+import 'package:adoptmatch/core/services/api_auth_service.dart';
 import '../helpers/secure_storage_mock.dart';
 
 void main() {
@@ -50,7 +50,7 @@ void main() {
       final authRepo = AuthRepository();
       final authBloc = AuthBloc(
         authRepository: authRepo,
-        laravelAuthService: LaravelAuthService(
+        laravelAuthService: ApiAuthService(
           apiClient: ApiClient(baseUrl: 'https://api.example.test/api/v1'),
         ),
       );
@@ -87,7 +87,7 @@ void main() {
       final authRepo = AuthRepository();
       final authBloc = AuthBloc(
         authRepository: authRepo,
-        laravelAuthService: LaravelAuthService(
+        laravelAuthService: ApiAuthService(
           apiClient: ApiClient(baseUrl: 'https://api.example.test/api/v1'),
         ),
       );
