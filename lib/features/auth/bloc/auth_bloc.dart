@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
+
 import '../../../config/demo_config.dart';
 import '../../../core/models/user_subscription_model.dart';
 import '../../../core/network/network_error.dart';
@@ -166,22 +167,41 @@ class UserProfile extends Equatable {
     final rawRole = json['role']?.toString();
 
     return UserProfile(
-      id: json['id']?.toString() ?? 'usr_${DateTime.now().millisecondsSinceEpoch}',
+      id:
+          json['id']?.toString() ??
+          'usr_${DateTime.now().millisecondsSinceEpoch}',
       name: json['name']?.toString() ?? 'Pet Lover',
       email: json['email']?.toString() ?? '',
       phone: json['phone']?.toString() ?? '',
       role: UserRole.fromCode(rawRole),
-      isVerified: json['isVerified'] == true || json['is_verified'] == true || json['email_verified_at'] != null || json['phone_verified_at'] != null,
-      avatarUrl: json['avatarUrl']?.toString() ?? json['avatar']?.toString() ?? '',
-      permissions: (json['permissions'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
-      location: json['location']?.toString() ?? json['location_city']?.toString() ?? 'Dhaka, Bangladesh',
+      isVerified:
+          json['isVerified'] == true ||
+          json['is_verified'] == true ||
+          json['email_verified_at'] != null ||
+          json['phone_verified_at'] != null,
+      avatarUrl:
+          json['avatarUrl']?.toString() ?? json['avatar']?.toString() ?? '',
+      permissions:
+          (json['permissions'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      location:
+          json['location']?.toString() ??
+          json['location_city']?.toString() ??
+          'Dhaka, Bangladesh',
       bio: json['bio']?.toString() ?? 'Animal advocate & pet rescuer',
       googlePhotoUrl: json['googlePhotoUrl']?.toString() ?? '',
       preferredPetType: json['preferredPetType']?.toString() ?? 'All Pets',
       isPremium: json['isPremium'] == true || json['is_premium'] == true,
-      premiumPlanId: json['premiumPlanId']?.toString() ?? json['premium_plan_id']?.toString(),
+      premiumPlanId:
+          json['premiumPlanId']?.toString() ??
+          json['premium_plan_id']?.toString(),
       premiumExpiresAt: expiry,
-      subscriptionStatus: json['subscriptionStatus']?.toString() ?? json['subscription_status']?.toString() ?? 'NONE',
+      subscriptionStatus:
+          json['subscriptionStatus']?.toString() ??
+          json['subscription_status']?.toString() ??
+          'NONE',
     );
   }
 
@@ -339,6 +359,10 @@ class VivaDemoPassEvent extends AuthEvent {
   const VivaDemoPassEvent();
 }
 
+class AdminDemoPassEvent extends AuthEvent {
+  const AdminDemoPassEvent();
+}
+
 class UserConfirmedSessionEvent extends AuthEvent {
   final UserProfile user;
   final String? accessToken;
@@ -385,7 +409,10 @@ class UpdateUserProfileEvent extends AuthEvent {
 class ChangePasswordEvent extends AuthEvent {
   final String currentPassword;
   final String newPassword;
-  const ChangePasswordEvent({required this.currentPassword, required this.newPassword});
+  const ChangePasswordEvent({
+    required this.currentPassword,
+    required this.newPassword,
+  });
   @override
   List<Object?> get props => [currentPassword, newPassword];
 }
@@ -420,6 +447,7 @@ class ResendConfirmationEvent extends AuthEvent {
 class LogoutEvent extends AuthEvent {
   const LogoutEvent();
 }
+
 typedef AuthLogoutRequested = LogoutEvent;
 
 // --- States ---
@@ -448,11 +476,7 @@ class Authenticated extends AuthState {
   /// home screen (a password-recovery deep link, for example).
   final String? pendingRoute;
 
-  const Authenticated(
-    this.user, {
-    this.isNewUser = false,
-    this.pendingRoute,
-  });
+  const Authenticated(this.user, {this.isNewUser = false, this.pendingRoute});
 
   @override
   List<Object?> get props => [user, isNewUser, pendingRoute];
@@ -495,12 +519,14 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository _authRepository;
   final LaravelAuthService _laravelAuthService;
 
-  AuthBloc({UserProfile? initialUser, AuthRepository? authRepository,
-      LaravelAuthService? laravelAuthService})
-      : _currentUser = initialUser,
-        _authRepository = authRepository ?? AuthRepository(),
-        _laravelAuthService = laravelAuthService ?? LaravelAuthService(),
-        super(initialUser != null ? Authenticated(initialUser) : AuthInitial()) {
+  AuthBloc({
+    UserProfile? initialUser,
+    AuthRepository? authRepository,
+    LaravelAuthService? laravelAuthService,
+  }) : _currentUser = initialUser,
+       _authRepository = authRepository ?? AuthRepository(),
+       _laravelAuthService = laravelAuthService ?? LaravelAuthService(),
+       super(initialUser != null ? Authenticated(initialUser) : AuthInitial()) {
     on<CheckSessionEvent>(_onCheckSession);
     on<SignUpWithEmailEvent>(_onSignUpWithEmail);
     on<LoginWithEmailEvent>(_onLoginWithEmail);
@@ -510,6 +536,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<SocialLoginEvent>(_onSocialLogin);
     on<GuestLoginEvent>(_onGuestLogin);
     on<VivaDemoPassEvent>(_onVivaDemoPass);
+    on<AdminDemoPassEvent>(_onAdminDemoPass);
     on<UserConfirmedSessionEvent>(_onUserConfirmedSession);
     on<SwitchRoleEvent>(_onSwitchRole);
     on<UpdateUserProfileEvent>(_onUpdateUserProfile);
@@ -518,7 +545,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<RequestPasswordResetEvent>(_onRequestPasswordReset);
     on<ResendConfirmationEvent>(_onResendConfirmation);
     on<LogoutEvent>(_onLogout);
-
   }
 
   // Supabase Auth is the single auth authority. The app session and app_role JWT hook own the identity.
@@ -530,11 +556,13 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     final user = await _authRepository.verifyCurrentSession();
     if (user != null) {
       _currentUser = user;
-      emit(Authenticated(
-        user,
-        // A recovery deep link must land on the password form, not the app.
-        pendingRoute: SupabaseService.pendingRecoveryRoute,
-      ));
+      emit(
+        Authenticated(
+          user,
+          // A recovery deep link must land on the password form, not the app.
+          pendingRoute: SupabaseService.pendingRecoveryRoute,
+        ),
+      );
     } else {
       _currentUser = null;
       emit(AuthUnauthenticated());
@@ -558,23 +586,29 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         );
       } catch (registerErr) {
         debugPrint('[AuthBloc] register failed: $registerErr');
-        emit(AuthFailure(describeNetworkFailure(
-          registerErr,
-          fallback:
-              'Could not create your account. Please check your details and try again.',
-        )));
+        emit(
+          AuthFailure(
+            describeNetworkFailure(
+              registerErr,
+              fallback: 'Could not create your account. Please check your details and try again.',
+            ),
+          ),
+        );
         return;
       }
 
       // Supabase created the account but the user must confirm the email
       // first. That is not a failure: say so and let them sign in afterwards.
       if (res['status'] == 'pending_confirmation') {
-        emit(AuthSignUpConfirmationPending(
-          email: res['email']?.toString() ?? emailLower,
-          message: res['message']?.toString() ??
-              'Account created. Check your inbox for the confirmation link, '
-                  'then sign in.',
-        ));
+        emit(
+          AuthSignUpConfirmationPending(
+            email: res['email']?.toString() ?? emailLower,
+            message:
+                res['message']?.toString() ??
+                'Account created. Check your inbox for the confirmation link, '
+                    'then sign in.',
+          ),
+        );
         return;
       }
 
@@ -582,9 +616,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         final token = (res['access_token'] ?? res['token'])?.toString();
         final userMap = res['user'];
         if (token != null && token.isNotEmpty && userMap is Map) {
-          final user = UserProfile.fromJson(
-            Map<String, dynamic>.from(userMap),
-          );
+          final user = UserProfile.fromJson(Map<String, dynamic>.from(userMap));
           await SecureStorageService.instance.saveAuthToken(token);
           await SecureStorageService.instance.saveUserProfile(user);
           _currentUser = user;
@@ -592,17 +624,23 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           return;
         }
         // Fail closed: no server-issued session means nobody is signed in.
-        emit(const AuthFailure(
-          'Your account could not be confirmed. Please sign in instead.',
-        ));
+        emit(
+          const AuthFailure(
+            'Your account could not be confirmed. Please sign in instead.',
+          ),
+        );
         return;
       }
 
       // A parsed 200 that is not a success carries the server's own reason.
-      emit(AuthFailure(describeNetworkFailure(
-        Exception(res['message']?.toString() ?? ''),
-        fallback: 'Could not create your account. Please try again.',
-      )));
+      emit(
+        AuthFailure(
+          describeNetworkFailure(
+            Exception(res['message']?.toString() ?? ''),
+            fallback: 'Could not create your account. Please try again.',
+          ),
+        ),
+      );
     } catch (e) {
       emit(AuthFailure(describeNetworkFailure(e)));
     }
@@ -627,10 +665,14 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         return;
       } catch (laravelErr) {
         debugPrint('[AuthBloc] Laravel login failed: $laravelErr');
-        emit(AuthFailure(describeNetworkFailure(
-          laravelErr,
-          fallback: 'Sign-in failed. Check your email and password, then try again.',
-        )));
+        emit(
+          AuthFailure(
+            describeNetworkFailure(
+              laravelErr,
+              fallback: 'Sign-in failed. Check your email and password, then try again.',
+            ),
+          ),
+        );
         return;
       }
     } catch (e) {
@@ -647,19 +689,37 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       final emailLower = event.email.trim().toLowerCase();
 
-      // 0. Academic Demo / Viva Fallback (only when explicitly enabled via ENABLE_VIVA_DEMO=true)
+      // 0. Academic Demo / Viva Fallback
       if (DemoConfig.enableVivaDemoPass &&
           emailLower == 'admin@adoptmatch.com' &&
           event.password == 'admin123') {
         final demoAdmin = UserProfile(
           id: 'admin-demo-master',
-          name: 'Shelter Operations Admin',
+          name: 'Super Operations Admin (Demo)',
           email: 'admin@adoptmatch.com',
-          role: UserRole.admin,
+          role: UserRole.superAdmin,
           isVerified: true,
           location: 'Gulshan, Dhaka, Bangladesh',
           phone: '+880 1700 000000',
+          isPremium: true,
+          premiumPlanId: 'plan-annual',
+          premiumExpiresAt: DateTime.now().add(const Duration(days: 30)),
+          subscriptionStatus: 'ACTIVE',
+          permissions: const [
+            'ALL_ACCESS',
+            'APPROVE_PETS',
+            'MANAGE_USERS',
+            'VERIFY_SHELTERS',
+            'MANAGE_SUBSCRIPTIONS',
+            'VIEW_AUDIT_LOGS',
+            'DELETE_PETS',
+            'DEMO_MODE',
+          ],
         );
+        await SecureStorageService.instance.saveAuthToken(
+          'viva-admin-demo-token',
+        );
+        await SecureStorageService.instance.saveUserProfile(demoAdmin);
         _currentUser = demoAdmin;
         emit(Authenticated(demoAdmin));
         return;
@@ -688,47 +748,78 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         adminError = laravelErr;
       }
 
-      emit(AuthFailure(describeNetworkFailure(
-        adminError,
-        fallback:
-            '403 Forbidden: Access Denied. Invalid administrative credentials or server unreachable.',
-      )));
+      emit(
+        AuthFailure(
+          describeNetworkFailure(
+            adminError,
+            fallback: '403 Forbidden: Access Denied. Invalid administrative credentials or server unreachable.',
+          ),
+        ),
+      );
     } catch (e) {
       emit(AuthFailure(describeNetworkFailure(e)));
     }
   }
 
-  Future<void> _onRequestOtp(RequestPhoneOtpEvent event, Emitter<AuthState> emit) async {
+  Future<void> _onRequestOtp(
+    RequestPhoneOtpEvent event,
+    Emitter<AuthState> emit,
+  ) async {
     emit(AuthLoading());
     try {
       final phone = LaravelAuthService.normalizePhone(event.phoneNumber);
       await _laravelAuthService.requestPhoneOtp(phone);
       emit(AuthOtpSent(phone));
     } catch (e) {
-      emit(AuthFailure(describeNetworkFailure(e,
-          fallback: 'OTP request failed. Please try again.')));
+      emit(
+        AuthFailure(
+          describeNetworkFailure(
+            e,
+            fallback: 'OTP request failed. Please try again.',
+          ),
+        ),
+      );
     }
   }
 
-  Future<void> _onVerifyOtp(VerifyPhoneOtpEvent event, Emitter<AuthState> emit) async {
+  Future<void> _onVerifyOtp(
+    VerifyPhoneOtpEvent event,
+    Emitter<AuthState> emit,
+  ) async {
     emit(AuthLoading());
     final otp = event.otp.trim();
     if (otp.length != 6 || int.tryParse(otp) == null) {
-      emit(const AuthFailure('Invalid OTP. Please enter the 6-digit verification code.'));
+      emit(
+        const AuthFailure(
+          'Invalid OTP. Please enter the 6-digit verification code.',
+        ),
+      );
       return;
     }
     try {
-      final data = await _laravelAuthService.verifyPhoneOtp(event.phoneNumber, otp);
+      final data = await _laravelAuthService.verifyPhoneOtp(
+        event.phoneNumber,
+        otp,
+      );
       final token = data['access_token']?.toString();
-      if (token == null || token.isEmpty) throw Exception('The server did not issue a session token.');
-      final user = UserProfile.fromJson(Map<String, dynamic>.from(data['user'] as Map));
+      if (token == null || token.isEmpty)
+        throw Exception('The server did not issue a session token.');
+      final user = UserProfile.fromJson(
+        Map<String, dynamic>.from(data['user'] as Map),
+      );
       await SecureStorageService.instance.saveAuthToken(token);
       await SecureStorageService.instance.saveUserProfile(user);
       _currentUser = user;
       emit(Authenticated(user));
     } catch (e) {
-      emit(AuthFailure(describeNetworkFailure(e,
-          fallback: 'OTP verification failed. Please try again.')));
+      emit(
+        AuthFailure(
+          describeNetworkFailure(
+            e,
+            fallback: 'OTP verification failed. Please try again.',
+          ),
+        ),
+      );
     }
   }
 
@@ -760,8 +851,14 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       }
       emit(const AuthFailure('Authentication provider unavailable.'));
     } catch (e) {
-      emit(AuthFailure(describeNetworkFailure(e,
-          fallback: 'Google sign-in failed. Please try again.')));
+      emit(
+        AuthFailure(
+          describeNetworkFailure(
+            e,
+            fallback: 'Google sign-in failed. Please try again.',
+          ),
+        ),
+      );
     }
   }
 
@@ -783,32 +880,83 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     if (!DemoConfig.enableVivaDemoPass) {
       emit(
         const AuthFailure(
-          'Demo pass is disabled in production builds. Please sign in with your account.',
+          'Demo pass is disabled in this build. Please sign in with your account.',
         ),
       );
       return;
     }
     emit(AuthLoading());
     final guestProfile = UserProfile(
-      id: 'usr-guest-2hr-${DateTime.now().millisecondsSinceEpoch}',
-      name: 'Academic Demo Adopter / ভিজিটর',
+      id: 'usr-demo-${DateTime.now().millisecondsSinceEpoch}',
+      name: 'Demo Adopter (All Access)',
       email: 'demo.adopter@adoptmatch.com',
       phone: '+880 1700 000000',
       role: UserRole.adopter,
       isVerified: true,
       location: 'Dhaka, Bangladesh',
-      bio: 'Academic Viva Access (2 Hours Free Pass)',
+      bio: 'Full-Access Demo Adopter Account',
       isPremium: true,
-      premiumPlanId: 'viva-pass-2h',
-      premiumExpiresAt: DateTime.now().add(const Duration(hours: 2)),
+      premiumPlanId: 'plan-annual',
+      premiumExpiresAt: DateTime.now().add(const Duration(days: 30)),
       subscriptionStatus: 'ACTIVE',
-      permissions: const ['ALL_ACCESS', 'DEMO_MODE'],
+      permissions: const [
+        'ALL_ACCESS',
+        'UNLIMITED_ADOPTIONS',
+        'VET_CHAT',
+        'HEALTH_PASSPORT',
+        'PRIORITY_MATCH',
+        'DEMO_MODE',
+      ],
     );
 
-    await SecureStorageService.instance.saveAuthToken('viva-guest-demo-token-2hours');
+    await SecureStorageService.instance.saveAuthToken('viva-guest-demo-token');
     await SecureStorageService.instance.saveUserProfile(guestProfile);
     _currentUser = guestProfile;
     emit(Authenticated(guestProfile));
+  }
+
+  Future<void> _onAdminDemoPass(
+    AdminDemoPassEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    if (!DemoConfig.enableVivaDemoPass) {
+      emit(
+        const AuthFailure(
+          'Admin demo pass is disabled in this build. Please sign in with admin credentials.',
+        ),
+      );
+      return;
+    }
+    emit(AuthLoading());
+    final demoAdmin = UserProfile(
+      id: 'admin-demo-master',
+      name: 'Super Operations Admin (Demo)',
+      email: 'admin@adoptmatch.com',
+      phone: '+880 1700 000000',
+      role: UserRole.superAdmin,
+      isVerified: true,
+      location: 'Gulshan, Dhaka, Bangladesh',
+      bio: 'Full-Access Demo Super Admin Account',
+      isPremium: true,
+      premiumPlanId: 'plan-annual',
+      premiumExpiresAt: DateTime.now().add(const Duration(days: 30)),
+      subscriptionStatus: 'ACTIVE',
+      permissions: const [
+        'ALL_ACCESS',
+        'APPROVE_PETS',
+        'MANAGE_USERS',
+        'VERIFY_SHELTERS',
+        'MANAGE_SUBSCRIPTIONS',
+        'VIEW_AUDIT_LOGS',
+        'DELETE_PETS',
+        'DEMO_MODE',
+      ],
+    );
+
+    await SecureStorageService.instance.saveAuthToken('viva-admin-demo-token');
+    await SecureStorageService.instance.saveUserProfile(demoAdmin);
+    _currentUser = demoAdmin;
+    emit(Authenticated(demoAdmin));
   }
 
   Future<void> _onUserConfirmedSession(
@@ -824,7 +972,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   }
 
   void _onSwitchRole(SwitchRoleEvent event, Emitter<AuthState> emit) {
-    emit(const AuthFailure('Role changes must be granted by the server. Local role elevation is disabled.'));
+    emit(
+      const AuthFailure(
+        'Role changes must be granted by the server. Local role elevation is disabled.',
+      ),
+    );
   }
 
   Future<void> _onRequestPasswordReset(
@@ -839,17 +991,24 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(AuthLoading());
     try {
       await _laravelAuthService.requestPasswordReset(email);
-      emit(AuthEmailDispatched(
-        email: email,
-        message:
-            'If an account exists for $email, a password reset link is on its '
-            'way. Open it on this device to set a new password.',
-      ));
+      emit(
+        AuthEmailDispatched(
+          email: email,
+          message:
+              'If an account exists for $email, a password reset link is on its '
+              'way. Open it on this device to set a new password.',
+        ),
+      );
     } catch (e) {
-      emit(AuthFailure(describeNetworkFailure(
-        e,
-        fallback: 'Could not send the password reset email. Please try again.',
-      )));
+      emit(
+        AuthFailure(
+          describeNetworkFailure(
+            e,
+            fallback:
+                'Could not send the password reset email. Please try again.',
+          ),
+        ),
+      );
     }
   }
 
@@ -865,15 +1024,23 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(AuthLoading());
     try {
       await _laravelAuthService.resendConfirmationEmail(email);
-      emit(AuthEmailDispatched(
-        email: email,
-        message: 'Confirmation email sent to $email. Check your inbox and spam.',
-      ));
+      emit(
+        AuthEmailDispatched(
+          email: email,
+          message:
+              'Confirmation email sent to $email. Check your inbox and spam.',
+        ),
+      );
     } catch (e) {
-      emit(AuthFailure(describeNetworkFailure(
-        e,
-        fallback: 'Could not resend the confirmation email. Please try again.',
-      )));
+      emit(
+        AuthFailure(
+          describeNetworkFailure(
+            e,
+            fallback:
+                'Could not resend the confirmation email. Please try again.',
+          ),
+        ),
+      );
     }
   }
 
@@ -977,12 +1144,17 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     if (_currentUser == null) return;
     emit(AuthLoading());
     try {
-      final result = await SubscriptionRepository()
-          .fetchMySubscription(_currentUser!.id);
+      final result = await SubscriptionRepository().fetchMySubscription(
+        _currentUser!.id,
+      );
       final subscription = result['subscription'] as UserSubscription?;
       if (subscription == null) {
         emit(Authenticated(_currentUser!));
-        emit(const AuthFailure('Could not read your subscription status. Please try again.'));
+        emit(
+          const AuthFailure(
+            'Could not read your subscription status. Please try again.',
+          ),
+        );
         return;
       }
 
@@ -995,9 +1167,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await SecureStorageService.instance.saveUserProfile(_currentUser!);
       emit(Authenticated(_currentUser!));
       if (!subscription.isPremium) {
-        emit(const AuthFailure(
-          'No verified payment found yet. Premium activates once your transaction is confirmed.',
-        ));
+        emit(
+          const AuthFailure(
+            'No verified payment found yet. Premium activates once your transaction is confirmed.',
+          ),
+        );
       }
     } catch (e) {
       emit(Authenticated(_currentUser!));

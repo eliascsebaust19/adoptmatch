@@ -29,11 +29,11 @@ class DemoConfig {
   /// If set to false during viva, demonstrates instant direct password sign-in.
   static bool enableStrictOTPVerification = true;
 
-  /// Enables academic viva demo shortcuts only when explicitly requested via
-  /// `--dart-define=ENABLE_VIVA_DEMO=true`. Disabled by default in production.
+  /// Enables 1-tap Admin & User Demo Access with full permissions.
+  /// Can be disabled for locked-down builds via `--dart-define=ENABLE_VIVA_DEMO=false`.
   static const bool enableVivaDemoPass = bool.fromEnvironment(
     'ENABLE_VIVA_DEMO',
-    defaultValue: false,
+    defaultValue: true,
   );
 
   /// Toggles exotic pet category chips (Turtles, Geckos, Birds) in the catalog.

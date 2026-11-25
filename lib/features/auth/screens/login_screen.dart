@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+
 import '../bloc/auth_bloc.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/services/supabase_auth_service.dart';
@@ -66,9 +67,7 @@ class _LoginScreenState extends State<LoginScreen> {
         _isSubmitting = true;
       });
 
-      context.read<AuthBloc>().add(
-        AdminLoginWithEmailEvent(email, password),
-      );
+      context.read<AuthBloc>().add(AdminLoginWithEmailEvent(email, password));
       return;
     }
 
@@ -96,11 +95,7 @@ class _LoginScreenState extends State<LoginScreen> {
       });
 
       context.read<AuthBloc>().add(
-        SignUpWithEmailEvent(
-          fullName: name,
-          email: email,
-          password: password,
-        ),
+        SignUpWithEmailEvent(fullName: name, email: email, password: password),
       );
       return;
     }
@@ -118,15 +113,14 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     // Fallback or demo bypass when strict OTP verification is toggled off
-    if (!AdoptMatchBackend.isInitialized || !DemoConfig.enableStrictOTPVerification) {
+    if (!AdoptMatchBackend.isInitialized ||
+        !DemoConfig.enableStrictOTPVerification) {
       setState(() {
         _activeAction = 'signin';
         _isSubmitting = true;
       });
 
-      context.read<AuthBloc>().add(
-        LoginWithEmailEvent(email, password),
-      );
+      context.read<AuthBloc>().add(LoginWithEmailEvent(email, password));
       return;
     }
 
@@ -177,12 +171,20 @@ class _LoginScreenState extends State<LoginScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
-            const Icon(Icons.mark_email_read_rounded, color: Color(0xFF0D9488), size: 26),
+            const Icon(
+              Icons.mark_email_read_rounded,
+              color: Color(0xFF0D9488),
+              size: 26,
+            ),
             const SizedBox(width: 10),
             Flexible(
               child: Text(
                 title,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF1E293B),
+                ),
               ),
             ),
           ],
@@ -201,12 +203,20 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.email_outlined, color: Color(0xFF0D9488), size: 18),
+                  const Icon(
+                    Icons.email_outlined,
+                    color: Color(0xFF0D9488),
+                    size: 18,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       email,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F766E)),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: Color(0xFF0F766E),
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -216,7 +226,11 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 14),
             Text(
               message,
-              style: const TextStyle(fontSize: 13, color: Color(0xFF475569), height: 1.5),
+              style: const TextStyle(
+                fontSize: 13,
+                color: Color(0xFF475569),
+                height: 1.5,
+              ),
             ),
           ],
         ),
@@ -239,7 +253,9 @@ class _LoginScreenState extends State<LoginScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF0D9488),
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             ),
             onPressed: () {
@@ -256,7 +272,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showErrorDialog(String error) {
-    final isUnverified = error.toLowerCase().contains('verify your email') ||
+    final isUnverified =
+        error.toLowerCase().contains('verify your email') ||
         error.toLowerCase().contains('email not confirmed');
 
     showDialog(
@@ -266,20 +283,32 @@ class _LoginScreenState extends State<LoginScreen> {
         title: Row(
           children: [
             Icon(
-              isUnverified ? Icons.verified_user_outlined : Icons.error_outline_rounded,
-              color: isUnverified ? const Color(0xFFF59E0B) : const Color(0xFFE11D48),
+              isUnverified
+                  ? Icons.verified_user_outlined
+                  : Icons.error_outline_rounded,
+              color: isUnverified
+                  ? const Color(0xFFF59E0B)
+                  : const Color(0xFFE11D48),
               size: 24,
             ),
             const SizedBox(width: 8),
             Text(
               isUnverified ? 'Verification Required' : 'Authentication Notice',
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)),
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF1E293B),
+              ),
             ),
           ],
         ),
         content: Text(
           error,
-          style: const TextStyle(fontSize: 13, color: Color(0xFF475569), height: 1.4),
+          style: const TextStyle(
+            fontSize: 13,
+            color: Color(0xFF475569),
+            height: 1.4,
+          ),
         ),
         actions: [
           if (isUnverified)
@@ -293,12 +322,21 @@ class _LoginScreenState extends State<LoginScreen> {
               },
               child: const Text(
                 'Resend link',
-                style: TextStyle(color: Color(0xFF0D9488), fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: Color(0xFF0D9488),
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK', style: TextStyle(color: Color(0xFF0D9488), fontWeight: FontWeight.bold)),
+            child: const Text(
+              'OK',
+              style: TextStyle(
+                color: Color(0xFF0D9488),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -346,7 +384,10 @@ class _LoginScreenState extends State<LoginScreen> {
               SafeArea(
                 child: Center(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 16,
+                    ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -394,35 +435,52 @@ class _LoginScreenState extends State<LoginScreen> {
                                                 });
                                               },
                                         child: Container(
-                                          padding: const EdgeInsets.symmetric(vertical: 8),
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 8,
+                                          ),
                                           decoration: BoxDecoration(
-                                            color: !_isAdminMode ? Colors.white : Colors.transparent,
-                                            borderRadius: BorderRadius.circular(10),
+                                            color: !_isAdminMode
+                                                ? Colors.white
+                                                : Colors.transparent,
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
                                             boxShadow: !_isAdminMode
                                                 ? [
                                                     BoxShadow(
-                                                      color: Colors.black.withOpacity(0.06),
+                                                      color: Colors.black
+                                                          .withOpacity(0.06),
                                                       blurRadius: 4,
-                                                      offset: const Offset(0, 2),
+                                                      offset: const Offset(
+                                                        0,
+                                                        2,
+                                                      ),
                                                     ),
                                                   ]
                                                 : null,
                                           ),
                                           child: Row(
-                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
                                             children: [
                                               Icon(
                                                 Icons.person_outline_rounded,
                                                 size: 16,
-                                                color: !_isAdminMode ? tealPrimary : const Color(0xFF64748B),
+                                                color: !_isAdminMode
+                                                    ? tealPrimary
+                                                    : const Color(0xFF64748B),
                                               ),
                                               const SizedBox(width: 6),
                                               Text(
                                                 'Adopter / ইউজার',
                                                 style: TextStyle(
                                                   fontSize: 12,
-                                                  fontWeight: !_isAdminMode ? FontWeight.bold : FontWeight.w600,
-                                                  color: !_isAdminMode ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+                                                  fontWeight: !_isAdminMode
+                                                      ? FontWeight.bold
+                                                      : FontWeight.w600,
+                                                  color: !_isAdminMode
+                                                      ? const Color(0xFF0F172A)
+                                                      : const Color(0xFF64748B),
                                                 ),
                                               ),
                                             ],
@@ -442,35 +500,52 @@ class _LoginScreenState extends State<LoginScreen> {
                                                 });
                                               },
                                         child: Container(
-                                          padding: const EdgeInsets.symmetric(vertical: 8),
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 8,
+                                          ),
                                           decoration: BoxDecoration(
-                                            color: _isAdminMode ? Colors.white : Colors.transparent,
-                                            borderRadius: BorderRadius.circular(10),
+                                            color: _isAdminMode
+                                                ? Colors.white
+                                                : Colors.transparent,
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
                                             boxShadow: _isAdminMode
                                                 ? [
                                                     BoxShadow(
-                                                      color: Colors.black.withOpacity(0.06),
+                                                      color: Colors.black
+                                                          .withOpacity(0.06),
                                                       blurRadius: 4,
-                                                      offset: const Offset(0, 2),
+                                                      offset: const Offset(
+                                                        0,
+                                                        2,
+                                                      ),
                                                     ),
                                                   ]
                                                 : null,
                                           ),
                                           child: Row(
-                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
                                             children: [
                                               Icon(
                                                 Icons.shield_outlined,
                                                 size: 16,
-                                                color: _isAdminMode ? tealPrimary : const Color(0xFF64748B),
+                                                color: _isAdminMode
+                                                    ? tealPrimary
+                                                    : const Color(0xFF64748B),
                                               ),
                                               const SizedBox(width: 6),
                                               Text(
                                                 'Admin / অ্যাডমিন',
                                                 style: TextStyle(
                                                   fontSize: 12,
-                                                  fontWeight: _isAdminMode ? FontWeight.bold : FontWeight.w600,
-                                                  color: _isAdminMode ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+                                                  fontWeight: _isAdminMode
+                                                      ? FontWeight.bold
+                                                      : FontWeight.w600,
+                                                  color: _isAdminMode
+                                                      ? const Color(0xFF0F172A)
+                                                      : const Color(0xFF64748B),
                                                 ),
                                               ),
                                             ],
@@ -487,7 +562,9 @@ class _LoginScreenState extends State<LoginScreen> {
                               Text(
                                 _isAdminMode
                                     ? 'Shelter & Admin Portal'
-                                    : (_isSignUp ? 'Create Account' : 'Welcome Back!'),
+                                    : (_isSignUp
+                                          ? 'Create Account'
+                                          : 'Welcome Back!'),
                                 style: const TextStyle(
                                   fontSize: 24,
                                   fontWeight: FontWeight.w800,
@@ -500,39 +577,100 @@ class _LoginScreenState extends State<LoginScreen> {
                                 _isAdminMode
                                     ? 'Sign in with shelter manager or admin credentials'
                                     : (_isSignUp
-                                        ? 'Join AdoptMatch to adopt & support rescues'
-                                        : 'Sign in to access your adoption profile'),
+                                          ? 'Join AdoptMatch to adopt & support rescues'
+                                          : 'Sign in to access your adoption profile'),
                                 style: TextStyle(
                                   fontSize: 13,
                                   color: Colors.grey.shade600,
                                 ),
                               ),
 
-                              // Quick Fill Demo Admin Chip (Viva / Defense only)
-                              if (_isAdminMode && DemoConfig.enableVivaDemoPass) ...[
+                              // 1-Tap Demo Admin Access + Quick Fill (All Permissions)
+                              if (_isAdminMode &&
+                                  DemoConfig.enableVivaDemoPass) ...[
                                 const SizedBox(height: 12),
+                                InkWell(
+                                  onTap: isGlobalLoading
+                                      ? null
+                                      : () {
+                                          setState(() {
+                                            _activeAction = 'admin';
+                                            _isSubmitting = true;
+                                          });
+                                          context.read<AuthBloc>().add(
+                                            const AdminDemoPassEvent(),
+                                          );
+                                        },
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFEEF2FF),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: const Color(0xFF6366F1),
+                                        width: 1.2,
+                                      ),
+                                    ),
+                                    child: const Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.admin_panel_settings_rounded,
+                                          size: 18,
+                                          color: Color(0xFF4F46E5),
+                                        ),
+                                        SizedBox(width: 8),
+                                        Text(
+                                          '⚡ 1-Tap Admin Demo Access (All Permissions)',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: Color(0xFF3730A3),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
                                 InkWell(
                                   onTap: () {
                                     setState(() {
-                                      _emailController.text = 'admin@adoptmatch.com';
+                                      _emailController.text =
+                                          'admin@adoptmatch.com';
                                       _passwordController.text = 'admin123';
                                     });
                                   },
                                   borderRadius: BorderRadius.circular(8),
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: const Color(0xFFCCFBF1),
                                       borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: const Color(0xFF99F6E4)),
+                                      border: Border.all(
+                                        color: const Color(0xFF99F6E4),
+                                      ),
                                     ),
-                                    child: Row(
+                                    child: const Row(
                                       mainAxisSize: MainAxisSize.min,
-                                      children: const [
-                                        Icon(Icons.key_rounded, size: 14, color: Color(0xFF0D9488)),
+                                      children: [
+                                        Icon(
+                                          Icons.key_rounded,
+                                          size: 14,
+                                          color: Color(0xFF0D9488),
+                                        ),
                                         SizedBox(width: 6),
                                         Text(
-                                          'Quick Fill Demo Admin (Viva / Defense)',
+                                          'Quick Fill Demo Admin Credentials',
                                           style: TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
@@ -545,8 +683,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ],
 
-                              // 1-Tap Free Access (2 Hours Demo Pass - Viva / Defense only)
-                              if (!_isAdminMode && !_isSignUp && DemoConfig.enableVivaDemoPass) ...[
+                              // 1-Tap User Demo Access (All Permissions)
+                              if (!_isAdminMode &&
+                                  !_isSignUp &&
+                                  DemoConfig.enableVivaDemoPass) ...[
                                 const SizedBox(height: 12),
                                 InkWell(
                                   onTap: isGlobalLoading
@@ -556,26 +696,39 @@ class _LoginScreenState extends State<LoginScreen> {
                                             _activeAction = 'signin';
                                             _isSubmitting = true;
                                           });
-                                          context.read<AuthBloc>().add(const VivaDemoPassEvent());
+                                          context.read<AuthBloc>().add(
+                                            const VivaDemoPassEvent(),
+                                          );
                                         },
                                   borderRadius: BorderRadius.circular(10),
                                   child: Container(
                                     width: double.infinity,
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: const Color(0xFFF0FDFA),
                                       borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(color: const Color(0xFF0D9488), width: 1.2),
+                                      border: Border.all(
+                                        color: const Color(0xFF0D9488),
+                                        width: 1.2,
+                                      ),
                                     ),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: const [
-                                        Icon(Icons.lock_open_rounded, size: 18, color: Color(0xFF0D9488)),
+                                    child: const Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.lock_open_rounded,
+                                          size: 18,
+                                          color: Color(0xFF0D9488),
+                                        ),
                                         SizedBox(width: 8),
                                         Text(
-                                          '⚡ 1-Tap Free Access (2 Hours Viva Pass)',
+                                          '⚡ 1-Tap User Demo Access (All Permissions)',
                                           style: TextStyle(
-                                            fontSize: 12.5,
+                                            fontSize: 12,
                                             fontWeight: FontWeight.w700,
                                             color: Color(0xFF0F766E),
                                           ),
@@ -595,19 +748,29 @@ class _LoginScreenState extends State<LoginScreen> {
                                   controller: _nameController,
                                   keyboardType: TextInputType.name,
                                   hintText: 'e.g. Shakil Ahmed',
-                                  prefixIcon: const Icon(Icons.person_outline, color: Colors.grey, size: 20),
+                                  prefixIcon: const Icon(
+                                    Icons.person_outline,
+                                    color: Colors.grey,
+                                    size: 20,
+                                  ),
                                 ),
                                 const SizedBox(height: 16),
                               ],
 
                               // Email Field
                               AppTextField(
-                                label: _isAdminMode ? 'Administrator Email' : 'Email Address',
+                                label: _isAdminMode
+                                    ? 'Administrator Email'
+                                    : 'Email Address',
                                 controller: _emailController,
                                 keyboardType: TextInputType.emailAddress,
-                                hintText: _isAdminMode ? 'admin@adoptmatch.com' : 'Enter your email',
+                                hintText: _isAdminMode
+                                    ? 'admin@adoptmatch.com'
+                                    : 'Enter your email',
                                 prefixIcon: Icon(
-                                  _isAdminMode ? Icons.admin_panel_settings_outlined : Icons.email_outlined,
+                                  _isAdminMode
+                                      ? Icons.admin_panel_settings_outlined
+                                      : Icons.email_outlined,
                                   color: Colors.grey,
                                   size: 20,
                                 ),
@@ -616,21 +779,32 @@ class _LoginScreenState extends State<LoginScreen> {
 
                               // Password Field
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   const Text(
                                     'Password',
-                                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: slateDark),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                      color: slateDark,
+                                    ),
                                   ),
                                   if (!_isSignUp && !_isAdminMode)
                                     GestureDetector(
                                       onTap: () {
-                                        final email = _emailController.text.trim();
-                                        if (email.isEmpty || !email.contains('@')) {
-                                          _showToast('Enter your email address, then tap Forgot Password.');
+                                        final email = _emailController.text
+                                            .trim();
+                                        if (email.isEmpty ||
+                                            !email.contains('@')) {
+                                          _showToast(
+                                            'Enter your email address, then tap Forgot Password.',
+                                          );
                                           return;
                                         }
-                                        context.read<AuthBloc>().add(RequestPasswordResetEvent(email));
+                                        context.read<AuthBloc>().add(
+                                          RequestPasswordResetEvent(email),
+                                        );
                                       },
                                       child: const Text(
                                         'Forgot Password?',
@@ -647,15 +821,25 @@ class _LoginScreenState extends State<LoginScreen> {
                               AppTextField(
                                 controller: _passwordController,
                                 obscureText: _obscurePassword,
-                                hintText: _isSignUp ? 'Create password (min 6 chars)' : 'Enter password',
-                                prefixIcon: const Icon(Icons.lock_outline, color: Colors.grey, size: 20),
+                                hintText: _isSignUp
+                                    ? 'Create password (min 6 chars)'
+                                    : 'Enter password',
+                                prefixIcon: const Icon(
+                                  Icons.lock_outline,
+                                  color: Colors.grey,
+                                  size: 20,
+                                ),
                                 suffixIcon: IconButton(
                                   icon: Icon(
-                                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                                    _obscurePassword
+                                        ? Icons.visibility_off
+                                        : Icons.visibility,
                                     color: Colors.grey,
                                     size: 20,
                                   ),
-                                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                                  onPressed: () => setState(
+                                    () => _obscurePassword = !_obscurePassword,
+                                  ),
                                 ),
                               ),
                               const SizedBox(height: 22),
@@ -664,12 +848,20 @@ class _LoginScreenState extends State<LoginScreen> {
                               AppPrimaryButton(
                                 text: _isAdminMode
                                     ? 'Sign In to Admin Portal'
-                                    : (_isSignUp ? 'Create Account' : 'Sign In'),
-                                onPressed: isGlobalLoading ? null : _handleSubmit,
+                                    : (_isSignUp
+                                          ? 'Create Account'
+                                          : 'Sign In'),
+                                onPressed: isGlobalLoading
+                                    ? null
+                                    : _handleSubmit,
                                 isLoading: isGlobalLoading,
                                 height: 50,
                                 borderRadius: 14,
-                                icon: const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18),
+                                icon: const Icon(
+                                  Icons.arrow_forward_rounded,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
                               ),
                               const SizedBox(height: 16),
 
@@ -677,14 +869,24 @@ class _LoginScreenState extends State<LoginScreen> {
                               if (!_isAdminMode)
                                 Center(
                                   child: GestureDetector(
-                                    onTap: () => setState(() => _isSignUp = !_isSignUp),
+                                    onTap: () =>
+                                        setState(() => _isSignUp = !_isSignUp),
                                     child: RichText(
                                       text: TextSpan(
-                                        style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey.shade700,
+                                        ),
                                         children: [
-                                          TextSpan(text: _isSignUp ? 'Already have an account? ' : "Don't have an account? "),
                                           TextSpan(
-                                            text: _isSignUp ? 'Sign In' : 'Create One',
+                                            text: _isSignUp
+                                                ? 'Already have an account? '
+                                                : "Don't have an account? ",
+                                          ),
+                                          TextSpan(
+                                            text: _isSignUp
+                                                ? 'Sign In'
+                                                : 'Create One',
                                             style: const TextStyle(
                                               color: tealPrimary,
                                               fontWeight: FontWeight.w700,
@@ -704,7 +906,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         if (!_isAdminMode) ...[
                           Row(
                             children: const [
-                              Expanded(child: Divider(color: Color(0xFFE2E8F0))),
+                              Expanded(
+                                child: Divider(color: Color(0xFFE2E8F0)),
+                              ),
                               Padding(
                                 padding: EdgeInsets.symmetric(horizontal: 16),
                                 child: Text(
@@ -716,7 +920,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                 ),
                               ),
-                              Expanded(child: Divider(color: Color(0xFFE2E8F0))),
+                              Expanded(
+                                child: Divider(color: Color(0xFFE2E8F0)),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 16),
@@ -728,7 +934,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: const Color(0xFFCBD5E1)),
+                              border: Border.all(
+                                color: const Color(0xFFCBD5E1),
+                              ),
                               boxShadow: [
                                 BoxShadow(
                                   color: Colors.black.withOpacity(0.02),
@@ -748,7 +956,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                           _activeAction = 'google';
                                           _isSubmitting = true;
                                         });
-                                        context.read<AuthBloc>().add(const SocialLoginEvent('google'));
+                                        context.read<AuthBloc>().add(
+                                          const SocialLoginEvent('google'),
+                                        );
                                       },
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,

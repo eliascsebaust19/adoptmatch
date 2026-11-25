@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../auth/bloc/auth_bloc.dart';
+import '../../../config/demo_config.dart';
 import '../../../core/network/api_client.dart';
 import '../../../shared/widgets/shared_widgets.dart';
 
@@ -89,302 +90,358 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         // Admin Logo Header
-                  Container(
-                    width: 76,
-                    height: 76,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: accentIndigo.withOpacity(0.5),
-                        width: 2,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: accentIndigo.withOpacity(0.25),
-                          blurRadius: 18,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: Image.asset(
-                      'assets/images/app_logo.png',
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
-                          const Icon(
-                            Icons.shield_outlined,
-                            color: accentIndigo,
-                            size: 36,
-                          ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'AdoptMatch Admin Portal',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Restricted to verified system moderators & super admins',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
-                  ),
-                  const SizedBox(height: 28),
-
-                  // Login Form Card
-                  Container(
-                    padding: const EdgeInsets.all(28),
-                    decoration: BoxDecoration(
-                      color: cardBg,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFF334155)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          blurRadius: 25,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (_errorMessage != null) ...[
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF881337).withOpacity(0.35),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: const Color(0xFFF43F5E).withOpacity(0.5),
-                              ),
+                        Container(
+                          width: 76,
+                          height: 76,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: accentIndigo.withOpacity(0.5),
+                              width: 2,
                             ),
-                            child: Row(
-                              children: [
+                            boxShadow: [
+                              BoxShadow(
+                                color: accentIndigo.withOpacity(0.25),
+                                blurRadius: 18,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: Image.asset(
+                            'assets/images/app_logo.png',
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
                                 const Icon(
-                                  Icons.error_outline,
-                                  color: Color(0xFFFB7185),
-                                  size: 20,
+                                  Icons.shield_outlined,
+                                  color: accentIndigo,
+                                  size: 36,
                                 ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    _errorMessage!,
-                                    style: const TextStyle(
-                                      color: Color(0xFFFECDD3),
-                                      fontSize: 12,
-                                      height: 1.3,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'AdoptMatch Admin Portal',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Restricted to verified system moderators & super admins',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 28),
+
+                        // Login Form Card
+                        Container(
+                          padding: const EdgeInsets.all(28),
+                          decoration: BoxDecoration(
+                            color: cardBg,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: const Color(0xFF334155)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.3),
+                                blurRadius: 25,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (_errorMessage != null) ...[
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF881337)
+                                        .withOpacity(0.35),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: const Color(0xFFF43F5E)
+                                          .withOpacity(0.5),
                                     ),
                                   ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.error_outline,
+                                        color: Color(0xFFFB7185),
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          _errorMessage!,
+                                          style: const TextStyle(
+                                            color: Color(0xFFFECDD3),
+                                            fontSize: 12,
+                                            height: 1.3,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
+                                const SizedBox(height: 18),
                               ],
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-                        ],
 
-                        // Email Field
-                        const Text(
-                          'Staff Email Address',
-                          style: TextStyle(
-                            color: Color(0xFFCBD5E1),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _emailController,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                          ),
-                          decoration: InputDecoration(
-                            prefixIcon: const Icon(
-                              Icons.badge_outlined,
-                              color: Color(0xFF94A3B8),
-                              size: 20,
-                            ),
-                            hintText: 'admin@adoptmatch.com',
-                            hintStyle: const TextStyle(
-                              color: Color(0xFF64748B),
-                            ),
-                            filled: true,
-                            fillColor: const Color(0xFF0F172A),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(
-                                color: Color(0xFF334155),
+                              // Email Field
+                              const Text(
+                                'Staff Email Address',
+                                style: TextStyle(
+                                  color: Color(0xFFCBD5E1),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(
-                                color: Color(0xFF334155),
+                              const SizedBox(height: 8),
+                              TextField(
+                                controller: _emailController,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                ),
+                                decoration: InputDecoration(
+                                  prefixIcon: const Icon(
+                                    Icons.badge_outlined,
+                                    color: Color(0xFF94A3B8),
+                                    size: 20,
+                                  ),
+                                  hintText: 'admin@adoptmatch.com',
+                                  hintStyle: const TextStyle(
+                                    color: Color(0xFF64748B),
+                                  ),
+                                  filled: true,
+                                  fillColor: const Color(0xFF0F172A),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: Color(0xFF334155),
+                                    ),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: Color(0xFF334155),
+                                    ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: accentIndigo,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                ),
                               ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(
-                                color: accentIndigo,
-                                width: 1.5,
-                              ),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              vertical: 14,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 18),
+                              const SizedBox(height: 18),
 
-                        // Password Field
-                        const Text(
-                          'Access Key / Password',
-                          style: TextStyle(
-                            color: Color(0xFFCBD5E1),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _passwordController,
-                          obscureText: _obscurePassword,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                          ),
-                          decoration: InputDecoration(
-                            prefixIcon: const Icon(
-                              Icons.lock_outline,
-                              color: Color(0xFF94A3B8),
-                              size: 20,
-                            ),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscurePassword
-                                    ? Icons.visibility_off
-                                    : Icons.visibility,
-                                color: const Color(0xFF94A3B8),
-                                size: 20,
+                              // Password Field
+                              const Text(
+                                'Access Key / Password',
+                                style: TextStyle(
+                                  color: Color(0xFFCBD5E1),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
-                              onPressed: () => setState(
-                                () => _obscurePassword = !_obscurePassword,
+                              const SizedBox(height: 8),
+                              TextField(
+                                controller: _passwordController,
+                                obscureText: _obscurePassword,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                ),
+                                decoration: InputDecoration(
+                                  prefixIcon: const Icon(
+                                    Icons.lock_outline,
+                                    color: Color(0xFF94A3B8),
+                                    size: 20,
+                                  ),
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _obscurePassword
+                                          ? Icons.visibility_off
+                                          : Icons.visibility,
+                                      color: const Color(0xFF94A3B8),
+                                      size: 20,
+                                    ),
+                                    onPressed: () => setState(
+                                      () =>
+                                          _obscurePassword = !_obscurePassword,
+                                    ),
+                                  ),
+                                  hintText: '••••••••••••',
+                                  hintStyle: const TextStyle(
+                                    color: Color(0xFF64748B),
+                                  ),
+                                  filled: true,
+                                  fillColor: const Color(0xFF0F172A),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: Color(0xFF334155),
+                                    ),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: Color(0xFF334155),
+                                    ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: accentIndigo,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                ),
                               ),
-                            ),
-                            hintText: '••••••••••••',
-                            hintStyle: const TextStyle(
-                              color: Color(0xFF64748B),
-                            ),
-                            filled: true,
-                            fillColor: const Color(0xFF0F172A),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(
-                                color: Color(0xFF334155),
+                              const SizedBox(height: 24),
+
+                              // Submit Button
+                              BlocBuilder<AuthBloc, AuthState>(
+                                builder: (context, state) {
+                                  final isLoading = state is AuthLoading;
+
+                                  return Column(
+                                    children: [
+                                      SizedBox(
+                                        width: double.infinity,
+                                        height: 48,
+                                        child: ElevatedButton(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: accentIndigo,
+                                            foregroundColor: Colors.white,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                            elevation: 0,
+                                          ),
+                                          onPressed: isLoading
+                                              ? null
+                                              : _handleAdminLogin,
+                                          child: isLoading
+                                              ? const SizedBox(
+                                                  width: 22,
+                                                  height: 22,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        strokeWidth: 2.5,
+                                                        color: Colors.white,
+                                                      ),
+                                                )
+                                              : const Row(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.center,
+                                                  children: [
+                                                    Icon(Icons.login, size: 18),
+                                                    SizedBox(width: 8),
+                                                    Text(
+                                                      'Authenticate & Enter',
+                                                      style: TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                        ),
+                                      ),
+                                      if (DemoConfig.enableVivaDemoPass) ...[
+                                        const SizedBox(height: 12),
+                                        SizedBox(
+                                          width: double.infinity,
+                                          height: 46,
+                                          child: OutlinedButton.icon(
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: const Color(
+                                                0xFFA5B4FC,
+                                              ),
+                                              side: const BorderSide(
+                                                color: Color(0xFF6366F1),
+                                              ),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
+                                            ),
+                                            onPressed: isLoading
+                                                ? null
+                                                : () => context
+                                                      .read<AuthBloc>()
+                                                      .add(
+                                                        const AdminDemoPassEvent(),
+                                                      ),
+                                            icon: const Icon(
+                                              Icons.bolt_rounded,
+                                              size: 18,
+                                            ),
+                                            label: const Text(
+                                              '1-Tap Admin Demo Access (All Permissions)',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 12.5,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  );
+                                },
                               ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(
-                                color: Color(0xFF334155),
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(
-                                color: accentIndigo,
-                                width: 1.5,
-                              ),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              vertical: 14,
-                            ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: 24),
 
-                        // Submit Button
-                        BlocBuilder<AuthBloc, AuthState>(
-                          builder: (context, state) {
-                            final isLoading = state is AuthLoading;
-
-                            return SizedBox(
-                              width: double.infinity,
-                              height: 48,
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: accentIndigo,
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  elevation: 0,
-                                ),
-                                onPressed: isLoading ? null : _handleAdminLogin,
-                                child: isLoading
-                                    ? const SizedBox(
-                                        width: 22,
-                                        height: 22,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2.5,
-                                          color: Colors.white,
-                                        ),
-                                      )
-                                    : Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: const [
-                                          Icon(Icons.login, size: 18),
-                                          SizedBox(width: 8),
-                                          Text(
-                                            'Authenticate & Enter',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                              ),
-                            );
-                          },
+                        // Switch to Adopter App
+                        TextButton.icon(
+                          icon: const Icon(
+                            Icons.arrow_back,
+                            size: 16,
+                            color: Color(0xFF94A3B8),
+                          ),
+                          label: const Text(
+                            'Back to Consumer Adopter App',
+                            style: TextStyle(
+                              color: Color(0xFF94A3B8),
+                              fontSize: 13,
+                            ),
+                          ),
+                          onPressed: () => context.go('/auth/login'),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 24),
-
-                  // Switch to Adopter App
-                  TextButton.icon(
-                    icon: const Icon(
-                      Icons.arrow_back,
-                      size: 16,
-                      color: Color(0xFF94A3B8),
-                    ),
-                    label: const Text(
-                      'Back to Consumer Adopter App',
-                      style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
-                    ),
-                    onPressed: () => context.go('/auth/login'),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
-        ),
-        if (isLoading)
-          const AuthLoadingOverlay(actionType: 'admin'),
-      ],
+              if (isLoading) const AuthLoadingOverlay(actionType: 'admin'),
+            ],
+          );
+        },
+      ),
     );
-  },
-),
-);
   }
 }
